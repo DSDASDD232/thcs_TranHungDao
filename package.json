@@ -4,8 +4,8 @@
   "description": "Hệ thống quản lý thi đua và học tập THCS Trần Hưng Đạo",
   "main": "index.js",
   "scripts": {
-    "build": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
-    "start": "npm start --prefix backend"
+    "build": "npm install --prefix backend && npm install --prefix frontend --include=dev && npm run build --prefix frontend",
+    "start": "node backend/src/server.js"
   },
   "repository": {
     "type": "git",

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import axios from "../lib/axios";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -22,6 +22,8 @@ const TeacherDashboard = () => {
   const fileInputRef = useRef(null);
   const editFileInputRef = useRef(null);
   const fullName = localStorage.getItem("fullName") || "Giáo viên";
+
+  const serverUrl = axios.defaults.baseURL.replace('/api', '');
 
   const [activeTab, setActiveTab] = useState("my-classes"); 
   const [loading, setLoading] = useState(false);
@@ -57,18 +59,24 @@ const TeacherDashboard = () => {
   const [editingQuestionId, setEditingQuestionId] = useState(null);
   const [editQuestionData, setEditQuestionData] = useState(initialQuestionState);
 
+  const getHeader = (isMultipart = false) => {
+    const token = localStorage.getItem("token");
+    const headers = { Authorization: `Bearer ${token}` };
+    if (isMultipart) headers["Content-Type"] = "multipart/form-data";
+    return { headers };
+  };
+
   const fetchData = async () => {
     setIsLoadingData(true);
     try {
-      const token = localStorage.getItem("token");
-      if (!token) return navigate("/login");
-      const config = { headers: { Authorization: `Bearer ${token}` } };
+      const config = getHeader();
+      if (!config.headers.Authorization.split(" ")[1]) return navigate("/login");
       
       const [profRes, classRes, questionsRes, assignmentsRes] = await Promise.all([
-        axios.get("http://localhost:5001/api/teacher/me", config),
-        axios.get("http://localhost:5001/api/classes/all", config),
-        axios.get("http://localhost:5001/api/questions/all", config),
-        axios.get("http://localhost:5001/api/assignments/my-assignments", config)
+        axios.get("/teacher/me", config),
+        axios.get("/classes/all", config),
+        axios.get("/questions/all", config),
+        axios.get("/assignments/my-assignments", config)
       ]);
       
       setTeacherProfile(profRes.data);
@@ -76,7 +84,11 @@ const TeacherDashboard = () => {
       setAllClasses(classRes.data.classes || []);
       setQuestions(questionsRes.data?.questions || []);
       setAssignments(assignmentsRes.data?.assignments || []);
-    } catch (error) { console.error("Lỗi tải dữ liệu:", error); } finally { setIsLoadingData(false); }
+    } catch (error) { 
+      console.error("Lỗi tải dữ liệu:", error); 
+    } finally { 
+      setIsLoadingData(false); 
+    }
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -86,10 +98,13 @@ const TeacherDashboard = () => {
       if (!classId) return;
       setIsLoadingLeaderboard(true);
       try {
-        const token = localStorage.getItem("token");
-        const res = await axios.get(`http://localhost:5001/api/submissions/class/${classId}/leaderboard?timeframe=${timeFilter}`, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await axios.get(`/submissions/class/${classId}/leaderboard?timeframe=${timeFilter}`, getHeader());
         setLeaderboardData(res.data.leaderboard || []);
-      } catch (error) { setLeaderboardData([]); } finally { setIsLoadingLeaderboard(false); }
+      } catch (error) { 
+        setLeaderboardData([]); 
+      } finally { 
+        setIsLoadingLeaderboard(false); 
+      }
     };
     if (activeTab === "leaderboard" && selectedLeaderboardClass) {
         fetchLeaderboard(selectedLeaderboardClass, leaderboardTimeFilter);
@@ -101,12 +116,15 @@ const TeacherDashboard = () => {
   const handleSaveMyClasses = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      await axios.put("http://localhost:5001/api/teacher/my-classes", { assignedClasses: selectedClassIds }, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.put("/teacher/my-classes", { assignedClasses: selectedClassIds }, getHeader());
       alert("✅ Đã cập nhật danh sách quản lý lớp thành công!");
       setIsSelectClassDialogOpen(false); 
       fetchData(); 
-    } catch (error) { alert("Lỗi lưu danh sách quản lý lớp!"); } finally { setLoading(false); }
+    } catch (error) { 
+      alert("Lỗi lưu danh sách quản lý lớp!"); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const handleCheckboxChange = (classId) => { setSelectedClassIds(prev => prev.includes(classId) ? prev.filter(id => id !== classId) : [...prev, classId]); };
@@ -145,11 +163,14 @@ const TeacherDashboard = () => {
 
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      await axios.post("http://localhost:5001/api/questions/add", formData, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" } });
+      await axios.post("/questions/add", formData, getHeader(true));
       alert("✅ Thêm thành công!");
       setIsQuestionDialogOpen(false); setPreviewUrl(""); setSelectedFile(null); setNewQuestion(initialQuestionState); fetchData();
-    } catch (err) { alert(err.response?.data?.message || "Lỗi lưu câu hỏi!"); } finally { setLoading(false); }
+    } catch (err) { 
+      alert(err.response?.data?.message || "Lỗi lưu câu hỏi!"); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const handleEditClick = (q) => {
@@ -180,7 +201,7 @@ const TeacherDashboard = () => {
       optC: parsedOptions[2] || "", optD: parsedOptions[3] || "",
       correctAnswer: correctKey
     });
-    setPreviewUrl(q.imageUrl ? `http://localhost:5001${q.imageUrl}` : "");
+    setPreviewUrl(q.imageUrl ? `${serverUrl}${q.imageUrl}` : "");
     setIsEditDialogOpen(true);
   };
 
@@ -202,30 +223,44 @@ const TeacherDashboard = () => {
 
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      await axios.put(`http://localhost:5001/api/questions/update/${editingQuestionId}`, formData, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" } });
+      await axios.put(`/questions/update/${editingQuestionId}`, formData, getHeader(true));
       alert("✅ Cập nhật thành công!");
       setIsEditDialogOpen(false); setPreviewUrl(""); setSelectedFile(null); fetchData();
-    } catch (err) { alert("Lỗi cập nhật!"); } finally { setLoading(false); }
+    } catch (err) { 
+      alert("Lỗi cập nhật!"); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const handleDeleteAssignment = async (id, title) => {
     if (!window.confirm(`Xóa bài "${title}"?`)) return;
-    try { const token = localStorage.getItem("token"); await axios.delete(`http://localhost:5001/api/assignments/${id}`, { headers: { Authorization: `Bearer ${token}` } }); fetchData(); } catch (err) { alert("Lỗi!"); }
+    try { 
+      await axios.delete(`/assignments/${id}`, getHeader()); 
+      fetchData(); 
+    } catch (err) { 
+      alert("Lỗi!"); 
+    }
   };
 
   const handleDeleteQuestion = async (id) => {
     if (!window.confirm("Xóa câu hỏi này?")) return;
-    try { const token = localStorage.getItem("token"); await axios.delete(`http://localhost:5001/api/questions/delete/${id}`, { headers: { Authorization: `Bearer ${token}` } }); fetchData(); } catch (err) { alert("Lỗi xóa!"); }
+    try { 
+      await axios.delete(`/questions/delete/${id}`, getHeader()); 
+      fetchData(); 
+    } catch (err) { 
+      alert("Lỗi xóa!"); 
+    }
   };
 
   const handleViewStudentList = async (classId, className) => {
     setSelectedClassName(className); setClassStudents([]); setIsStudentListOpen(true);
     try {
-      const token = localStorage.getItem("token");
-      const res = await axios.get(`http://localhost:5001/api/classes/${classId}/students`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await axios.get(`/classes/${classId}/students`, getHeader());
       setClassStudents(res.data.students || []);
-    } catch (error) { console.error("Lỗi:", error); }
+    } catch (error) { 
+      console.error("Lỗi:", error); 
+    }
   };
 
   const getRankMedal = (index) => {
@@ -272,7 +307,7 @@ const TeacherDashboard = () => {
                <DialogContent className="sm:max-w-[700px] rounded-3xl border-none shadow-2xl overflow-y-auto max-h-[95vh] p-8">
                  <DialogHeader><DialogTitle className="text-2xl font-black text-sky-950 border-b border-sky-100 pb-3">Thêm câu hỏi mới</DialogTitle></DialogHeader>
                  <form onSubmit={handleCreateQuestion} className="space-y-5 pt-2">
-                    
+                   
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <Select value={newQuestion.type} onValueChange={(v) => setNewQuestion({...newQuestion, type: v})}>
                         <SelectTrigger className="h-12 rounded-xl bg-slate-50 border-sky-100 font-bold"><span className="truncate">{newQuestion.type === "multiple_choice" ? "Trắc nghiệm" : "Tự luận"}</span></SelectTrigger>
@@ -510,7 +545,6 @@ const TeacherDashboard = () => {
                 <Select value={leaderboardTimeFilter} onValueChange={setLeaderboardTimeFilter}>
                   <SelectTrigger className="h-12 rounded-xl bg-sky-50 border-none font-bold text-sky-800 shadow-sm border border-sky-100 w-[140px]">
                     <Calendar className="w-4 h-4 mr-2" />
-                    {/* ÉP CỨNG CHỮ TIẾNG VIỆT CHO THỜI GIAN */}
                     <span className="truncate">
                       {leaderboardTimeFilter === 'week' ? 'Tuần này' : 
                        leaderboardTimeFilter === 'month' ? 'Tháng này' : 
@@ -527,7 +561,6 @@ const TeacherDashboard = () => {
 
                 <Select value={selectedLeaderboardClass} onValueChange={setSelectedLeaderboardClass}>
                   <SelectTrigger className="h-12 rounded-xl bg-sky-50 border-none font-bold text-sky-800 shadow-sm border border-sky-100 w-[180px]">
-                    {/* ÉP CỨNG TÊN LỚP VÀO NÚT BẤM (Fix lỗi hiện ID) */}
                     <span className="truncate">
                       {selectedLeaderboardClass ? (
                         (() => {
@@ -636,7 +669,7 @@ const TeacherDashboard = () => {
                 <TableBody>
                   {isLoadingData ? <TableRow><TableCell colSpan={5} className="text-center py-20"><Loader2 className="animate-spin mx-auto text-sky-500 h-10 w-10" /></TableCell></TableRow> : filteredQuestions.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-24 text-slate-400 italic">Không tìm thấy câu hỏi.</TableCell></TableRow> : filteredQuestions.map(q => (
                     <TableRow key={q._id} className="hover:bg-sky-50/50 transition-colors border-sky-50">
-                      <TableCell className="pl-8 py-4"><div className="flex items-center gap-3">{q.imageUrl ? (<img src={`http://localhost:5001${q.imageUrl}`} className="h-12 w-12 object-cover rounded-lg border bg-white shadow-sm" />) : (<div className="h-12 w-12 bg-slate-50 rounded-lg border border-dashed flex items-center justify-center shrink-0"><ImageIcon className="h-4 w-4 text-slate-300" /></div>)}<span className="font-semibold text-slate-700 line-clamp-2">{q.content}</span></div></TableCell>
+                      <TableCell className="pl-8 py-4"><div className="flex items-center gap-3">{q.imageUrl ? (<img src={`${serverUrl}${q.imageUrl}`} className="h-12 w-12 object-cover rounded-lg border bg-white shadow-sm" />) : (<div className="h-12 w-12 bg-slate-50 rounded-lg border border-dashed flex items-center justify-center shrink-0"><ImageIcon className="h-4 w-4 text-slate-300" /></div>)}<span className="font-semibold text-slate-700 line-clamp-2">{q.content}</span></div></TableCell>
                       <TableCell className="text-center"><Badge variant="outline" className="bg-sky-100 text-sky-700 border-0 font-black px-3 hover:bg-sky-200">Khối {q.grade || "?"}</Badge></TableCell>
                       <TableCell><Badge variant="outline" className="bg-slate-100 text-slate-600 border-0 hover:bg-slate-200">{q.subject}</Badge></TableCell>
                       <TableCell><Badge variant="outline" className={`${q.difficulty === 'easy' ? 'text-teal-600 bg-teal-50' : q.difficulty === 'hard' ? 'text-rose-600 bg-rose-50' : 'text-amber-600 bg-amber-50'} border-0`}>{q.difficulty === 'easy' ? 'Dễ' : q.difficulty === 'hard' ? 'Khó' : 'TB'}</Badge></TableCell>

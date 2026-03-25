@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import axios from "axios";
+import axios from "../lib/axios"; // ĐÃ SỬA: Import axiosInstance thay cho axios mặc định
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -18,8 +18,8 @@ const ViewGrades = () => {
     const fetchGrades = async () => {
       try {
         const token = localStorage.getItem("token");
-        // ĐÃ FIX LỖI 404: Bổ sung "/grades" vào đúng chuẩn API Backend
-        const res = await axios.get(`http://localhost:5001/api/submissions/assignment/${assignmentId}/grades`, {
+        // ĐÃ SỬA: Rút gọn API do đã có baseURL
+        const res = await axios.get(`/submissions/assignment/${assignmentId}/grades`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         

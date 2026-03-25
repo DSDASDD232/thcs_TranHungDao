@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import axios from "axios";
+import axios from "../lib/axios"; // ĐÃ SỬA: Dùng axiosInstance
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -21,11 +21,15 @@ const TakeQuiz = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState(null);
 
+  // Lấy URL thực tế của Server (từ axiosInstance) để nối vào link ảnh
+  const serverUrl = axios.defaults.baseURL.replace('/api', '');
+
   useEffect(() => {
     const fetchAssignment = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get(`http://localhost:5001/api/assignments/${id}`, {
+        // ĐÃ SỬA: Rút gọn API
+        const res = await axios.get(`/assignments/${id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         
@@ -64,7 +68,8 @@ const TakeQuiz = () => {
 
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.post("http://localhost:5001/api/submissions/submit", {
+      // ĐÃ SỬA: Rút gọn API
+      const res = await axios.post("/submissions/submit", {
         assignmentId: id,
         studentAnswers: formattedAnswers
       }, { headers: { Authorization: `Bearer ${token}` } });
@@ -136,7 +141,6 @@ const TakeQuiz = () => {
         <div className="flex-1 w-full min-w-0"> 
           <Card className="rounded-3xl shadow-md border-sky-100 overflow-hidden bg-white flex flex-col">
             
-            {/* Phân vùng Câu hỏi: Nền xanh nhạt */}
             <CardHeader className="bg-sky-100 border-b border-sky-200 p-6 sm:p-8">
               <Badge className="mb-4 bg-white text-sky-800 font-bold border border-sky-200 px-4 py-1.5 text-sm uppercase tracking-wider shadow-none w-max">
                 Câu {currentQuestionIdx + 1}
@@ -145,7 +149,8 @@ const TakeQuiz = () => {
               {currentQ?.imageUrl && (
                 <div className="w-full mb-6 rounded-2xl overflow-hidden border border-sky-200 bg-white shadow-sm p-2">
                   <img 
-                    src={`http://localhost:5001${currentQ.imageUrl}`} 
+                    // ĐÃ SỬA: Nối chuỗi linh hoạt cho ảnh từ server local hoặc Render
+                    src={`${serverUrl}${currentQ.imageUrl}`} 
                     alt="Hình minh họa" 
                     className="w-full h-auto max-h-[400px] object-contain mx-auto rounded-xl fade-in"
                   />
@@ -157,7 +162,6 @@ const TakeQuiz = () => {
               </CardTitle>
             </CardHeader>
 
-            {/* Phân vùng Đáp án: Nền trắng, bỏ khung viền */}
             <CardContent className="p-6 sm:p-8 bg-white flex-1">
               <RadioGroup 
                 value={answers[currentQ?._id] || ""} 
@@ -168,7 +172,6 @@ const TakeQuiz = () => {
                   const isSelected = answers[currentQ?._id] === opt;
                   return (
                     <div key={idx} className="flex items-center space-x-4 p-3 rounded-xl transition-colors cursor-pointer hover:bg-sky-50/50">
-                      {/* Chấm tròn: Đậm lên khi được chọn */}
                       <RadioGroupItem 
                         value={opt} 
                         id={`opt-${idx}`} 
@@ -176,7 +179,6 @@ const TakeQuiz = () => {
                       />
                       
                       <Label htmlFor={`opt-${idx}`} className="flex-1 text-lg cursor-pointer flex items-center gap-4 leading-relaxed font-normal text-slate-700">
-                         {/* Chữ A, B, C, D: Không in đậm, nền tròn */}
                          <span className={`flex items-center justify-center w-8 h-8 rounded-full text-base font-medium transition-colors ${isSelected ? 'bg-sky-600 text-white' : 'bg-sky-100 text-sky-800'}`}>
                            {String.fromCharCode(65 + idx)}
                          </span> 

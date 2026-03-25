@@ -1,0 +1,18 @@
+{
+  "name": "thcs-tranhungdao",
+  "version": "1.0.0",
+  "description": "Hệ thống quản lý thi đua và học tập THCS Trần Hưng Đạo",
+  "main": "index.js",
+  "scripts": {
+    "build": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
+    "start": "npm start --prefix backend"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DSDASDD232/thcs_TranHungDao.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}

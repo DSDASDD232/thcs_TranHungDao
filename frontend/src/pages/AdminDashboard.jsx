@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import axios from "../lib/axios"; // Đã trỏ về axiosInstance
 import * as XLSX from "xlsx"; 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +13,7 @@ import {
   ShieldCheck, Users, GraduationCap, BookOpen, School,
   LogOut, TrendingUp, UserPlus, CheckCircle, Loader2, Trash2, Edit, PlusCircle,
   Search, Filter, UploadCloud, FileSpreadsheet, Sparkles, AlertCircle, PenTool, Download, Table as TableIcon,
-  Trophy, Medal, BarChart, Calendar // Thêm icon cho bảng thi đua
+  Trophy, Medal, BarChart, Calendar 
 } from "lucide-react";
 
 const AdminDashboard = () => {
@@ -36,7 +36,7 @@ const AdminDashboard = () => {
 
   // THI ĐUA TOÀN TRƯỜNG STATE
   const [adminLeaderboard, setAdminLeaderboard] = useState([]);
-  const [lbTimeFilter, setLbTimeFilter] = useState("month"); // Mặc định xem theo tháng
+  const [lbTimeFilter, setLbTimeFilter] = useState("month"); 
   const [lbGradeFilter, setLbGradeFilter] = useState("all");
   const [isLoadingLb, setIsLoadingLb] = useState(false);
 
@@ -55,23 +55,32 @@ const AdminDashboard = () => {
   const [filterUserGrade, setFilterUserGrade] = useState("all");
   const [filterUserClass, setFilterUserClass] = useState("all");
 
+  // Hàm hỗ trợ lấy Token gọn gàng
+  const getHeader = () => {
+    const token = localStorage.getItem("token");
+    return { headers: { Authorization: `Bearer ${token}` } };
+  };
+
   const fetchData = async () => {
     setIsLoadingData(true);
     try {
-      const token = localStorage.getItem("token");
-      const config = { headers: { Authorization: `Bearer ${token}` } };
+      const config = getHeader();
       
       const [statsRes, usersRes, classRes] = await Promise.all([
-        axios.get("http://localhost:5001/api/admin/stats", config),
-        axios.get("http://localhost:5001/api/admin/users/recent", config),
-        axios.get("http://localhost:5001/api/classes/all", config)
+        axios.get("/admin/stats", config),
+        axios.get("/admin/users/recent", config),
+        axios.get("/classes/all", config)
       ]);
 
       setDashboardStats(statsRes.data.data || statsRes.data);
       const usersData = usersRes.data;
       setRecentUsers(Array.isArray(usersData) ? usersData : (usersData.users || usersData.data || []));
       setClassesList(classRes.data.classes || []);
-    } catch (error) { if (error.response?.status === 403) handleLogout(); } finally { setIsLoadingData(false); }
+    } catch (error) { 
+        if (error.response?.status === 403) handleLogout(); 
+    } finally { 
+        setIsLoadingData(false); 
+    }
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -81,10 +90,7 @@ const AdminDashboard = () => {
     const fetchAdminLeaderboard = async () => {
       setIsLoadingLb(true);
       try {
-        const token = localStorage.getItem("token");
-        const res = await axios.get(`http://localhost:5001/api/admin/leaderboard?timeframe=${lbTimeFilter}&grade=${lbGradeFilter}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const res = await axios.get(`/admin/leaderboard?timeframe=${lbTimeFilter}&grade=${lbGradeFilter}`, getHeader());
         setAdminLeaderboard(res.data.leaderboard || []);
       } catch (error) {
         console.error("Lỗi tải bảng thi đua:", error);
@@ -107,10 +113,28 @@ const AdminDashboard = () => {
     if (!newClass.name.startsWith(newClass.grade)) return alert(`❌ Sai định dạng!\nTên lớp phải bắt đầu bằng số Khối.\nVí dụ: Khối ${newClass.grade} -> Lớp ${newClass.grade}A1`);
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      await axios.post("http://localhost:5001/api/classes/create", newClass, { headers: { Authorization: `Bearer ${token}` } });
-      alert("✅ Đã tạo lớp học thành công!"); setIsClassDialogOpen(false); setNewClass({ name: "", grade: "6", academicYear: "2023-2024" }); fetchData(); 
-    } catch (error) { alert(error.response?.data?.message || "Lỗi tạo lớp!"); } finally { setLoading(false); }
+      await axios.post("/classes/create", newClass, getHeader());
+      alert("✅ Đã tạo lớp học thành công!"); 
+      setIsClassDialogOpen(false); 
+      setNewClass({ name: "", grade: "6", academicYear: "2023-2024" }); 
+      fetchData(); 
+    } catch (error) { 
+        alert(error.response?.data?.message || "Lỗi tạo lớp!"); 
+    } finally { 
+        setLoading(false); 
+    }
+  };
+
+  // ĐÃ BỔ SUNG: Hàm xóa lớp (bị thiếu trong code cũ)
+  const handleDeleteClass = async (classId, className) => {
+    if (!window.confirm(`Xóa lớp: ${className}?`)) return;
+    try {
+      await axios.delete(`/classes/${classId}`, getHeader());
+      fetchData();
+      alert("✅ Đã xóa lớp thành công!");
+    } catch (err) {
+      alert("Lỗi xóa lớp học!");
+    }
   };
 
   const handleCreateUser = async (e) => {
@@ -118,10 +142,16 @@ const AdminDashboard = () => {
     if (newUser.role === "student" && (!newUser.grade || !newUser.classId)) return alert("Vui lòng chọn đầy đủ Khối và Lớp cho học sinh!");
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      await axios.post("http://localhost:5001/api/auth/register", newUser, { headers: { Authorization: `Bearer ${token}` } });
-      setIsDialogOpen(false); setNewUser({ username: "", password: "", fullName: "", role: "student", grade: "", classId: "" }); fetchData(); alert("✅ Tạo tài khoản thành công!");
-    } catch (err) { alert(err.response?.data?.message || "❌ Lỗi tạo tài khoản!"); } finally { setLoading(false); }
+      await axios.post("/auth/register", newUser, getHeader());
+      setIsDialogOpen(false); 
+      setNewUser({ username: "", password: "", fullName: "", role: "student", grade: "", classId: "" }); 
+      fetchData(); 
+      alert("✅ Tạo tài khoản thành công!");
+    } catch (err) { 
+        alert(err.response?.data?.message || "❌ Lỗi tạo tài khoản!"); 
+    } finally { 
+        setLoading(false); 
+    }
   };
 
   const handleDownloadTemplate = () => {
@@ -155,8 +185,7 @@ const AdminDashboard = () => {
       const selectedClassObj = classesList.find(c => String(c._id) === String(uploadClassId));
       const payload = { classId: uploadClassId, className: selectedClassObj.name, grade: selectedClassObj.grade, students: previewData };
 
-      const token = localStorage.getItem("token");
-      const res = await axios.post("http://localhost:5001/api/admin/users/import-json", payload, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await axios.post("/admin/users/import-json", payload, getHeader());
 
       alert(`✅ Thành công! Đã tạo ${res.data.successCount} tài khoản. ${res.data.failedCount > 0 ? `(Bỏ qua ${res.data.failedCount} dòng lỗi)` : ''}\n\nĐang tự động tải file tài khoản .xlsx về máy...`);
 
@@ -168,7 +197,11 @@ const AdminDashboard = () => {
       }
 
       setIsDialogOpen(false); setAccountFile(null); setPreviewData([]); setUploadGrade(""); setUploadClassId(""); fetchData(); 
-    } catch (error) { alert(error.response?.data?.message || "Lỗi xử lý. Vui lòng kiểm tra lại file."); } finally { setLoading(false); }
+    } catch (error) { 
+        alert(error.response?.data?.message || "Lỗi xử lý. Vui lòng kiểm tra lại file."); 
+    } finally { 
+        setLoading(false); 
+    }
   };
 
   const handleExportClassList = () => {
@@ -191,15 +224,25 @@ const AdminDashboard = () => {
     if (editUser.role === "student" && (!editUser.grade || !editUser.classId)) return alert("Vui lòng chọn đầy đủ Khối và Lớp!");
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      await axios.put(`http://localhost:5001/api/admin/users/${editUser._id}`, editUser, { headers: { Authorization: `Bearer ${token}` } });
-      setIsEditDialogOpen(false); fetchData(); alert("✅ Cập nhật thành công!");
-    } catch (err) { alert("❌ Lỗi cập nhật!"); } finally { setLoading(false); }
+      await axios.put(`/admin/users/${editUser._id}`, editUser, getHeader());
+      setIsEditDialogOpen(false); 
+      fetchData(); 
+      alert("✅ Cập nhật thành công!");
+    } catch (err) { 
+        alert("❌ Lỗi cập nhật!"); 
+    } finally { 
+        setLoading(false); 
+    }
   };
 
   const handleDeleteUser = async (userId, userName) => {
     if (!window.confirm(`Xóa tài khoản: ${userName}?`)) return;
-    try { const token = localStorage.getItem("token"); await axios.delete(`http://localhost:5001/api/admin/users/${userId}`, { headers: { Authorization: `Bearer ${token}` } }); fetchData(); } catch (err) { alert("Lỗi xóa tài khoản!"); }
+    try { 
+        await axios.delete(`/admin/users/${userId}`, getHeader()); 
+        fetchData(); 
+    } catch (err) { 
+        alert("Lỗi xóa tài khoản!"); 
+    }
   };
 
   const getRankMedal = (index) => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import axios from "../lib/axios"; // ĐÃ SỬA: Import axiosInstance
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,16 +29,18 @@ const StudentDashboard = () => {
         
         const config = { headers: { Authorization: `Bearer ${token}` } };
         
+        // ĐÃ SỬA: Rút gọn các đường dẫn API
         // 1. Lấy thông tin cá nhân (Để biết học sinh thuộc Lớp nào)
-        const profileRes = await axios.get("http://localhost:5001/api/auth/me", config).catch(() => null);
+        const profileRes = await axios.get("/auth/me", config).catch(() => null);
         if (profileRes && profileRes.data) {
           setProfile(profileRes.data);
         }
 
         // 2. Lấy danh sách Bài tập và Bài làm
-        // (Giả định bạn có API trả về tất cả bài tập của lớp học sinh đó)
-        const assignmentsRes = await axios.get("http://localhost:5001/api/assignments/student", config).catch(() => ({ data: [] }));
-        const submissionsRes = await axios.get("http://localhost:5001/api/submissions/my-submissions", config).catch(() => ({ data: [] }));
+        const [assignmentsRes, submissionsRes] = await Promise.all([
+          axios.get("/assignments/student", config).catch(() => ({ data: [] })),
+          axios.get("/submissions/my-submissions", config).catch(() => ({ data: [] }))
+        ]);
 
         const allAssignments = assignmentsRes.data.assignments || assignmentsRes.data || [];
         const mySubmissions = submissionsRes.data.submissions || submissionsRes.data || [];

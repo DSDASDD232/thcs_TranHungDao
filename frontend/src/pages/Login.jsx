@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import axios from "../lib/axios"; // ĐÃ SỬA: Import axiosInstance thay vì axios mặc định
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,8 +18,8 @@ const Login = () => {
     setError("");
 
     try {
-      // Gọi API Backend
-      const response = await axios.post("http://localhost:5001/api/auth/login", formData);
+      // ĐÃ SỬA: Đường dẫn gọi API cực kỳ ngắn gọn, phần gốc đã được xử lý ở lib/axios.js
+      const response = await axios.post("/auth/login", formData);
       
       // BÍ QUYẾT SỬA LỖI Ở ĐÂY: 
       // Dùng '?.' để lấy dữ liệu an toàn dù Backend trả về nằm thẳng ở ngoài hay bọc trong object 'user'
@@ -42,7 +42,7 @@ const Login = () => {
       }
 
     } catch (err) {
-      setError(err.response?.data?.message || "Đăng nhập thất bại. Vui lòng thử lại!");
+      setError(err.response?.data?.message || "Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin!");
     } finally {
       setLoading(false);
     }

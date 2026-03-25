@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import axios from "../lib/axios"; // Sử dụng axiosInstance để tự động cấu hình baseURL
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -43,16 +43,26 @@ const CreateAssignment = () => {
 
   const [assignmentFile, setAssignmentFile] = useState(null);
 
+  // Hàm hỗ trợ lấy Token gọn gàng
+  const getHeader = (isMultipart = false) => {
+    const token = localStorage.getItem("token");
+    const headers = { Authorization: `Bearer ${token}` };
+    if (isMultipart) {
+      headers["Content-Type"] = "multipart/form-data";
+    }
+    return { headers };
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         const token = localStorage.getItem("token");
         if (!token) return navigate("/login");
-        const config = { headers: { Authorization: `Bearer ${token}` } };
         
+        // ĐÃ SỬA: Rút gọn đường dẫn API
         const [profRes, questionsRes] = await Promise.all([
-          axios.get("http://localhost:5001/api/teacher/me", config),
-          axios.get("http://localhost:5001/api/questions/all", config)
+          axios.get("/teacher/me", getHeader()),
+          axios.get("/questions/all", getHeader())
         ]);
         
         setTeacherProfile(profRes.data);
@@ -126,10 +136,8 @@ const CreateAssignment = () => {
       formData.append("subject", newAssignment.subject);
       formData.append("grade", newAssignment.targetClass ? newAssignment.targetClass.replace(/\D/g, '').substring(0, 1) : "6");
 
-      const token = localStorage.getItem("token");
-      const res = await axios.post("http://localhost:5001/api/assignments/extract-word", formData, {
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" }
-      });
+      // ĐÃ SỬA: Rút gọn đường dẫn API và dùng chung getHeader
+      const res = await axios.post("/assignments/extract-word", formData, getHeader(true));
       
       setManualQuestions(res.data.questions);
       setCreationMethod("manual"); 
@@ -153,13 +161,12 @@ const CreateAssignment = () => {
     
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-
       if (creationMethod === "bank") {
         if (newAssignment.questions.length === 0) {
           setLoading(false); return alert("Chọn ít nhất 1 câu hỏi từ kho!");
         }
-        await axios.post("http://localhost:5001/api/assignments/create", newAssignment, { headers: { Authorization: `Bearer ${token}` } });
+        // ĐÃ SỬA: Rút gọn đường dẫn API
+        await axios.post("/assignments/create", newAssignment, getHeader());
       } 
       else if (creationMethod === "manual" || creationMethod === "upload") {
         const isValid = manualQuestions.every(q => q.content.trim() !== "");
@@ -181,9 +188,8 @@ const CreateAssignment = () => {
             if (q.imageFile) formData.append(`image_${q.tempId}`, q.imageFile);
         });
 
-        await axios.post("http://localhost:5001/api/assignments/create-manual", formData, { 
-            headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" } 
-        });
+        // ĐÃ SỬA: Rút gọn đường dẫn API
+        await axios.post("/assignments/create-manual", formData, getHeader(true));
       }
 
       alert("✅ Giao bài thành công!");

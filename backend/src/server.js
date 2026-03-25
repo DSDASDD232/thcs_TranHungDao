@@ -1,7 +1,11 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors"; 
+import path from "path";
+import { fileURLToPath } from 'url';
 import { connectDB } from "./config/db.js"; 
+
+// Import các routes
 import authRoutes from "./routes/auth.js"; 
 import questionRoutes from "./routes/question.js";
 import assignmentRoutes from "./routes/assignment.js";
@@ -9,30 +13,29 @@ import submissionRoutes from "./routes/submission.js";
 import adminRoutes from "./routes/admin.js";
 import classRoutes from "./routes/classes.js"; 
 import teacherRoutes from "./routes/teacher.js";
-import path from "path";
-import { fileURLToPath } from 'url';
 
 dotenv.config();
 
-// 1. XỬ LÝ __DIRNAME CHUẨN XÁC CHO ES MODULE
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = process.env.PORT || 5001;
 const app = express();
+// Render sử dụng biến PORT (thường là 10000)
+const PORT = process.env.PORT || 10000;
 
 // ==========================================
-// 1. CÁC MIDDLEWARE (GÁC CỔNG)
+// 1. CẤU HÌNH CORS (Sửa lỗi 500 khi gọi API)
 // ==========================================
 const allowedOrigins = [
   "http://localhost:5173", 
   "http://localhost:5001",
-  "https://thcs-tranhungdao.vercel.app", // Thay bằng link thật của bạn khi có
+  "https://thcs-tranhungdao.onrender.com" // Link Render chính thức của bạn
 ];
 
 app.use(cors({
     origin: function (origin, callback) {
-        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+        // Cho phép request từ các nguồn trong danh sách hoặc không có origin (như Postman)
+        if (!origin || allowedOrigins.includes(origin)) {
           callback(null, true);
         } else {
           callback(new Error("Chặn bởi CORS: Origin này không được phép!"));
@@ -43,8 +46,8 @@ app.use(cors({
 
 app.use(express.json()); 
 
-// Cấu hình xem ảnh upload (Đảm bảo folder backend/uploads tồn tại)
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Cấu hình xem ảnh upload - Sử dụng process.cwd() để chuẩn hóa đường dẫn trên Render
+app.use('/uploads', express.static(path.join(process.cwd(), 'backend', 'uploads')));
 
 // ==========================================
 // 2. KẾT NỐI DATABASE
@@ -52,7 +55,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 connectDB();
 
 // ==========================================
-// 3. CÁC ROUTES API (PHẢI ĐẶT TRƯỚC PHẦN PHỤC VỤ FRONTEND)
+// 3. CÁC ROUTES API
 // ==========================================
 app.use("/api/auth", authRoutes);
 app.use("/api/questions", questionRoutes);
@@ -63,26 +66,32 @@ app.use("/api/classes", classRoutes);
 app.use("/api/teacher", teacherRoutes);
 
 // ==========================================
-// 4. PHỤC VỤ FRONTEND (DÙNG CHO PRODUCTION)
+// 4. PHỤC VỤ FRONTEND (SỬA LỖI TRẮNG TRANG & MIME TYPE)
 // ==========================================
-if (process.env.NODE_ENV === "production") {
-    // Chỉ định đường dẫn tuyệt đối tới thư mục frontend/dist
-    // __dirname là backend/src -> lùi 2 cấp là ra gốc -> vào frontend/dist
-    const frontendPath = path.resolve(__dirname, "../../frontend/dist");
+
+// Sử dụng process.cwd() để lấy thư mục gốc của dự án trên Render (/opt/render/project/src)
+const rootDir = process.cwd();
+const frontendPath = path.join(rootDir, "frontend", "dist");
+
+// Luôn phục vụ file tĩnh nếu ở môi trường production
+if (process.env.NODE_ENV === "production" || process.env.RENDER) {
+    console.log("📂 Đang phục vụ Frontend từ:", frontendPath);
     
-    // In ra để kiểm tra trên Terminal/Render log
-    console.log("📂 Đang phục vụ Frontend từ đường dẫn tuyệt đối:", frontendPath);
-    
-    // PHẢI đặt static trước wildcard '*'
+    // 1. Phục vụ các file tĩnh (css, js, img)
     app.use(express.static(frontendPath));
     
+    // 2. Xử lý mọi route còn lại để trả về index.html (cho React Router)
     app.get("*", (req, res) => {
-        // Nếu là request gọi file assets mà bị lọt vào đây tức là static phía trên tìm không thấy file
-        const indexPath = path.join(frontendPath, "index.html");
-        res.sendFile(indexPath, (err) => {
+        // Nếu là request gọi API mà không khớp thì báo lỗi 404 cho API đó
+        if (req.path.startsWith('/api')) {
+            return res.status(404).json({ message: "API endpoint không tồn tại" });
+        }
+        
+        // Gửi file index.html cho các trường hợp còn lại
+        res.sendFile(path.join(frontendPath, "index.html"), (err) => {
             if (err) {
-                console.error("❌ Lỗi không tìm thấy file index.html:", err.message);
-                res.status(404).send("❌ Lỗi: Không tìm thấy thư mục build (dist) của Frontend.");
+                console.error("❌ Lỗi gửi file index.html:", err.message);
+                res.status(500).send("Không tìm thấy file giao diện. Hãy kiểm tra lệnh build.");
             }
         });
     });
@@ -96,5 +105,6 @@ if (process.env.NODE_ENV === "production") {
 // 5. CHẠY SERVER
 // ==========================================
 app.listen(PORT, () => {
-    console.log(`🚀 Server đang khởi chạy trên cổng ${PORT} với môi trường: ${process.env.NODE_ENV}`);
+    console.log(`🚀 Server đang khởi chạy trên cổng ${PORT}`);
+    console.log(`🌐 Chế độ: ${process.env.NODE_ENV || 'development'}`);
 });

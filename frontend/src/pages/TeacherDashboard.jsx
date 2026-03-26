@@ -14,8 +14,8 @@ import {
   Loader2, PlusCircle, Eye, Trash2, Pencil,
   Search, Filter, Image as ImageIcon, UploadCloud, X,
   Settings, Users, Download, BarChart, UserCircle, Trophy, Medal,
-  CheckCircle2, Sparkles, Calendar 
-} from "lucide-react";
+  CheckCircle2, Sparkles, Calendar, Menu 
+} from "lucide-react"; // Đã thêm Menu
 
 const TeacherDashboard = () => {
   const navigate = useNavigate();
@@ -28,6 +28,9 @@ const TeacherDashboard = () => {
   const [activeTab, setActiveTab] = useState("my-classes"); 
   const [loading, setLoading] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
+
+  // STATE CHO MOBILE MENU
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const [questions, setQuestions] = useState([]);
   const [assignments, setAssignments] = useState([]);
@@ -112,6 +115,12 @@ const TeacherDashboard = () => {
   }, [activeTab, selectedLeaderboardClass, leaderboardTimeFilter]);
 
   const handleLogout = () => { localStorage.clear(); navigate("/login"); };
+
+  // Đóng menu trên mobile khi chọn tab
+  const handleMenuClick = (tab) => {
+    setActiveTab(tab);
+    setIsMobileMenuOpen(false);
+  };
 
   const handleSaveMyClasses = async () => {
     setLoading(true);
@@ -271,27 +280,53 @@ const TeacherDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-sky-50/40 flex font-sans text-slate-800">
-      <aside className="w-64 bg-white border-r border-sky-100 flex flex-col sticky top-0 h-screen shadow-[4px_0_24px_rgba(14,165,233,0.05)] z-10">
-        <div className="p-6 flex items-center gap-3 border-b border-sky-50">
-          <div className="bg-sky-100 p-2 rounded-xl"><BookOpen className="h-6 w-6 text-sky-600" /></div>
-          <span className="font-extrabold text-xl text-sky-950 tracking-tight">Khu vực<br/>Giáo viên</span>
+    <div className="min-h-screen bg-sky-50/40 flex font-sans text-slate-800 relative">
+      
+      {/* OVERLAY CHO MOBILE */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden" 
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* SIDEBAR RESPONSIVE */}
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-sky-100 flex flex-col h-screen shadow-xl transform transition-transform duration-300 lg:translate-x-0 lg:static lg:shadow-[4px_0_24px_rgba(14,165,233,0.05)] ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="p-6 flex items-center justify-between gap-3 border-b border-sky-50">
+          <div className="flex items-center gap-3">
+            <div className="bg-sky-100 p-2 rounded-xl"><BookOpen className="h-6 w-6 text-sky-600" /></div>
+            <span className="font-extrabold text-xl text-sky-950 tracking-tight">Khu vực<br/>Giáo viên</span>
+          </div>
+          <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setIsMobileMenuOpen(false)}>
+            <X className="w-5 h-5 text-slate-500" />
+          </Button>
         </div>
-        <nav className="flex-1 p-4 space-y-2 mt-2">
-          <Button onClick={() => setActiveTab("my-classes")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'my-classes' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'hover:bg-sky-50 hover:text-sky-600 text-slate-500'}`}><School className="mr-3 h-5 w-5" /> Quản lý Lớp</Button>
-          <Button onClick={() => {setActiveTab("leaderboard"); if(!selectedLeaderboardClass && teacherProfile?.assignedClasses?.length > 0) setSelectedLeaderboardClass(String(teacherProfile.assignedClasses[0]._id || teacherProfile.assignedClasses[0]));}} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'leaderboard' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'hover:bg-sky-50 hover:text-sky-600 text-slate-500'}`}><Trophy className="mr-3 h-5 w-5" /> Bảng thi đua</Button>
-          <Button onClick={() => setActiveTab("assignments")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'assignments' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'hover:bg-sky-50 hover:text-sky-600 text-slate-500'}`}><CheckSquare className="mr-3 h-5 w-5" /> Bài tập đã giao</Button>
-          <Button onClick={() => setActiveTab("questions")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'questions' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'hover:bg-sky-50 hover:text-sky-600 text-slate-500'}`}><FileQuestion className="mr-3 h-5 w-5" /> Kho câu hỏi</Button>
+        <nav className="flex-1 p-4 space-y-2 mt-2 overflow-y-auto">
+          <Button onClick={() => handleMenuClick("my-classes")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'my-classes' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'hover:bg-sky-50 hover:text-sky-600 text-slate-500'}`}><School className="mr-3 h-5 w-5" /> Quản lý Lớp</Button>
+          <Button onClick={() => {handleMenuClick("leaderboard"); if(!selectedLeaderboardClass && teacherProfile?.assignedClasses?.length > 0) setSelectedLeaderboardClass(String(teacherProfile.assignedClasses[0]._id || teacherProfile.assignedClasses[0]));}} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'leaderboard' ? 'bg-amber-500 text-white shadow-md shadow-amber-200' : 'hover:bg-amber-50 hover:text-amber-600 text-slate-500'}`}><Trophy className="mr-3 h-5 w-5" /> Bảng thi đua</Button>
+          <Button onClick={() => handleMenuClick("assignments")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'assignments' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'hover:bg-sky-50 hover:text-sky-600 text-slate-500'}`}><CheckSquare className="mr-3 h-5 w-5" /> Bài tập đã giao</Button>
+          <Button onClick={() => handleMenuClick("questions")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'questions' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'hover:bg-sky-50 hover:text-sky-600 text-slate-500'}`}><FileQuestion className="mr-3 h-5 w-5" /> Kho câu hỏi</Button>
         </nav>
         <div className="p-5 border-t border-sky-50"><Button onClick={handleLogout} variant="ghost" className="w-full text-rose-500 hover:bg-rose-50 hover:text-rose-600 font-bold h-11 rounded-xl"><LogOut className="mr-2 h-4 w-4" /> Đăng xuất</Button></div>
       </aside>
 
-      <main className="flex-1 p-8 lg:p-10 max-w-7xl mx-auto overflow-y-auto">
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
-          <div><h1 className="text-3xl font-extrabold text-sky-950 tracking-tight">Trường THCS Trần Hưng Đạo</h1><p className="text-slate-500 mt-2 font-medium">Chào thầy/cô {fullName} 👋</p></div>
-          <div className="flex gap-3">
+      {/* MAIN CONTENT */}
+      <main className="flex-1 p-4 sm:p-8 lg:p-10 w-full overflow-y-auto overflow-x-hidden max-w-[100vw]">
+        
+        {/* HEADER RESPONSIVE */}
+        <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-8 gap-4">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" className="lg:hidden bg-white shadow-sm rounded-xl border border-sky-100" onClick={() => setIsMobileMenuOpen(true)}>
+              <Menu className="w-5 h-5 text-sky-900" />
+            </Button>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-sky-950 tracking-tight">Trường THCS...</h1>
+              <p className="text-slate-500 mt-1 sm:mt-2 font-medium">Chào thầy/cô {fullName} 👋</p>
+            </div>
+          </div>
+          <div className="flex gap-3 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
             {activeTab === "assignments" && (
-              <Button onClick={() => navigate("/teacher/create-assignment")} className="bg-sky-500 hover:bg-sky-600 text-white h-11 px-6 rounded-xl shadow-md shadow-sky-200 flex items-center font-bold transition-all active:scale-95 cursor-pointer">
+              <Button onClick={() => navigate("/teacher/create-assignment")} className="bg-sky-500 hover:bg-sky-600 whitespace-nowrap text-white h-11 px-6 rounded-xl shadow-md flex items-center font-bold">
                 <PlusCircle className="mr-2 h-5 w-5" /> Giao bài mới
               </Button>
             )}
@@ -300,12 +335,12 @@ const TeacherDashboard = () => {
             {activeTab === "questions" && (
                <Dialog open={isQuestionDialogOpen} onOpenChange={(val) => { setIsQuestionDialogOpen(val); if(!val) {setPreviewUrl(""); setSelectedFile(null);}}}>
                <DialogTrigger asChild>
-                 <Button className="bg-sky-500 hover:bg-sky-600 text-white h-11 px-6 rounded-xl shadow-md shadow-sky-200 flex items-center font-bold transition-all active:scale-95">
+                 <Button className="bg-sky-500 hover:bg-sky-600 whitespace-nowrap text-white h-11 px-6 rounded-xl shadow-md flex items-center font-bold">
                    <PlusCircle className="mr-2 h-5 w-5" /> Soạn câu hỏi
                  </Button>
                </DialogTrigger>
-               <DialogContent className="sm:max-w-[700px] rounded-3xl border-none shadow-2xl overflow-y-auto max-h-[95vh] p-8">
-                 <DialogHeader><DialogTitle className="text-2xl font-black text-sky-950 border-b border-sky-100 pb-3">Thêm câu hỏi mới</DialogTitle></DialogHeader>
+               <DialogContent className="sm:max-w-[700px] w-[95%] max-h-[90vh] overflow-y-auto rounded-3xl border-none shadow-2xl p-4 sm:p-8">
+                 <DialogHeader><DialogTitle className="text-xl sm:text-2xl font-black text-sky-950 border-b border-sky-100 pb-3">Thêm câu hỏi mới</DialogTitle></DialogHeader>
                  <form onSubmit={handleCreateQuestion} className="space-y-5 pt-2">
                    
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -348,8 +383,8 @@ const TeacherDashboard = () => {
                     </div>
 
                     {newQuestion.type === "multiple_choice" && (
-                      <div className="bg-sky-50/50 p-5 rounded-2xl border border-sky-100 space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-sky-50/50 p-4 sm:p-5 rounded-2xl border border-sky-100 space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           {['A', 'B', 'C', 'D'].map(k => (
                             <div key={k} className="flex items-center gap-2">
                                <span className="font-bold text-sky-800 w-5">{k}.</span>
@@ -357,16 +392,16 @@ const TeacherDashboard = () => {
                             </div>
                           ))}
                         </div>
-                        <div className="flex items-center justify-between pt-3 border-t border-sky-100">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-sky-100">
                           <label className="text-sm font-bold text-rose-600 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Chọn đáp án ĐÚNG:</label>
                           <Select value={newQuestion.correctAnswer} onValueChange={(v) => setNewQuestion({...newQuestion, correctAnswer: v})}>
-                            <SelectTrigger className="h-11 w-32 bg-white text-rose-600 font-bold border-rose-200 rounded-xl shadow-sm"><span className="truncate">{newQuestion.correctAnswer ? `Câu ${newQuestion.correctAnswer}` : "Chọn"}</span></SelectTrigger>
+                            <SelectTrigger className="h-11 w-full sm:w-32 bg-white text-rose-600 font-bold border-rose-200 rounded-xl shadow-sm"><span className="truncate">{newQuestion.correctAnswer ? `Câu ${newQuestion.correctAnswer}` : "Chọn"}</span></SelectTrigger>
                             <SelectContent><SelectItem value="A">Câu A</SelectItem><SelectItem value="B">Câu B</SelectItem><SelectItem value="C">Câu C</SelectItem><SelectItem value="D">Câu D</SelectItem></SelectContent>
                           </Select>
                         </div>
                       </div>
                     )}
-                    <Button type="submit" disabled={loading} className="w-full h-14 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-lg shadow-xl shadow-sky-200 mt-2">Lưu vào kho câu hỏi</Button>
+                    <Button type="submit" disabled={loading} className="w-full h-12 sm:h-14 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-lg shadow-xl mt-2">Lưu vào kho</Button>
                  </form>
                </DialogContent>
              </Dialog>
@@ -376,8 +411,8 @@ const TeacherDashboard = () => {
 
         {/* MODAL CHỈNH SỬA CÂU HỎI */}
         <Dialog open={isEditDialogOpen} onOpenChange={(val) => { setIsEditDialogOpen(val); if(!val) {setPreviewUrl(""); setSelectedFile(null);}}}>
-          <DialogContent className="sm:max-w-[700px] rounded-3xl border-none shadow-2xl overflow-y-auto max-h-[95vh] p-8">
-            <DialogHeader><DialogTitle className="text-2xl font-black text-sky-950 flex items-center gap-2 border-b border-sky-100 pb-3"><Pencil className="h-6 w-6 text-sky-500"/> Chỉnh sửa câu hỏi</DialogTitle></DialogHeader>
+          <DialogContent className="sm:max-w-[700px] w-[95%] max-h-[90vh] overflow-y-auto rounded-3xl border-none shadow-2xl p-4 sm:p-8">
+            <DialogHeader><DialogTitle className="text-xl sm:text-2xl font-black text-sky-950 flex items-center gap-2 border-b border-sky-100 pb-3"><Pencil className="h-5 sm:h-6 w-5 sm:w-6 text-sky-500"/> Chỉnh sửa câu hỏi</DialogTitle></DialogHeader>
             <form onSubmit={handleUpdateQuestion} className="space-y-5 pt-2">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Select value={editQuestionData.type} onValueChange={(v) => setEditQuestionData({...editQuestionData, type: v})}>
@@ -419,34 +454,34 @@ const TeacherDashboard = () => {
               </div>
 
               {editQuestionData.type === "multiple_choice" && (
-                <div className="bg-sky-50/50 p-5 rounded-2xl border border-sky-100 space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    {['A', 'B', 'C', 'D'].map((k, index) => (
+                <div className="bg-sky-50/50 p-4 sm:p-5 rounded-2xl border border-sky-100 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {['A', 'B', 'C', 'D'].map((k) => (
                       <div key={k} className="flex items-center gap-2">
                          <span className="font-bold text-sky-800 w-5">{k}.</span>
                          <Input placeholder={`Nhập đáp án ${k}`} className="h-12 rounded-xl bg-white border-sky-100 font-medium" value={editQuestionData[`opt${k}`]} onChange={(e) => setEditQuestionData({...editQuestionData, [`opt${k}`]: e.target.value})} required />
                       </div>
                     ))}
                   </div>
-                  <div className="flex items-center justify-between pt-3 border-t border-sky-100">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-sky-100">
                     <label className="text-sm font-bold text-rose-600 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Chọn đáp án ĐÚNG:</label>
                     <Select value={editQuestionData.correctAnswer} onValueChange={(v) => setEditQuestionData({...editQuestionData, correctAnswer: v})}>
-                      <SelectTrigger className="h-11 w-32 bg-white text-rose-600 font-bold border-rose-200 rounded-xl shadow-sm"><span className="truncate">{editQuestionData.correctAnswer ? `Câu ${editQuestionData.correctAnswer}` : "Chọn"}</span></SelectTrigger>
+                      <SelectTrigger className="h-11 w-full sm:w-32 bg-white text-rose-600 font-bold border-rose-200 rounded-xl shadow-sm"><span className="truncate">{editQuestionData.correctAnswer ? `Câu ${editQuestionData.correctAnswer}` : "Chọn"}</span></SelectTrigger>
                       <SelectContent><SelectItem value="A">Câu A</SelectItem><SelectItem value="B">Câu B</SelectItem><SelectItem value="C">Câu C</SelectItem><SelectItem value="D">Câu D</SelectItem></SelectContent>
                     </Select>
                   </div>
                 </div>
               )}
-              <Button type="submit" disabled={loading} className="w-full h-14 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-lg shadow-xl shadow-sky-200 mt-2">Cập nhật thay đổi</Button>
+              <Button type="submit" disabled={loading} className="w-full h-12 sm:h-14 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-lg shadow-xl mt-2">Cập nhật thay đổi</Button>
             </form>
           </DialogContent>
         </Dialog>
 
-        {/* MODAL THAY ĐỔI LỚP PHỤ TRÁCH VÀ XEM DS HỌC SINH */}
+        {/* MODAL THAY ĐỔI LỚP PHỤ TRÁCH */}
         <Dialog open={isSelectClassDialogOpen} onOpenChange={setIsSelectClassDialogOpen}>
-          <DialogContent className="sm:max-w-[700px] rounded-3xl border-none">
-            <DialogHeader><DialogTitle className="text-2xl font-black text-sky-950">Chọn Lớp Quản Lý</DialogTitle></DialogHeader>
-            <div className="p-4">
+          <DialogContent className="sm:max-w-[700px] w-[95%] rounded-3xl border-none">
+            <DialogHeader><DialogTitle className="text-xl sm:text-2xl font-black text-sky-950">Chọn Lớp Quản Lý</DialogTitle></DialogHeader>
+            <div className="p-2 sm:p-4">
               <p className="text-sky-700 text-sm mb-4">Đánh dấu vào các lớp mà thầy/cô đang trực tiếp giảng dạy.</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[50vh] overflow-y-auto pr-2">
                 {['6', '7', '8', '9'].map(grade => {
@@ -467,29 +502,32 @@ const TeacherDashboard = () => {
                   )
                 })}
               </div>
-              <Button onClick={handleSaveMyClasses} disabled={loading} className="w-full h-12 mt-6 bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl shadow-md shadow-sky-200">{loading ? <Loader2 className="animate-spin" /> : "Lưu thay đổi"}</Button>
+              <Button onClick={handleSaveMyClasses} disabled={loading} className="w-full h-12 mt-6 bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl shadow-md">{loading ? <Loader2 className="animate-spin" /> : "Lưu thay đổi"}</Button>
             </div>
           </DialogContent>
         </Dialog>
 
+        {/* MODAL XEM DS HỌC SINH */}
         <Dialog open={isStudentListOpen} onOpenChange={setIsStudentListOpen}>
-          <DialogContent className="sm:max-w-[500px] rounded-3xl border-none">
-            <DialogHeader><DialogTitle className="text-2xl font-black text-sky-950 flex items-center gap-2"><UserCircle className="w-6 h-6 text-sky-500"/> Danh sách Lớp {selectedClassName}</DialogTitle></DialogHeader>
+          <DialogContent className="sm:max-w-[500px] w-[95%] rounded-3xl border-none p-4">
+            <DialogHeader><DialogTitle className="text-xl sm:text-2xl font-black text-sky-950 flex items-center gap-2"><UserCircle className="w-5 sm:w-6 h-5 sm:h-6 text-sky-500"/> Danh sách Lớp {selectedClassName}</DialogTitle></DialogHeader>
             <div className="max-h-[60vh] overflow-y-auto pr-2 mt-2">
               {classStudents.length === 0 ? (
                 <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200"><Users className="w-10 h-10 text-slate-300 mx-auto mb-2" /><p className="text-slate-500 font-medium">Lớp này chưa có học sinh nào.</p></div>
               ) : (
-                <Table><TableHeader className="bg-sky-50/50"><TableRow><TableHead className="font-bold text-sky-800 w-16">STT</TableHead><TableHead className="font-bold text-sky-800">Họ và Tên</TableHead><TableHead className="font-bold text-sky-800 text-right">Tài khoản</TableHead></TableRow></TableHeader>
-                  <TableBody>
-                    {classStudents.map((student, idx) => (
-                      <TableRow key={student._id} className="hover:bg-sky-50/50 border-sky-50">
-                        <TableCell className="font-medium text-slate-400 text-center">{idx + 1}</TableCell>
-                        <TableCell className="font-bold text-sky-900">{student.fullName}</TableCell>
-                        <TableCell className="text-right text-slate-500 font-medium">{student.username}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[300px]"><TableHeader className="bg-sky-50/50"><TableRow><TableHead className="font-bold text-sky-800 w-16">STT</TableHead><TableHead className="font-bold text-sky-800">Họ và Tên</TableHead><TableHead className="font-bold text-sky-800 text-right">Tài khoản</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {classStudents.map((student, idx) => (
+                        <TableRow key={student._id} className="hover:bg-sky-50/50 border-sky-50">
+                          <TableCell className="font-medium text-slate-400 text-center">{idx + 1}</TableCell>
+                          <TableCell className="font-bold text-sky-900">{student.fullName}</TableCell>
+                          <TableCell className="text-right text-slate-500 font-medium">{student.username}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               )}
             </div>
           </DialogContent>
@@ -499,28 +537,28 @@ const TeacherDashboard = () => {
         {activeTab === "my-classes" && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div><h2 className="text-2xl font-bold text-sky-950">Tiến độ & Thi đua</h2><p className="text-slate-500 text-sm mt-1">Báo cáo tổng quan các lớp thầy/cô đang phụ trách.</p></div>
-              <Button onClick={() => setIsSelectClassDialogOpen(true)} className="bg-white border border-sky-200 text-sky-700 hover:bg-sky-50 h-11 px-5 rounded-xl shadow-sm font-bold"><Settings className="w-4 h-4 mr-2" /> Thay đổi lớp phụ trách</Button>
+              <div><h2 className="text-xl sm:text-2xl font-bold text-sky-950">Tiến độ & Thi đua</h2><p className="text-slate-500 text-xs sm:text-sm mt-1">Báo cáo tổng quan các lớp thầy/cô đang phụ trách.</p></div>
+              <Button onClick={() => setIsSelectClassDialogOpen(true)} className="bg-white border border-sky-200 text-sky-700 hover:bg-sky-50 h-11 px-5 rounded-xl shadow-sm font-bold w-full sm:w-auto"><Settings className="w-4 h-4 mr-2" /> Thay đổi lớp</Button>
             </div>
             {isLoadingData ? <div className="text-center py-10"><Loader2 className="w-10 h-10 animate-spin mx-auto text-sky-500"/></div> : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {!teacherProfile?.assignedClasses || teacherProfile.assignedClasses.length === 0 ? (
-                   <div className="col-span-full bg-white border border-dashed border-sky-200 rounded-3xl p-12 text-center"><School className="w-16 h-16 text-sky-200 mx-auto mb-4" /><h3 className="text-xl font-bold text-slate-600 mb-2">Chưa có dữ liệu lớp học</h3><p className="text-slate-400">Hãy bấm nút "Thay đổi lớp phụ trách" ở góc trên để chọn lớp thầy/cô đang dạy nhé.</p></div>
+                   <div className="col-span-full bg-white border border-dashed border-sky-200 rounded-3xl p-10 sm:p-12 text-center"><School className="w-16 h-16 text-sky-200 mx-auto mb-4" /><h3 className="text-xl font-bold text-slate-600 mb-2">Chưa có dữ liệu lớp học</h3><p className="text-slate-400">Hãy bấm nút "Thay đổi lớp" ở góc trên để chọn lớp thầy/cô đang dạy nhé.</p></div>
                 ) : (
                   teacherProfile.assignedClasses.map(cls => {
                     const classStats = allClasses.find(c => c._id === cls._id || c._id === cls) || {};
                     return (
                       <Card key={cls._id || cls} className="border-sky-100 shadow-sm rounded-3xl bg-white hover:shadow-md transition-shadow overflow-hidden flex flex-col">
-                        <CardHeader className="border-b border-sky-50 bg-sky-50/30 pb-4 pt-5 px-6"><CardTitle className="flex justify-between items-center"><span className="text-2xl font-black text-sky-950">{cls.name}</span><Badge className="bg-sky-100 text-sky-700 shadow-none font-bold">Khối {cls.grade}</Badge></CardTitle></CardHeader>
-                        <CardContent className="p-6 flex-1 flex flex-col justify-between space-y-4">
+                        <CardHeader className="border-b border-sky-50 bg-sky-50/30 pb-4 pt-5 px-6"><CardTitle className="flex justify-between items-center"><span className="text-xl sm:text-2xl font-black text-sky-950">{cls.name}</span><Badge className="bg-sky-100 text-sky-700 shadow-none font-bold">Khối {cls.grade}</Badge></CardTitle></CardHeader>
+                        <CardContent className="p-5 sm:p-6 flex-1 flex flex-col justify-between space-y-4">
                           <div className="space-y-3">
                             <div className="flex justify-between items-center border-b border-slate-50 pb-3"><div className="flex items-center text-slate-500"><Users className="w-4 h-4 mr-2"/> Sĩ số</div><span className="font-black text-slate-700 text-lg">{classStats.studentCount || 0} em</span></div>
-                            <div className="flex justify-between items-center border-b border-slate-50 pb-3"><div className="flex items-center text-slate-500"><CheckSquare className="w-4 h-4 mr-2"/> Làm bài</div><span className="font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-md text-sm">Đang cập nhật</span></div>
-                            <div className="flex justify-between items-center"><div className="flex items-center text-slate-500"><BarChart className="w-4 h-4 mr-2"/> ĐTB Lớp</div><span className="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md text-sm">Đang cập nhật</span></div>
+                            <div className="flex justify-between items-center border-b border-slate-50 pb-3"><div className="flex items-center text-slate-500"><CheckSquare className="w-4 h-4 mr-2"/> Làm bài</div><span className="font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-md text-xs sm:text-sm">Đang cập nhật</span></div>
+                            <div className="flex justify-between items-center"><div className="flex items-center text-slate-500"><BarChart className="w-4 h-4 mr-2"/> ĐTB Lớp</div><span className="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md text-xs sm:text-sm">Đang cập nhật</span></div>
                           </div>
                           <div className="pt-2 flex gap-2">
-                            <Button onClick={() => handleViewStudentList(cls._id || cls, cls.name)} className="flex-1 bg-sky-50 text-sky-600 hover:bg-sky-100 hover:text-sky-700 font-bold shadow-none">Xem DS</Button>
-                            <Button className="flex-1 bg-sky-500 hover:bg-sky-600 text-white font-bold shadow-sm"><Download className="w-4 h-4 mr-2"/> Báo cáo</Button>
+                            <Button onClick={() => handleViewStudentList(cls._id || cls, cls.name)} className="flex-1 bg-sky-50 text-sky-600 hover:bg-sky-100 font-bold shadow-none text-xs sm:text-sm">Xem DS</Button>
+                            <Button className="flex-1 bg-sky-500 hover:bg-sky-600 text-white font-bold shadow-sm text-xs sm:text-sm"><Download className="w-4 h-4 mr-1 sm:mr-2"/> Báo cáo</Button>
                           </div>
                         </CardContent>
                       </Card>
@@ -532,35 +570,22 @@ const TeacherDashboard = () => {
           </div>
         )}
 
-        {/* TAB BẢNG THI ĐUA (LEADERBOARD) */}
+        {/* TAB BẢNG THI ĐUA */}
         {activeTab === "leaderboard" && (
           <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-3xl shadow-sm border border-sky-100">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-sky-100">
               <div>
-                <h2 className="text-2xl font-bold text-sky-950 flex items-center gap-2"><Trophy className="w-6 h-6 text-amber-500" /> Bảng Xếp Hạng Thi Đua</h2>
-                <p className="text-slate-500 text-sm mt-1">Theo dõi điểm trung bình của học sinh theo từng lớp.</p>
+                <h2 className="text-xl sm:text-2xl font-bold text-sky-950 flex items-center gap-2"><Trophy className="w-6 h-6 text-amber-500" /> Bảng Xếp Hạng Lớp</h2>
               </div>
               
-              <div className="flex gap-3 w-full sm:w-auto">
+              <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
                 <Select value={leaderboardTimeFilter} onValueChange={setLeaderboardTimeFilter}>
-                  <SelectTrigger className="h-12 rounded-xl bg-sky-50 border-none font-bold text-sky-800 shadow-sm border border-sky-100 w-[140px]">
-                    <Calendar className="w-4 h-4 mr-2" />
-                    <span className="truncate">
-                      {leaderboardTimeFilter === 'week' ? 'Tuần này' : 
-                       leaderboardTimeFilter === 'month' ? 'Tháng này' : 
-                       leaderboardTimeFilter === 'year' ? 'Năm nay' : 'Tất cả'}
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tất cả</SelectItem>
-                    <SelectItem value="week">Tuần này</SelectItem>
-                    <SelectItem value="month">Tháng này</SelectItem>
-                    <SelectItem value="year">Năm nay</SelectItem>
-                  </SelectContent>
+                  <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[120px] border-none font-bold text-sky-800 shadow-sm"><Calendar className="w-4 h-4 mr-2" /><span className="truncate">{leaderboardTimeFilter === 'week' ? 'Tuần này' : leaderboardTimeFilter === 'month' ? 'Tháng này' : leaderboardTimeFilter === 'year' ? 'Năm nay' : 'Tất cả'}</span></SelectTrigger>
+                  <SelectContent><SelectItem value="all">Tất cả</SelectItem><SelectItem value="week">Tuần này</SelectItem><SelectItem value="month">Tháng này</SelectItem><SelectItem value="year">Năm nay</SelectItem></SelectContent>
                 </Select>
 
                 <Select value={selectedLeaderboardClass} onValueChange={setSelectedLeaderboardClass}>
-                  <SelectTrigger className="h-12 rounded-xl bg-sky-50 border-none font-bold text-sky-800 shadow-sm border border-sky-100 w-[180px]">
+                  <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 border-none font-bold text-sky-800 shadow-sm min-w-[140px]">
                     <span className="truncate">
                       {selectedLeaderboardClass ? (
                         (() => {
@@ -578,7 +603,6 @@ const TeacherDashboard = () => {
                         const classId = String(c._id || c);
                         const matchedClass = allClasses.find(cls => String(cls._id) === classId);
                         const className = matchedClass ? matchedClass.name : "Đang tải...";
-                        
                         return <SelectItem key={classId} value={classId} className="font-bold">Lớp {className}</SelectItem>
                       })
                     )}
@@ -588,37 +612,37 @@ const TeacherDashboard = () => {
             </div>
 
             {isLoadingLeaderboard ? (
-              <div className="text-center py-20 bg-white rounded-3xl border border-sky-100"><Loader2 className="w-12 h-12 animate-spin mx-auto text-sky-500 mb-4"/><p className="font-bold text-slate-500">Đang tính toán điểm số...</p></div>
+              <div className="text-center py-20 bg-white rounded-3xl border border-sky-100"><Loader2 className="w-12 h-12 animate-spin mx-auto text-sky-500 mb-4"/></div>
             ) : !selectedLeaderboardClass ? (
-              <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-sky-200"><Trophy className="w-16 h-16 text-slate-200 mx-auto mb-4" /><p className="text-slate-500 font-medium">Vui lòng chọn một lớp ở menu phía trên để xem xếp hạng.</p></div>
+              <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-sky-200"><Trophy className="w-16 h-16 text-slate-200 mx-auto mb-4" /><p className="text-slate-500 font-medium">Chọn một lớp để xem xếp hạng.</p></div>
             ) : leaderboardData.length === 0 ? (
-              <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-sky-200"><BarChart className="w-16 h-16 text-slate-200 mx-auto mb-4" /><h3 className="text-xl font-bold text-slate-700 mb-2">Chưa có dữ liệu</h3><p className="text-slate-500 font-medium">Chưa có học sinh nào làm bài trong khoảng thời gian này.</p></div>
+              <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-sky-200"><BarChart className="w-16 h-16 text-slate-200 mx-auto mb-4" /><p className="text-slate-500 font-medium">Chưa có học sinh nào làm bài.</p></div>
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-1 space-y-4">
-                  <h3 className="font-black text-sky-900 text-lg uppercase tracking-wider mb-2 flex items-center gap-2"><Sparkles className="w-5 h-5 text-amber-500"/> Bảng Vàng</h3>
+                  <h3 className="font-black text-sky-900 text-lg uppercase flex items-center gap-2"><Sparkles className="w-5 h-5 text-amber-500"/> Bảng Vàng</h3>
                   {leaderboardData.slice(0, 3).map((student, idx) => (
-                    <Card key={student._id} className={`border-none shadow-md rounded-2xl overflow-hidden ${idx === 0 ? 'bg-gradient-to-br from-amber-100 to-amber-50' : idx === 1 ? 'bg-gradient-to-br from-slate-200 to-slate-100' : 'bg-gradient-to-br from-orange-200 to-orange-100'}`}>
-                      <CardContent className="p-5 flex items-center justify-between">
-                         <div className="flex items-center gap-4"><div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm">{getRankMedal(idx)}</div><div><p className="font-black text-slate-800 text-lg leading-tight">{student.fullName}</p><p className="text-xs font-bold text-slate-500 mt-0.5">{student.totalTests} bài đã làm</p></div></div>
-                         <div className="text-right"><p className="font-black text-3xl leading-none" style={{ color: idx === 0 ? '#b45309' : idx === 1 ? '#475569' : '#9a3412' }}>{student.averageScore}</p><p className="text-[10px] font-black uppercase tracking-wider opacity-60">Điểm TB</p></div>
+                    <Card key={student._id} className={`border-none shadow-md rounded-2xl ${idx === 0 ? 'bg-gradient-to-br from-amber-100 to-amber-50' : idx === 1 ? 'bg-gradient-to-br from-slate-200 to-slate-100' : 'bg-gradient-to-br from-orange-200 to-orange-100'}`}>
+                      <CardContent className="p-4 flex items-center justify-between">
+                         <div className="flex items-center gap-3"><div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm">{getRankMedal(idx)}</div><div><p className="font-black text-slate-800 text-lg">{student.fullName}</p><p className="text-xs font-bold text-slate-500">{student.totalTests} bài</p></div></div>
+                         <div className="text-right"><p className="font-black text-2xl">{student.averageScore}</p><p className="text-[10px] font-black uppercase opacity-60">Điểm TB</p></div>
                       </CardContent>
                     </Card>
                   ))}
                 </div>
                 
                 <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-sky-100 overflow-hidden">
-                  <div className="bg-sky-50/50 p-5 border-b border-sky-100"><h3 className="font-black text-sky-900 text-lg">Danh sách toàn lớp</h3></div>
-                  <div className="max-h-[500px] overflow-y-auto p-2">
-                    <Table>
-                      <TableHeader><TableRow className="border-b border-sky-50 hover:bg-transparent"><TableHead className="w-16 font-bold text-slate-400 text-center">Hạng</TableHead><TableHead className="font-bold text-slate-400">Họ và Tên</TableHead><TableHead className="font-bold text-slate-400 text-center">Đã làm</TableHead><TableHead className="font-bold text-sky-700 text-right pr-6">Điểm TB</TableHead></TableRow></TableHeader>
+                  <div className="bg-sky-50/50 p-4 border-b border-sky-100"><h3 className="font-black text-sky-900">Danh sách toàn lớp</h3></div>
+                  <div className="max-h-[500px] overflow-x-auto p-2">
+                    <Table className="min-w-[400px]">
+                      <TableHeader><TableRow><TableHead className="w-16 text-center">Hạng</TableHead><TableHead>Họ và Tên</TableHead><TableHead className="text-center">Đã làm</TableHead><TableHead className="text-right pr-6">Điểm TB</TableHead></TableRow></TableHeader>
                       <TableBody>
                         {leaderboardData.map((student, idx) => (
-                          <TableRow key={student._id} className="hover:bg-sky-50/50 border-sky-50 transition-colors">
+                          <TableRow key={student._id}>
                             <TableCell className="text-center font-bold text-slate-400">{idx + 1}</TableCell>
                             <TableCell className="font-bold text-slate-700">{student.fullName}</TableCell>
-                            <TableCell className="text-center text-slate-500 font-medium">{student.totalTests}</TableCell>
-                            <TableCell className="text-right pr-6 font-black text-lg text-sky-600">{student.averageScore}</TableCell>
+                            <TableCell className="text-center font-medium">{student.totalTests}</TableCell>
+                            <TableCell className="text-right pr-6 font-black text-sky-600">{student.averageScore}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -633,20 +657,22 @@ const TeacherDashboard = () => {
         {/* TAB BÀI TẬP ĐÃ GIAO */}
         {activeTab === "assignments" && (
           <Card className="border-sky-100/50 shadow-sm rounded-3xl overflow-hidden bg-white">
-            <Table>
-              <TableHeader className="bg-sky-50/80"><TableRow><TableHead className="pl-8 font-bold h-14 text-sky-800">Tên bài tập</TableHead><TableHead className="text-center font-bold text-sky-800">Lớp</TableHead><TableHead className="text-center font-bold text-sky-800">Số câu</TableHead><TableHead className="font-bold text-sky-800">Hạn nộp</TableHead><TableHead className="text-right pr-8 font-bold text-sky-800">Thao tác</TableHead></TableRow></TableHeader>
-              <TableBody>
-                {isLoadingData ? <TableRow><TableCell colSpan={5} className="text-center py-20"><Loader2 className="animate-spin mx-auto text-sky-500 h-10 w-10" /></TableCell></TableRow> : assignments.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-24 text-slate-400 italic">Chưa có bài tập nào.</TableCell></TableRow> : assignments.map(assig => (
-                  <TableRow key={assig._id} className="hover:bg-sky-50/50 transition-colors border-sky-50">
-                    <TableCell className="font-bold text-sky-700 pl-8">{assig.title}</TableCell>
-                    <TableCell className="text-center"><Badge className="bg-sky-100 text-sky-700 font-bold px-3 shadow-none hover:bg-sky-200">{assig.targetClass}</Badge></TableCell>
-                    <TableCell className="font-semibold text-center text-slate-600">{assig.questions?.length || 0}</TableCell>
-                    <TableCell className="text-slate-500 text-sm font-medium">{new Date(assig.dueDate).toLocaleString("vi-VN")}</TableCell>
-                    <TableCell className="text-right pr-8"><div className="flex justify-end gap-2"><Button onClick={() => navigate(`/teacher/assignment/${assig._id}/grades`)} variant="ghost" className="h-9 w-9 p-0 text-sky-600 hover:bg-sky-100 rounded-xl"><Eye className="h-4 w-4" /></Button><Button onClick={() => handleDeleteAssignment(assig._id, assig.title)} variant="ghost" className="h-9 w-9 p-0 text-rose-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl"><Trash2 className="h-4 w-4" /></Button></div></TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <Table className="min-w-[600px]">
+                <TableHeader className="bg-sky-50/80"><TableRow><TableHead className="pl-4 sm:pl-8 font-bold h-14 text-sky-800">Tên bài tập</TableHead><TableHead className="text-center font-bold text-sky-800">Lớp</TableHead><TableHead className="text-center font-bold text-sky-800">Số câu</TableHead><TableHead className="font-bold text-sky-800">Hạn nộp</TableHead><TableHead className="text-right pr-4 sm:pr-8 font-bold text-sky-800">Thao tác</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {isLoadingData ? <TableRow><TableCell colSpan={5} className="text-center py-20"><Loader2 className="animate-spin mx-auto text-sky-500 h-10 w-10" /></TableCell></TableRow> : assignments.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-24 text-slate-400 italic">Chưa có bài tập nào.</TableCell></TableRow> : assignments.map(assig => (
+                    <TableRow key={assig._id} className="hover:bg-sky-50/50 transition-colors border-sky-50">
+                      <TableCell className="font-bold text-sky-700 pl-4 sm:pl-8">{assig.title}</TableCell>
+                      <TableCell className="text-center"><Badge className="bg-sky-100 text-sky-700 font-bold px-3 shadow-none hover:bg-sky-200">{assig.targetClass}</Badge></TableCell>
+                      <TableCell className="font-semibold text-center text-slate-600">{assig.questions?.length || 0}</TableCell>
+                      <TableCell className="text-slate-500 text-sm font-medium">{new Date(assig.dueDate).toLocaleString("vi-VN")}</TableCell>
+                      <TableCell className="text-right pr-4 sm:pr-8"><div className="flex justify-end gap-1 sm:gap-2"><Button onClick={() => navigate(`/teacher/assignment/${assig._id}/grades`)} variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-sky-600 hover:bg-sky-100 rounded-xl"><Eye className="h-4 w-4" /></Button><Button onClick={() => handleDeleteAssignment(assig._id, assig.title)} variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-rose-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl"><Trash2 className="h-4 w-4" /></Button></div></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </Card>
         )}
 
@@ -656,33 +682,35 @@ const TeacherDashboard = () => {
             <Card className="mb-6 border-none shadow-sm rounded-2xl bg-white p-4">
               <div className="flex flex-col md:flex-row gap-4 items-center">
                 <div className="relative flex-1 w-full"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" /><Input placeholder="Tìm câu hỏi..." className="pl-10 rounded-xl bg-slate-50 border-none h-11" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
-                <div className="flex gap-2 w-full md:w-auto">
-                  <Select value={filterGrade} onValueChange={setFilterGrade}><SelectTrigger className="w-[120px] rounded-xl bg-slate-50 border-none h-11 font-semibold"><Filter className="w-3 h-3 mr-2" /><SelectValue placeholder="Khối" /></SelectTrigger><SelectContent><SelectItem value="all">Tất cả Khối</SelectItem><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent></Select>
-                  <Select value={filterSubject} onValueChange={setFilterSubject}><SelectTrigger className="w-[120px] rounded-xl bg-slate-50 border-none h-11 font-semibold"><SelectValue placeholder="Môn" /></SelectTrigger><SelectContent><SelectItem value="all">Tất cả Môn</SelectItem><SelectItem value="Toán">Toán</SelectItem><SelectItem value="Ngữ Văn">Ngữ Văn</SelectItem><SelectItem value="Tiếng Anh">Tiếng Anh</SelectItem></SelectContent></Select>
+                <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 sm:pb-0">
+                  <Select value={filterGrade} onValueChange={setFilterGrade}><SelectTrigger className="w-[110px] sm:w-[120px] rounded-xl bg-slate-50 border-none h-11 font-semibold"><Filter className="w-3 h-3 mr-1 sm:mr-2" /><SelectValue placeholder="Khối" /></SelectTrigger><SelectContent><SelectItem value="all">Tất cả Khối</SelectItem><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent></Select>
+                  <Select value={filterSubject} onValueChange={setFilterSubject}><SelectTrigger className="w-[110px] sm:w-[120px] rounded-xl bg-slate-50 border-none h-11 font-semibold"><SelectValue placeholder="Môn" /></SelectTrigger><SelectContent><SelectItem value="all">Tất cả Môn</SelectItem><SelectItem value="Toán">Toán</SelectItem><SelectItem value="Ngữ Văn">Ngữ Văn</SelectItem><SelectItem value="Tiếng Anh">Tiếng Anh</SelectItem></SelectContent></Select>
                 </div>
               </div>
             </Card>
 
             <Card className="border-sky-100/50 shadow-xl rounded-3xl overflow-hidden bg-white">
-              <Table>
-                <TableHeader className="bg-sky-50/80"><TableRow><TableHead className="pl-8 font-bold h-14 w-1/2 text-sky-800">Nội dung câu hỏi</TableHead><TableHead className="font-bold text-center text-sky-800">Khối</TableHead><TableHead className="font-bold text-sky-800">Môn</TableHead><TableHead className="font-bold text-sky-800">Độ khó</TableHead><TableHead className="text-right pr-8 font-bold text-sky-800">Thao tác</TableHead></TableRow></TableHeader>
-                <TableBody>
-                  {isLoadingData ? <TableRow><TableCell colSpan={5} className="text-center py-20"><Loader2 className="animate-spin mx-auto text-sky-500 h-10 w-10" /></TableCell></TableRow> : filteredQuestions.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-24 text-slate-400 italic">Không tìm thấy câu hỏi.</TableCell></TableRow> : filteredQuestions.map(q => (
-                    <TableRow key={q._id} className="hover:bg-sky-50/50 transition-colors border-sky-50">
-                      <TableCell className="pl-8 py-4"><div className="flex items-center gap-3">{q.imageUrl ? (<img src={`${serverUrl}${q.imageUrl}`} className="h-12 w-12 object-cover rounded-lg border bg-white shadow-sm" />) : (<div className="h-12 w-12 bg-slate-50 rounded-lg border border-dashed flex items-center justify-center shrink-0"><ImageIcon className="h-4 w-4 text-slate-300" /></div>)}<span className="font-semibold text-slate-700 line-clamp-2">{q.content}</span></div></TableCell>
-                      <TableCell className="text-center"><Badge variant="outline" className="bg-sky-100 text-sky-700 border-0 font-black px-3 hover:bg-sky-200">Khối {q.grade || "?"}</Badge></TableCell>
-                      <TableCell><Badge variant="outline" className="bg-slate-100 text-slate-600 border-0 hover:bg-slate-200">{q.subject}</Badge></TableCell>
-                      <TableCell><Badge variant="outline" className={`${q.difficulty === 'easy' ? 'text-teal-600 bg-teal-50' : q.difficulty === 'hard' ? 'text-rose-600 bg-rose-50' : 'text-amber-600 bg-amber-50'} border-0`}>{q.difficulty === 'easy' ? 'Dễ' : q.difficulty === 'hard' ? 'Khó' : 'TB'}</Badge></TableCell>
-                      <TableCell className="text-right pr-8">
-                         <div className="flex justify-end gap-2">
-                            <Button onClick={() => handleEditClick(q)} variant="ghost" className="h-9 w-9 p-0 text-sky-500 hover:bg-sky-100 rounded-xl"><Pencil className="h-4 w-4" /></Button>
-                            <Button onClick={() => handleDeleteQuestion(q._id)} variant="ghost" className="h-9 w-9 p-0 text-rose-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl"><Trash2 className="h-4 w-4" /></Button>
-                         </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <div className="overflow-x-auto">
+                <Table className="min-w-[600px]">
+                  <TableHeader className="bg-sky-50/80"><TableRow><TableHead className="pl-4 sm:pl-8 font-bold h-14 w-[40%] sm:w-1/2 text-sky-800">Nội dung</TableHead><TableHead className="font-bold text-center text-sky-800">Khối</TableHead><TableHead className="font-bold text-sky-800">Môn</TableHead><TableHead className="font-bold text-sky-800">Độ khó</TableHead><TableHead className="text-right pr-4 sm:pr-8 font-bold text-sky-800">Thao tác</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {isLoadingData ? <TableRow><TableCell colSpan={5} className="text-center py-20"><Loader2 className="animate-spin mx-auto text-sky-500 h-10 w-10" /></TableCell></TableRow> : filteredQuestions.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-24 text-slate-400 italic">Không tìm thấy câu hỏi.</TableCell></TableRow> : filteredQuestions.map(q => (
+                      <TableRow key={q._id} className="hover:bg-sky-50/50 transition-colors border-sky-50">
+                        <TableCell className="pl-4 sm:pl-8 py-4"><div className="flex items-center gap-3">{q.imageUrl ? (<img src={`${serverUrl}${q.imageUrl}`} className="h-10 w-10 sm:h-12 sm:w-12 object-cover rounded-lg border bg-white shadow-sm" />) : (<div className="h-10 w-10 sm:h-12 sm:w-12 bg-slate-50 rounded-lg border border-dashed flex items-center justify-center shrink-0"><ImageIcon className="h-4 w-4 text-slate-300" /></div>)}<span className="font-semibold text-slate-700 line-clamp-2 text-sm sm:text-base">{q.content}</span></div></TableCell>
+                        <TableCell className="text-center"><Badge variant="outline" className="bg-sky-100 text-sky-700 border-0 font-black px-2 sm:px-3 hover:bg-sky-200 text-xs sm:text-sm">Khối {q.grade || "?"}</Badge></TableCell>
+                        <TableCell><Badge variant="outline" className="bg-slate-100 text-slate-600 border-0 text-xs sm:text-sm">{q.subject}</Badge></TableCell>
+                        <TableCell><Badge variant="outline" className={`${q.difficulty === 'easy' ? 'text-teal-600 bg-teal-50' : q.difficulty === 'hard' ? 'text-rose-600 bg-rose-50' : 'text-amber-600 bg-amber-50'} border-0 text-xs sm:text-sm`}>{q.difficulty === 'easy' ? 'Dễ' : q.difficulty === 'hard' ? 'Khó' : 'TB'}</Badge></TableCell>
+                        <TableCell className="text-right pr-4 sm:pr-8">
+                           <div className="flex justify-end gap-1 sm:gap-2">
+                              <Button onClick={() => handleEditClick(q)} variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-sky-500 hover:bg-sky-100 rounded-xl"><Pencil className="h-4 w-4" /></Button>
+                              <Button onClick={() => handleDeleteQuestion(q._id)} variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-rose-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl"><Trash2 className="h-4 w-4" /></Button>
+                           </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </Card>
           </>
         )}

@@ -9,6 +9,13 @@ const assignmentSchema = new mongoose.Schema(
             trim: true,
         },
 
+        // [BỔ SUNG] Môn học (Để hiển thị đúng môn trên giao diện)
+        subject: {
+            type: String,
+            required: true,
+            default: "Toán",
+        },
+
         // Lời dặn dò, mô tả của giáo viên (Tùy chọn)
         description: {
             type: String,
@@ -32,8 +39,16 @@ const assignmentSchema = new mongoose.Schema(
         // Đây là một MẢNG chứa các ID trỏ về Thư viện câu hỏi (Bảng Question)
         questions: [
             {
-                type: mongoose.Schema.Types.ObjectId,
-                ref: "Question",
+                questionId: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: "Question",
+                    required: true
+                },
+                points: {
+                    type: Number,
+                    required: true,
+                    default: 1
+                }
             }
         ],
 
@@ -54,6 +69,13 @@ const assignmentSchema = new mongoose.Schema(
         duration: {
             type: Number, 
             default: null,
+        },
+
+        // [BỔ SUNG QUAN TRỌNG] Trạng thái bài tập
+        status: {
+            type: String,
+            enum: ["draft", "published"], 
+            default: "published" // Mặc định nếu không gửi gì thì là Đã giao
         }
     },
     { 

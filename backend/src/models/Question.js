@@ -51,12 +51,19 @@ const questionSchema = new mongoose.Schema(
             default: "" 
         },
 
+        questionSet: { 
+        type: String, 
+        default: "Ngân hàng chung" 
+        },
+        
         // ĐỔI TÊN TỪ createdBy THÀNH teacher ĐỂ KHỚP VỚI FILE ROUTES
         teacher: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User", 
             required: true,
-        }
+        },
+
+        isBank: { type: Boolean, default: false }
     },
     { timestamps: true }
 );

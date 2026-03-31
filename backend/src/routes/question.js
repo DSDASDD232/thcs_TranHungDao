@@ -19,28 +19,26 @@ const storage = multer.diskStorage({
         cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname));
+        cb(null, Date.now() + "-" + file.originalname.replace(/\s+/g, '-')); // Thêm logic chống lỗi tên file có dấu cách
     }
 });
 
 const upload = multer({ 
     storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 } // 5MB
+    limits: { fileSize: 10 * 1024 * 1024 } // Tăng lên 10MB để hỗ trợ tải nhiều ảnh một lúc
 });
 
 // ==========================================================
-// 1. [POST] Thêm câu hỏi mới (BẢN FIX LỖI 500)
+// 1. [POST] Thêm 1 câu hỏi lẻ (THÊM VÀO KHO)
 // ==========================================================
 router.post("/add", verifyToken, isTeacherOrAdmin, upload.single("image"), async (req, res) => {
     try {
-        const { content, subject, difficulty, grade, options, correctAnswer } = req.body;
+        const { content, subject, difficulty, grade, type, options, correctAnswer } = req.body;
 
-        // BẢO VỆ 1: Kiểm tra xem các trường bắt buộc có bị trống không
         if (!content || !options || !correctAnswer) {
             return res.status(400).json({ message: "Thiếu thông tin câu hỏi, đáp án hoặc nội dung!" });
         }
 
-        // BẢO VỆ 2: Xử lý Parse JSON cho options một cách an toàn
         let parsedOptions;
         try {
             parsedOptions = typeof options === 'string' ? JSON.parse(options) : options;
@@ -52,7 +50,6 @@ router.post("/add", verifyToken, isTeacherOrAdmin, upload.single("image"), async
             return res.status(400).json({ message: "Định dạng danh sách đáp án không hợp lệ!" });
         }
 
-        // Xử lý ảnh
         let finalImageUrl = "";
         if (req.file) {
             finalImageUrl = `/uploads/${req.file.filename}`;
@@ -63,14 +60,17 @@ router.post("/add", verifyToken, isTeacherOrAdmin, upload.single("image"), async
             subject,
             difficulty,
             grade: grade || "6",
+            type: type || "multiple_choice",
             options: parsedOptions,
             correctAnswer,
             imageUrl: finalImageUrl, 
-            teacher: req.user.id
+            teacher: req.user.id,
+            isBank: true,
+            questionSet: "Ngân hàng chung" // Mặc định nếu thêm lẻ
         });
 
         await newQuestion.save();
-        res.status(201).json({ message: "✅ Đã thêm câu hỏi thành công!", question: newQuestion });
+        res.status(201).json({ message: "✅ Đã thêm câu hỏi vào Kho thành công!", question: newQuestion });
 
     } catch (error) {
         console.error("LỖI BACKEND CHI TIẾT:", error);
@@ -78,12 +78,73 @@ router.post("/add", verifyToken, isTeacherOrAdmin, upload.single("image"), async
     }
 });
 
+// ======================================================================
+// [MỚI] 2. [POST] LƯU HÀNG LOẠT CÂU HỎI THÀNH "BỘ ĐỀ" (TỪ TRANG TẠO BỘ ĐỀ)
+// ======================================================================
+router.post("/create-set", verifyToken, isTeacherOrAdmin, upload.any(), async (req, res) => {
+    try {
+        const { setName, subject, grade, questionsData } = req.body;
+        
+        let parsedQuestions = [];
+        try {
+            parsedQuestions = JSON.parse(questionsData);
+        } catch (e) {
+            return res.status(400).json({ message: "Dữ liệu danh sách câu hỏi không hợp lệ!" });
+        }
+        
+        if (!parsedQuestions || parsedQuestions.length === 0) {
+            return res.status(400).json({ message: "Không có câu hỏi nào để lưu!" });
+        }
+
+        const questionsToSave = [];
+
+        // Lặp qua từng câu hỏi gửi lên
+        for (let q of parsedQuestions) {
+            let imageUrl = q.existingImageUrl || "";
+            
+            // Tìm file ảnh tương ứng (nếu có up lên)
+            const imageFile = req.files?.find(f => f.fieldname === `image_${q.tempId}`);
+            if (imageFile) {
+                imageUrl = `/uploads/${imageFile.filename}`;
+            }
+
+            questionsToSave.push({
+                content: q.content,
+                type: q.type || "multiple_choice",
+                options: q.options,
+                correctAnswer: q.correctAnswer,
+                difficulty: q.difficulty || "medium",
+                subject: subject || "Chung",
+                grade: grade || "Chung",
+                questionSet: setName || "Ngân hàng chung", // ✅ LƯU TÊN BỘ ĐỀ
+                teacher: req.user.id,
+                imageUrl: imageUrl,
+                isBank: true // ✅ ĐÁNH DẤU LÀ NẰM TRONG KHO
+            });
+        }
+
+        // Lưu toàn bộ vào DB trong 1 nốt nhạc
+        await Question.insertMany(questionsToSave);
+
+        res.status(201).json({ message: `✅ Đã lưu thành công ${questionsToSave.length} câu hỏi vào Bộ đề: ${setName}` });
+
+    } catch (error) {
+        console.error("Lỗi lưu Bộ đề:", error);
+        res.status(500).json({ message: "Lỗi server khi lưu bộ đề", error: error.message });
+    }
+});
+
 // ==========================================================
-// 2. [GET] Lấy toàn bộ câu hỏi
+// 3. [GET] Lấy toàn bộ câu hỏi (CHỈ LẤY CÂU TRONG KHO)
 // ==========================================================
 router.get("/all", verifyToken, isTeacherOrAdmin, async (req, res) => {
     try {
-        const questions = await Question.find()
+        const queryFilter = { isBank: true };
+        if (req.user.role === "teacher") {
+            queryFilter.teacher = req.user.id;
+        }
+
+        const questions = await Question.find(queryFilter)
             .sort({ createdAt: -1 }) 
             .populate("teacher", "fullName username");
 
@@ -98,7 +159,7 @@ router.get("/all", verifyToken, isTeacherOrAdmin, async (req, res) => {
 });
 
 // ==========================================================
-// 3. [PUT] Cập nhật câu hỏi
+// 4. [PUT] Cập nhật câu hỏi
 // ==========================================================
 router.put("/update/:id", verifyToken, isTeacherOrAdmin, upload.single("image"), async (req, res) => {
     try {
@@ -131,16 +192,14 @@ router.put("/update/:id", verifyToken, isTeacherOrAdmin, upload.single("image"),
 });
 
 // ==========================================================
-// 4. [DELETE] Xóa câu hỏi (Fix đường dẫn xóa file vật lý)
+// 5. [DELETE] Xóa câu hỏi (Fix đường dẫn xóa file vật lý)
 // ==========================================================
 router.delete("/delete/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
     try {
         const deletedQuestion = await Question.findByIdAndDelete(req.params.id);
         if (!deletedQuestion) return res.status(404).json({ message: "Không tìm thấy câu hỏi!" });
 
-        // Xóa file ảnh trong thư mục uploads để tránh đầy rác máy chủ
         if (deletedQuestion.imageUrl) {
-            // Chuyển /uploads/abc.jpg thành đường dẫn tuyệt đối trên máy tính
             const fileName = deletedQuestion.imageUrl.replace('/uploads/', '');
             const filePath = path.join(process.cwd(), 'uploads', fileName);
             
@@ -155,5 +214,5 @@ router.delete("/delete/:id", verifyToken, isTeacherOrAdmin, async (req, res) => 
         res.status(500).json({ message: "Lỗi server khi xóa", error: error.message });
     }
 });
-
+    
 export default router;

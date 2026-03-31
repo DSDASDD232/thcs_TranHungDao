@@ -4,33 +4,65 @@ import Assignment from "../models/Assignment.js";
 import Question from "../models/Question.js";
 import { verifyToken, isTeacherOrAdmin } from "../middleware/auth.js";
 import User from "../models/User.js";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+
 const router = express.Router();
 
+// ==========================================================
+// CẤU HÌNH LƯU TRỮ ẢNH HỌC SINH NỘP (MULTER)
+// ==========================================================
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const uploadDir = "uploads/submissions/";
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + path.extname(file.originalname));
+    }
+});
+
+const uploadSubmission = multer({ 
+    storage: storage,
+    limits: { fileSize: 10 * 1024 * 1024 } // Giới hạn ảnh 10MB
+});
+
 // ======================================================================
-// 1. [POST] API NỘP BÀI VÀ TỰ ĐỘNG CHẤM ĐIỂM (DÀNH CHO HỌC SINH)
+// 1. [POST] API NỘP BÀI VÀ TỰ ĐỘNG CHẤM ĐIỂM (LAI TRẮC NGHIỆM & TỰ LUẬN)
 // ======================================================================
-router.post("/submit", verifyToken, async (req, res) => {
+router.post("/submit", verifyToken, uploadSubmission.any(), async (req, res) => {
     try {
-        // Chỉ học sinh mới được nộp bài
         if (req.user.role !== "student") {
             return res.status(403).json({ message: "Chỉ học sinh mới được nộp bài!" });
         }
 
         const { assignmentId, studentAnswers } = req.body;
+        
+        // Cần parse string JSON về dạng Array (do gửi bằng FormData có đính kèm File)
+        let parsedAnswers = [];
+        try {
+            parsedAnswers = JSON.parse(studentAnswers);
+        } catch (e) {
+            return res.status(400).json({ message: "Dữ liệu câu trả lời không hợp lệ" });
+        }
 
-        // 1. Tìm bài tập xem có tồn tại không
+        // 1. Tìm bài tập
         const assignment = await Assignment.findById(assignmentId);
         if (!assignment) {
             return res.status(404).json({ message: "Không tìm thấy bài tập này!" });
         }
 
-        // 2. Kiểm tra Deadline (Hạn nộp)
+        // 2. Kiểm tra Deadline
         const now = new Date();
         if (now > new Date(assignment.dueDate)) {
             return res.status(400).json({ message: "⏳ Đã hết hạn nộp bài!" });
         }
 
-        // 3. Kiểm tra xem học sinh này đã nộp bài này chưa (tránh nộp 2 lần)
+        // 3. Chống nộp 2 lần
         const existingSubmission = await Submission.findOne({
             assignment: assignmentId,
             student: req.user.id
@@ -39,53 +71,89 @@ router.post("/submit", verifyToken, async (req, res) => {
             return res.status(400).json({ message: "Bạn đã nộp bài này rồi, không thể nộp lại!" });
         }
 
-        // 4. TỰ ĐỘNG CHẤM ĐIỂM (Auto-grading)
-        let correctCount = 0;
+        // 4. BẮT ĐẦU CHẤM ĐIỂM
+        let totalScore = 0;
         let processedAnswers = [];
+        let hasEssayQuestion = false; // Cờ theo dõi xem bài này có câu tự luận không
 
-        // Lấy tất cả câu hỏi của bài tập này ra để dò đáp án
-        const questionsInDb = await Question.find({ _id: { $in: assignment.questions } });
+        // Lấy dữ liệu gốc của tất cả câu hỏi
+        const questionIds = assignment.questions.map(q => q.questionId);
+        const questionsInDb = await Question.find({ _id: { $in: questionIds } });
 
-        // Lặp qua từng câu trả lời của học sinh để chấm
-        for (let ans of studentAnswers) {
+        for (let ans of parsedAnswers) {
             const questionDoc = questionsInDb.find(q => q._id.toString() === ans.question);
-            let isCorrect = false;
+            // Lấy mức điểm tối đa của câu hỏi này từ Assignment
+            const assignmentQuestion = assignment.questions.find(q => q.questionId.toString() === ans.question);
+            const maxPoints = assignmentQuestion ? assignmentQuestion.points : 0;
 
-            if (questionDoc && ans.studentAnswer === questionDoc.correctAnswer) {
-                isCorrect = true;
-                correctCount++;
+            let isCorrect = false;
+            let pointsAwarded = 0;
+            let finalImageUrl = "";
+
+            if (questionDoc) {
+                // TÌNH HUỐNG 1: CÂU HỎI TRẮC NGHIỆM -> MÁY CHẤM LIỀN
+                if (questionDoc.type === "multiple_choice") {
+                    
+                    // Parse options để lấy text tương ứng với A, B, C, D
+                    let parsedOptions = [];
+                    try {
+                        parsedOptions = typeof questionDoc.options === 'string' ? JSON.parse(questionDoc.options) : questionDoc.options;
+                    } catch (e) {
+                        parsedOptions = questionDoc.options || [];
+                    }
+
+                    // Tìm index tương ứng với A, B, C, D
+                    const optIndex = ans.studentAnswer === 'A' ? 0 : ans.studentAnswer === 'B' ? 1 : ans.studentAnswer === 'C' ? 2 : ans.studentAnswer === 'D' ? 3 : -1;
+                    let studentAnswerText = optIndex !== -1 ? parsedOptions[optIndex] : "";
+                    
+                    // LOGIC CHẤM ĐIỂM: So khớp Text HOẶC so khớp A,B,C,D
+                    if (
+                        (studentAnswerText && questionDoc.correctAnswer && studentAnswerText.trim().toLowerCase() === questionDoc.correctAnswer.trim().toLowerCase()) ||
+                        (ans.studentAnswer && ans.studentAnswer.toUpperCase() === questionDoc.correctAnswer.toUpperCase())
+                    ) {
+                        isCorrect = true;
+                        pointsAwarded = maxPoints; 
+                        totalScore += maxPoints; 
+                    }
+                } 
+                // TÌNH HUỐNG 2: CÂU HỎI TỰ LUẬN -> LƯU ẢNH LẠI CHỜ GIÁO VIÊN
+                else if (questionDoc.type === "essay") {
+                    hasEssayQuestion = true; 
+                    const imageFile = req.files.find(f => f.fieldname === `image_${ans.question}`);
+                    if (imageFile) {
+                        finalImageUrl = `/uploads/submissions/${imageFile.filename}`;
+                    }
+                }
             }
 
             processedAnswers.push({
                 question: ans.question,
-                studentAnswer: ans.studentAnswer,
-                isCorrect: isCorrect
+                type: questionDoc ? questionDoc.type : "multiple_choice",
+                studentAnswer: ans.studentAnswer || "", // Text trả lời trắc nghiệm hoặc gõ tự luận
+                studentImage: finalImageUrl, // Link ảnh học sinh chụp (tự luận)
+                isCorrect: isCorrect,
+                pointsAwarded: pointsAwarded,
+                maxPoints: maxPoints
             });
         }
 
-        // 5. Tính điểm trên thang 10 (Làm tròn 1 chữ số thập phân cho đẹp)
-        const totalQuestions = assignment.questions.length;
-        let score = 0;
-        if (totalQuestions > 0) {
-            score = (correctCount / totalQuestions) * 10;
-            score = Math.round(score * 10) / 10; // Làm tròn 1 chữ số (VD: 8.5)
-        }
+        // 5. Xác định Trạng thái bài nộp
+        const finalStatus = hasEssayQuestion ? "pending" : "graded";
 
-        // 6. Tạo bản ghi Submission mới và lưu xuống DB
         const newSubmission = new Submission({
             assignment: assignmentId,
             student: req.user.id,
-            studentAnswers: processedAnswers, // Đổi từ answers -> studentAnswers cho khớp DB
-            score: score,
-            status: "graded"
+            answers: processedAnswers, 
+            score: Number(totalScore.toFixed(2)), 
+            status: finalStatus
         });
 
         await newSubmission.save();
 
         res.status(201).json({
             message: "✅ Nộp bài thành công!",
-            score: score,
-            correctAnswers: `${correctCount}/${totalQuestions}`,
+            status: finalStatus,
+            score: finalStatus === "graded" ? newSubmission.score : null, 
             submission: newSubmission
         });
 
@@ -102,32 +170,58 @@ router.get("/assignment/:id/grades", verifyToken, isTeacherOrAdmin, async (req, 
     try {
         const assignmentId = req.params.id;
 
-        // 1. Kiểm tra xem bài tập có tồn tại không
         const assignment = await Assignment.findById(assignmentId);
         if (!assignment) {
             return res.status(404).json({ message: "Không tìm thấy bài tập này!" });
         }
 
-        // 2. Chốt bảo mật: Nếu là giáo viên, chỉ cho phép xem bài do chính mình giao
-        if (req.user.role === "teacher" && assignment.teacher.toString() !== req.user.id) {
-            return res.status(403).json({ message: "⛔ Bạn chỉ được xem điểm của bài tập do chính mình giao!" });
-        }
-
-        // 3. Truy vấn lấy toàn bộ bài nộp của bài tập này
         const submissions = await Submission.find({ assignment: assignmentId })
             .populate({
                 path: "student", 
-                select: "fullName username classId", // Kéo thêm classId
-                populate: { path: "classId", select: "name" } // Dịch classId thành Tên lớp
-            }) 
-            .sort({ score: -1 }); 
+                select: "fullName username classId", 
+                populate: { path: "classId", select: "name" } 
+            })
+            .populate("answers.question") 
+            .sort({ status: -1, score: -1 }); 
 
-        // 4. Trả về kết quả (Gói trong thuộc tính `submissions` để Frontend dễ đọc)
-        res.status(200).json({ submissions });
+        res.status(200).json({ assignment, submissions });
 
     } catch (error) {
         console.error("Lỗi lấy danh sách điểm:", error);
         res.status(500).json({ message: "Lỗi server", error });
+    }
+});
+
+// ======================================================================
+// [MỚI] API LƯU ĐIỂM CHẤM THỦ CÔNG CỦA GIÁO VIÊN (CHẤM TỰ LUẬN)
+// ======================================================================
+router.put("/grade/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { grades } = req.body; 
+
+        const submission = await Submission.findById(id).populate("answers.question");
+        if (!submission) return res.status(404).json({ message: "Không tìm thấy bài nộp!" });
+
+        let newTotalScore = 0;
+
+        submission.answers.forEach(ans => {
+            const qIdStr = ans.question._id.toString();
+            if (grades[qIdStr] !== undefined) {
+                ans.pointsAwarded = Number(grades[qIdStr]);
+            }
+            newTotalScore += ans.pointsAwarded;
+        });
+
+        submission.score = Number(newTotalScore.toFixed(2));
+        submission.status = "graded"; 
+
+        await submission.save();
+
+        res.status(200).json({ message: "✅ Chấm bài thành công!", submission });
+    } catch (error) {
+        console.error("Lỗi chấm bài:", error);
+        res.status(500).json({ message: "Lỗi server khi chấm bài", error });
     }
 });
 
@@ -141,10 +235,9 @@ router.get("/my-submissions", verifyToken, async (req, res) => {
         }
 
         const mySubmissions = await Submission.find({ student: req.user.id })
-            .populate("assignment", "title targetClass dueDate") 
+            .populate("assignment", "title subject dueDate") 
             .sort({ createdAt: -1 }); 
 
-        // Trả kết quả về
         res.status(200).json({
             message: "✅ Lấy lịch sử điểm số thành công!",
             total: mySubmissions.length,
@@ -157,78 +250,94 @@ router.get("/my-submissions", verifyToken, async (req, res) => {
     }
 });
 
-
 // ======================================================================
-// 4. [GET] API LẤY BẢNG XẾP HẠNG THI ĐUA CỦA 1 LỚP (CÓ BỘ LỌC THỜI GIAN)
+// 4. [GET] API LẤY BẢNG XẾP HẠNG THI ĐUA CỦA 1 LỚP (CÓ BỘ LỌC THỜI GIAN VÀ MÔN)
 // ======================================================================
 router.get("/class/:classId/leaderboard", verifyToken, isTeacherOrAdmin, async (req, res) => {
     try {
         const classId = req.params.classId;
-        const { timeframe } = req.query; // Nhận thời gian từ Frontend (all, week, month, year)
+        const { timeframe, subject } = req.query; // 👉 Đã thêm subject
 
-        // 1. Tìm tất cả học sinh trong lớp này
         const students = await User.find({ classId: classId, role: "student" }).select("fullName username");
         if (students.length === 0) return res.status(200).json({ leaderboard: [] });
         const studentIds = students.map(s => s._id);
 
-        // 2. Tạo bộ lọc thời gian
         let dateFilter = {};
         const now = new Date();
 
         if (timeframe === 'week') {
             const day = now.getDay();
-            const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Tìm ngày Thứ 2 đầu tuần
+            const diff = now.getDate() - day + (day === 0 ? -6 : 1); 
             const firstDayOfWeek = new Date(now.setDate(diff));
             firstDayOfWeek.setHours(0, 0, 0, 0);
             dateFilter = { createdAt: { $gte: firstDayOfWeek } };
         } else if (timeframe === 'month') {
-            const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1); // Ngày 1 đầu tháng
+            const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1); 
             dateFilter = { createdAt: { $gte: firstDayOfMonth } };
         } else if (timeframe === 'year') {
-            const firstDayOfYear = new Date(now.getFullYear(), 0, 1); // Ngày 1/1 đầu năm
+            const firstDayOfYear = new Date(now.getFullYear(), 0, 1); 
             dateFilter = { createdAt: { $gte: firstDayOfYear } };
         }
 
-        // 3. Tìm các bài nộp của học sinh trong lớp kết hợp LỌC THỜI GIAN
+        // 👉 Xử lý lọc theo môn học (tìm các Assignment có môn tương ứng trước)
+        let assignmentFilter = {};
+        if (subject && subject !== "all") {
+            const assignmentsOfSubject = await Assignment.find({ subject: subject }).select("_id");
+            const assignmentIds = assignmentsOfSubject.map(a => a._id);
+            assignmentFilter = { assignment: { $in: assignmentIds } };
+        }
+
         const submissions = await Submission.find({ 
             student: { $in: studentIds },
-            ...dateFilter 
-        });
+            status: "graded", // Thi đua chỉ tính các bài đã chấm xong
+            ...dateFilter,
+            ...assignmentFilter // 👉 Gắn bộ lọc môn học vào đây
+        }).sort({ createdAt: -1 }); 
 
-        // 4. Tính điểm trung bình cho từng em
         let leaderboard = students.map(student => {
-            // Lọc ra các bài nộp của riêng học sinh này
             const studentSubs = submissions.filter(sub => sub.student.toString() === student._id.toString());
-            
-            // Tính tổng điểm
             const totalScore = studentSubs.reduce((sum, sub) => sum + sub.score, 0);
-            
-            // Tính điểm trung bình (làm tròn 1 chữ số)
             const averageScore = studentSubs.length > 0 ? (totalScore / studentSubs.length).toFixed(1) : 0;
+            const lastSubmission = studentSubs.length > 0 ? studentSubs[0].createdAt : null;
 
             return {
                 _id: student._id,
                 fullName: student.fullName,
                 username: student.username,
-                totalTests: studentSubs.length, // Số bài đã làm
-                averageScore: parseFloat(averageScore) // Điểm trung bình thi đua
+                totalTests: studentSubs.length, 
+                averageScore: parseFloat(averageScore), 
+                lastSubmission: lastSubmission 
             };
         });
 
-        // 5. CHỈ GIỮ LẠI những học sinh có làm bài (tránh rác bảng xếp hạng với những số 0)
-        leaderboard = leaderboard.filter(student => student.totalTests > 0);
-
-        // 6. Sắp xếp: Ưu tiên Điểm TB cao hơn -> Nếu điểm bằng nhau thì ưu tiên Chăm chỉ (Số bài làm nhiều hơn)
+        // 👉 ƯU TIÊN SẮP XẾP: Số lượt nộp bài > Điểm Trung Bình
         leaderboard.sort((a, b) => {
-            if (b.averageScore !== a.averageScore) {
-                return b.averageScore - a.averageScore;
+            if (b.totalTests !== a.totalTests) {
+                return b.totalTests - a.totalTests;
             }
-            return b.totalTests - a.totalTests;
+            return b.averageScore - a.averageScore;
         });
 
         res.status(200).json({ leaderboard });
     } catch (error) {
         console.error("Lỗi lấy bảng xếp hạng:", error);
+        res.status(500).json({ message: "Lỗi server", error });
+    }
+});
+
+// ======================================================================
+// 5. [GET] API XEM CHI TIẾT LỊCH SỬ LÀM BÀI CỦA 1 HỌC SINH (Cho Giáo viên)
+// ======================================================================
+router.get("/student/:studentId", verifyToken, isTeacherOrAdmin, async (req, res) => {
+    try {
+        const { studentId } = req.params;
+        const submissions = await Submission.find({ student: studentId })
+            .populate("assignment", "title") 
+            .sort({ createdAt: -1 }); 
+
+        res.status(200).json({ submissions });
+    } catch (error) {
+        console.error("Lỗi lấy lịch sử học sinh:", error);
         res.status(500).json({ message: "Lỗi server", error });
     }
 });

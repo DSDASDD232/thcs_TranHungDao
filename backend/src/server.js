@@ -23,38 +23,53 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 
 // ==========================================
-// 1. KẾT NỐI DATABASE
+// 1. CẤU HÌNH CORS & JSON (BẮT BUỘC ĐẶT LÊN ĐẦU TIÊN)
 // ==========================================
-connectDB();
+const allowedOrigins = [
+    "http://localhost:5173", 
+    "http://localhost:5001",
+    "https://thcs-tranhungdao.onrender.com"
+];
 
-// ==========================================
-// 2. PHỤC VỤ FILE GIAO DIỆN (ĐẶT LÊN ĐẦU TIÊN)
-// ==========================================
-// Tránh việc CORS chặn tải file CSS/JS của Vite
-const rootDir = process.cwd();
-const frontendPath = path.join(rootDir, "frontend", "dist");
-
-// Cung cấp file tĩnh của Frontend (css, js, ảnh)
-if (fs.existsSync(frontendPath)) {
-    app.use(express.static(frontendPath));
-}
-
-// Cung cấp file Uploads
-const uploadsPath = path.join(rootDir, 'backend', 'uploads');
-if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath, { recursive: true });
-app.use('/uploads', express.static(uploadsPath));
-
-// ==========================================
-// 3. CẤU HÌNH CORS CHO CÁC API KHÔNG BỊ LỖI 500
-// ==========================================
-// Mở toang cửa CORS để tránh hoàn toàn mọi lỗi ngăn chặn kết nối
 app.use(cors({
-    origin: "*", // Cho phép mọi nguồn (Rất an toàn cho project thực hành)
+    origin: function (origin, callback) {
+        // Cho phép postman (!origin), localhost và link render
+        if (!origin || allowedOrigins.includes(origin) || origin.includes("onrender.com")) {
+            callback(null, true);
+        } else {
+            console.log("⚠️ Bị chặn bởi CORS:", origin);
+            callback(null, true);
+        }
+    },
+    credentials: true, // BẮT BUỘC PHẢI CÓ để Frontend gửi Token
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// BẮT BUỘC PHẢI CÓ DÒNG NÀY ĐỂ ĐỌC ĐƯỢC DỮ LIỆU (req.body)
 app.use(express.json()); 
+
+// ==========================================
+// 2. KẾT NỐI DATABASE
+// ==========================================
+connectDB();
+
+// ==========================================
+// 3. PHỤC VỤ FILE TĨNH (ẢNH UPLOAD & GIAO DIỆN)
+// ==========================================
+const rootDir = process.cwd();
+
+// 👉 FIX LỖI ẢNH BỊ VỠ TẠI ĐÂY: 
+// Do chạy server từ thư mục 'backend', nên thư mục uploads sẽ nằm ngay gốc của nó.
+const uploadsPath = path.join(rootDir, 'uploads'); 
+if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath, { recursive: true });
+app.use('/uploads', express.static(uploadsPath));
+
+// Cung cấp file tĩnh của Frontend (Dùng khi Deploy)
+const frontendPath = path.join(rootDir, "frontend", "dist");
+if (fs.existsSync(frontendPath)) {
+    app.use(express.static(frontendPath));
+}
 
 // ==========================================
 // 4. CÁC ROUTES API

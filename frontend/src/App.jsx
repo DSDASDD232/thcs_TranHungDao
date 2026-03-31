@@ -4,8 +4,10 @@ import TeacherDashboard from "./pages/TeacherDashboard";
 import StudentDashboard from "./pages/StudentDashboard";
 import TakeQuiz from "./pages/TakeQuiz";
 import AdminDashboard from "./pages/AdminDashboard";
-import ViewGrades from "./pages/ViewGrades";
 import CreateAssignment from "./pages/CreateAssignment";
+import AssignmentGrades from "./pages/AssignmentGrades";
+import QuestionBank from "./pages/QuestionBank";
+import GradeStudent from "./pages/GradeStudent"; 
 
 function App() {
   return (
@@ -20,12 +22,18 @@ function App() {
         <Route path="/teacher-dashboard" element={<TeacherDashboard />} />
         <Route path="/student-dashboard" element={<StudentDashboard />} />
         
-        {/* ĐÃ FIX LỖI Ở ĐÂY: Đổi từ /quiz/:id thành /take-quiz/:id */}
+        {/* Trang Học sinh làm bài */}
         <Route path="/take-quiz/:id" element={<TakeQuiz />} />
         
-        <Route path="/teacher/assignment/:assignmentId/grades" element={<ViewGrades />} />
-
+        {/* Nhóm trang Giáo viên quản lý bài tập */}
         <Route path="/teacher/create-assignment" element={<CreateAssignment />} />
+        <Route path="/teacher/edit-assignment/:id" element={<CreateAssignment />} />
+        
+        {/* TRANG DANH SÁCH NỘP BÀI CỦA 1 BÀI TẬP */}
+        <Route path="/teacher/assignment/:id/grades" element={<AssignmentGrades />} />
+        <Route path="/teacher/question-bank" element={<QuestionBank />} />
+        {/* [MỚI THÊM] TRANG CHẤM ĐIỂM CHI TIẾT CỦA 1 HỌC SINH */}
+        <Route path="/teacher/grade/:id" element={<GradeStudent />} />
       </Routes>
     </Router>
   );

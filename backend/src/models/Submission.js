@@ -25,15 +25,36 @@ const submissionSchema = new mongoose.Schema(
                     ref: "Question",
                     required: true,
                 },
-                // Đáp án học sinh chọn (Trắc nghiệm) hoặc gõ vào (Tự luận)
+                // Phân loại để dễ lọc ra câu nào máy chấm, câu nào người chấm
+                type: {
+                    type: String,
+                    enum: ["multiple_choice", "essay"],
+                    default: "multiple_choice",
+                },
+                // Đáp án học sinh chọn (A,B,C,D) hoặc nội dung text tự luận
                 studentAnswer: {
                     type: String,
                     default: "",
                 },
-                // Máy tự chấm xem câu này đúng hay sai (rất tiện để tính điểm)
+                // [MỚI] Ảnh học sinh upload cho câu tự luận
+                studentImage: {
+                    type: String,
+                    default: "",
+                },
+                // Máy tự chấm xem câu này đúng hay sai (Dành cho trắc nghiệm)
                 isCorrect: {
                     type: Boolean,
                     default: false,
+                },
+                // [MỚI] Điểm đạt được của riêng câu này
+                pointsAwarded: {
+                    type: Number,
+                    default: 0,
+                },
+                // [MỚI] Điểm tối đa của câu này (Copy từ Assignment sang để dễ tính toán)
+                maxPoints: {
+                    type: Number,
+                    default: 0,
                 }
             }
         ],
@@ -44,14 +65,17 @@ const submissionSchema = new mongoose.Schema(
             default: 0,
         },
 
-        // Trạng thái bài làm (Dùng để phân biệt bài toàn trắc nghiệm máy chấm xong luôn, hay bài có tự luận phải chờ giáo viên chấm)
+        // [SỬA] Thêm trạng thái pending (Chờ chấm)
         status: {
             type: String,
-            enum: ["submitted", "graded"], 
+            enum: ["submitted", "pending", "graded"], 
+            // submitted: Đã nộp
+            // pending: Có câu tự luận, đang chờ giáo viên vào chấm ảnh
+            // graded: Đã có điểm chính thức
             default: "submitted",
         },
 
-        // Lời phê của giáo viên
+        // Lời phê của giáo viên cho toàn bài
         feedback: {
             type: String,
             default: "",

@@ -5,14 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress"; 
+// 👉 IMPORT THÊM DIALOG ĐỂ LÀM POPUP XEM CHI TIẾT
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
-  ArrowLeft, UploadCloud, CheckCircle, AlertCircle, 
+  ArrowLeft, UploadCloud, CheckCircle, CheckCircle2, AlertCircle, // 👉 THÊM CheckCircle2 VÀO DÒNG NÀY
   Sparkles, FileText, Loader2, Image as ImageIcon,
-  PenTool, Database, PlusCircle, Trash2, Calculator, Save, Search
+  PenTool, Database, PlusCircle, Trash2, Calculator, Save, Search, Eye
 } from "lucide-react";
 
 const CreateAssignment = () => {
@@ -26,6 +28,9 @@ const CreateAssignment = () => {
 
   const [creationMethod, setCreationMethod] = useState("manual"); 
   
+  // 👉 STATE MỚI: Dùng để lưu trữ câu hỏi đang được xem chi tiết
+  const [viewQuestion, setViewQuestion] = useState(null);
+
   const getDefaultDueDate = () => {
     const now = new Date();
     now.setHours(now.getHours() + 24); 
@@ -64,9 +69,6 @@ const CreateAssignment = () => {
     return { headers };
   };
 
-  // ==========================================
-  // AUTO-FILL: GỌI DỮ LIỆU BÀI NHÁP CŨ RA
-  // ==========================================
   useEffect(() => {
     const fetchAssignmentData = async () => {
       if (!id) return; 
@@ -99,10 +101,14 @@ const CreateAssignment = () => {
 
             let correctKey = "A";
             if (q.type === 'multiple_choice' && parsedOptions.length > 0) {
-              if (q.correctAnswer === parsedOptions[0]) correctKey = "A";
-              else if (q.correctAnswer === parsedOptions[1]) correctKey = "B";
-              else if (q.correctAnswer === parsedOptions[2]) correctKey = "C";
-              else if (q.correctAnswer === parsedOptions[3]) correctKey = "D";
+              if (["A", "B", "C", "D"].includes(q.correctAnswer)) {
+                  correctKey = q.correctAnswer;
+              } else {
+                  if (q.correctAnswer === parsedOptions[0]) correctKey = "A";
+                  else if (q.correctAnswer === parsedOptions[1]) correctKey = "B";
+                  else if (q.correctAnswer === parsedOptions[2]) correctKey = "C";
+                  else if (q.correctAnswer === parsedOptions[3]) correctKey = "D";
+              }
             }
 
             const tempId = q._id; 
@@ -177,16 +183,12 @@ const CreateAssignment = () => {
     return matchSearch && matchGrade && matchSubject && matchSet;
   });
 
-  // ==========================================
-  // 👉 HÀM TỰ ĐỘNG CHIA ĐỀU ĐIỂM (ĐÃ SỬA LẠI ĐỂ BẮT LỖI SỐ DƯ)
-  // ==========================================
   useEffect(() => {
     if (manualQuestions.length === 0) return setQuestionPoints({});
 
     const allHavePoints = manualQuestions.every(q => questionPoints[q.tempId] !== undefined);
     if (id && allHavePoints) return; 
 
-    // CHỈ CHIA ĐỀU TẮP LỰ, KHÔNG CỘNG SỐ DƯ VÀO CÂU CUỐI NỮA
     const basePoint = Math.floor((10 / manualQuestions.length) * 100) / 100;
     
     const newPoints = {};
@@ -200,10 +202,9 @@ const CreateAssignment = () => {
     setQuestionPoints(prev => ({ ...prev, [qId]: Number(value) || 0 }));
   };
 
-  // 👉 TÍNH TỔNG ĐIỂM VÀ BẮT LỖI NGHIÊM NGẶT
   const totalPoints = Object.values(questionPoints).reduce((sum, p) => sum + (Number(p) || 0), 0);
-  const roundedTotal = Math.round(totalPoints * 100) / 100; // Tránh lỗi số thập phân của Javascript
-  const isPointsValid = roundedTotal === 10; // Bắt buộc phải bằng đúng 10.00
+  const roundedTotal = Math.round(totalPoints * 100) / 100; 
+  const isPointsValid = roundedTotal === 10; 
 
   const handleAddManualQuestion = () => {
     setManualQuestions([...manualQuestions, {
@@ -287,15 +288,21 @@ const CreateAssignment = () => {
         } else { parsedOptions = q.options; }
       }
 
+      // 👉 FIX LỖI: SỬA LOGIC NHẬN DIỆN ĐÁP ÁN ĐÚNG KHI KÉO TỪ KHO (Giống hệt QuestionBank)
       let correctKey = "A";
-      if (parsedOptions.length > 0) {
-        if (q.correctAnswer === parsedOptions[0]) correctKey = "A";
-        else if (q.correctAnswer === parsedOptions[1]) correctKey = "B";
-        else if (q.correctAnswer === parsedOptions[2]) correctKey = "C";
-        else if (q.correctAnswer === parsedOptions[3]) correctKey = "D";
+      if (q.type === 'multiple_choice' && parsedOptions.length > 0) {
+        if (["A", "B", "C", "D"].includes(q.correctAnswer)) {
+            correctKey = q.correctAnswer;
+        } else {
+            if (q.correctAnswer === parsedOptions[0]) correctKey = "A";
+            else if (q.correctAnswer === parsedOptions[1]) correctKey = "B";
+            else if (q.correctAnswer === parsedOptions[2]) correctKey = "C";
+            else if (q.correctAnswer === parsedOptions[3]) correctKey = "D";
+        }
       }
 
       return {
+        _id: q._id, // Tránh tạo câu hỏi rác mới trong Database
         tempId: Date.now() + Math.random(), 
         content: q.content,
         type: q.type || "multiple_choice",
@@ -320,7 +327,6 @@ const CreateAssignment = () => {
         return alert("Vui lòng chọn lớp để giao bài!");
     }
     
-    // 👉 NẾU PHÁT HÀNH MÀ CHƯA TRÒN 10 ĐIỂM -> BÁO LỖI
     if (actionType === 'published' && !isPointsValid) {
         return alert(`Tổng điểm hiện tại là ${roundedTotal.toFixed(2)}. Bạn bắt buộc phải chia điểm hoặc thêm câu hỏi sao cho bằng đúng 10.00 mới được PHÁT HÀNH!`);
     }
@@ -371,8 +377,14 @@ const CreateAssignment = () => {
     }
   };
 
+  // HÀM HELPER ĐỂ MỞ POPUP XEM CÂU HỎI
+  const handleOpenViewQuestion = (e, q) => {
+      e.stopPropagation(); // Ngăn không cho click này kích hoạt click chọn (checkbox) của TableRow
+      setViewQuestion(q);
+  };
+
   return (
-    <div className="min-h-screen bg-sky-50/40 p-4 sm:p-6 md:p-10 font-sans text-slate-800">
+    <div className="min-h-screen bg-sky-50/40 p-4 sm:p-6 md:p-10 font-sans text-slate-800 relative">
       <div className="max-w-5xl mx-auto">
         <Button 
           variant="ghost" 
@@ -382,7 +394,6 @@ const CreateAssignment = () => {
           <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 mr-2" /> Hủy & Quay lại
         </Button>
 
-        {/* 👉 THANH CÔNG CỤ BÁO TỔNG ĐIỂM (ĐỎ NẾU LỖI, XANH NẾU CHUẨN 10) */}
         {creationMethod !== "bank" && (
           <div className="sticky top-4 z-30 mb-6 transition-all">
             <Card className={`border-none shadow-lg ${isPointsValid ? 'bg-emerald-500' : 'bg-rose-500'} text-white`}>
@@ -740,6 +751,17 @@ const CreateAssignment = () => {
                                         </div>
                                       </div>
                                     </TableCell>
+                                    {/* 👉 NÚT XEM CHI TIẾT CÂU HỎI */}
+                                    <TableCell className="text-right pr-4 align-top pt-3">
+                                      <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8 text-sky-600 hover:bg-sky-100 hover:text-sky-700 rounded-full"
+                                        onClick={(e) => handleOpenViewQuestion(e, q)}
+                                      >
+                                        <Eye className="w-5 h-5" />
+                                      </Button>
+                                    </TableCell>
                                   </TableRow>
                                 )
                               })}
@@ -789,6 +811,51 @@ const CreateAssignment = () => {
             </form>
           </CardContent>
         </Card>
+        
+        {/* 👉 MODAL (POPUP) XEM CHI TIẾT CÂU HỎI TỪ KHO */}
+        <Dialog open={!!viewQuestion} onOpenChange={(open) => { if(!open) setViewQuestion(null) }}>
+          <DialogContent className="sm:max-w-[600px] w-[95%] rounded-3xl border-none p-6 bg-white shadow-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-black text-sky-950 border-b border-sky-100 pb-3">Chi tiết câu hỏi</DialogTitle>
+            </DialogHeader>
+            {viewQuestion && (
+              <div className="space-y-4 pt-2">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <p className="font-bold text-slate-800 text-base leading-relaxed">{viewQuestion.content}</p>
+                  {viewQuestion.imageUrl && (
+                    <img src={getImageUrl(viewQuestion.imageUrl)} alt="Hình ảnh đính kèm" className="max-h-48 mt-3 rounded-xl border border-slate-200 shadow-sm mx-auto" />
+                  )}
+                </div>
+
+                {viewQuestion.type === "multiple_choice" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {(() => {
+                      let parsedOpts = [];
+                      try { parsedOpts = typeof viewQuestion.options === 'string' ? JSON.parse(viewQuestion.options) : (viewQuestion.options || []); } catch(e) {}
+                      
+                      return parsedOpts.map((opt, idx) => {
+                        const letter = String.fromCharCode(65 + idx);
+                        // Xác định xem đây có phải đáp án đúng không
+                        const isCorrect = viewQuestion.correctAnswer === letter || viewQuestion.correctAnswer === opt;
+                        return (
+                          <div key={idx} className={`p-3 rounded-xl border-2 flex items-start gap-2 ${isCorrect ? 'bg-sky-50 border-sky-400' : 'bg-white border-slate-100'}`}>
+                             <span className={`font-bold ${isCorrect ? 'text-sky-600' : 'text-slate-400'}`}>{letter}.</span>
+                             <span className={`text-sm ${isCorrect ? 'font-bold text-sky-700' : 'text-slate-600 font-medium'}`}>{opt}</span>
+                             {isCorrect && <CheckCircle2 className="w-4 h-4 text-sky-500 shrink-0 ml-auto"/>}
+                          </div>
+                        )
+                      });
+                    })()}
+                  </div>
+                )}
+                <div className="flex gap-2 justify-end pt-4 border-t border-slate-100">
+                   <Button onClick={() => setViewQuestion(null)} className="rounded-xl bg-slate-800 text-white hover:bg-slate-700 font-bold px-6">Đóng</Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
       </div>
     </div>
   );

@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { 
   BookOpen, FileQuestion, LogOut, CheckSquare, School,
   Loader2, PlusCircle, Trash2, Pencil, Image as ImageIcon, X,
@@ -53,7 +53,7 @@ const TeacherDashboard = () => {
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(false);
   const [selectedLeaderboardClass, setSelectedLeaderboardClass] = useState("");
   const [leaderboardTimeFilter, setLeaderboardTimeFilter] = useState("all");
-  const [leaderboardSubjectFilter, setLeaderboardSubjectFilter] = useState("all"); // 👉 MỚI: State lọc môn học Bảng thi đua
+  const [leaderboardSubjectFilter, setLeaderboardSubjectFilter] = useState("all"); 
 
   const [searchClassQuery, setSearchClassQuery] = useState("");
   const [classStatsMap, setClassStatsMap] = useState({});
@@ -74,6 +74,15 @@ const TeacherDashboard = () => {
     const headers = { Authorization: `Bearer ${token}` };
     if (isMultipart) headers["Content-Type"] = "multipart/form-data";
     return { headers };
+  };
+
+  // 👉 HÀM LẤY ẢNH CHUẨN CHỐNG RÁCH
+  const getImageUrl = (url) => {
+      if (!url) return "";
+      if (url.startsWith("http") || url.startsWith("blob:")) return url;
+      let cleanUrl = url.replace(/\\/g, '/'); 
+      if (!cleanUrl.startsWith("/")) cleanUrl = "/" + cleanUrl;
+      return `${serverUrl}${cleanUrl}`;
   };
 
   const fetchData = async () => {
@@ -132,7 +141,6 @@ const TeacherDashboard = () => {
     fetchAllClassStats();
   }, [activeTab, teacherProfile]);
 
-  // 👉 CẬP NHẬT: THÊM BỘ LỌC MÔN VÀ ƯU TIÊN LƯỢT NỘP BÀI KHI SẮP XẾP
   useEffect(() => {
     const fetchLeaderboard = async (classId, timeFilter, subjectFilter) => {
       if (!classId) return;
@@ -157,7 +165,6 @@ const TeacherDashboard = () => {
           };
         });
 
-        // ƯU TIÊN SẮP XẾP: Số lượt nộp bài (totalTests) > Điểm trung bình (averageScore)
         mergedLeaderboard.sort((a, b) => {
           if (b.totalTests !== a.totalTests) return b.totalTests - a.totalTests;
           if (b.averageScore !== a.averageScore) return b.averageScore - a.averageScore;
@@ -210,6 +217,9 @@ const TeacherDashboard = () => {
     return matchesSearch && matchesGrade && matchesSubject;
   });
 
+  // =========================================================
+  // 👉 FIX: Khớp chính xác đáp án A B C D khi mở form ở Dashboard
+  // =========================================================
   const handleEditClick = (q) => {
     setEditingQuestionId(q._id);
     let parsedOptions = ["", "", "", ""];
@@ -220,35 +230,50 @@ const TeacherDashboard = () => {
         try { parsedOptions = JSON.parse(q.options); } catch (e) { parsedOptions = [q.options, "", "", ""]; }
       } else { parsedOptions = q.options; }
     }
+    
     let correctKey = "A";
-    if (parsedOptions.length > 0) {
-      if (q.correctAnswer === parsedOptions[0]) correctKey = "A";
-      else if (q.correctAnswer === parsedOptions[1]) correctKey = "B";
-      else if (q.correctAnswer === parsedOptions[2]) correctKey = "C";
-      else if (q.correctAnswer === parsedOptions[3]) correctKey = "D";
+    if (q.type === 'multiple_choice' && parsedOptions.length > 0) {
+      if (["A", "B", "C", "D"].includes(q.correctAnswer)) {
+          correctKey = q.correctAnswer;
+      } else {
+          if (q.correctAnswer === parsedOptions[0]) correctKey = "A";
+          else if (q.correctAnswer === parsedOptions[1]) correctKey = "B";
+          else if (q.correctAnswer === parsedOptions[2]) correctKey = "C";
+          else if (q.correctAnswer === parsedOptions[3]) correctKey = "D";
+      }
     }
+
     setEditQuestionData({
       content: q.content, subject: q.subject, difficulty: q.difficulty, grade: q.grade || "6", type: q.type || "multiple_choice",
       optA: parsedOptions[0] || "", optB: parsedOptions[1] || "", optC: parsedOptions[2] || "", optD: parsedOptions[3] || "", correctAnswer: correctKey
     });
     
-    let cUrl = q.imageUrl ? `${serverUrl}${q.imageUrl}` : "";
-    setPreviewUrl(cUrl.replace(/\\/g, '/'));
+    setPreviewUrl(getImageUrl(q.imageUrl));
     setIsEditDialogOpen(true);
   };
 
+  // =========================================================
+  // 👉 FIX: Ép lưu chuẩn ký tự "A", "B", "C", "D"
+  // =========================================================
   const handleUpdateQuestion = async (e) => {
     e.preventDefault();
     const formData = new FormData();
     formData.append("content", editQuestionData.content); formData.append("subject", editQuestionData.subject); 
     formData.append("difficulty", editQuestionData.difficulty); formData.append("grade", editQuestionData.grade); formData.append("type", editQuestionData.type);
+    
     if (editQuestionData.type === "multiple_choice") {
-      formData.append("correctAnswer", editQuestionData[`opt${editQuestionData.correctAnswer}`]);
+      formData.append("correctAnswer", editQuestionData.correctAnswer);
       formData.append("options", JSON.stringify([editQuestionData.optA, editQuestionData.optB, editQuestionData.optC, editQuestionData.optD]));
     } else {
       formData.append("correctAnswer", ""); formData.append("options", "[]");
     }
-    if (selectedFile) formData.append("image", selectedFile);
+
+    if (selectedFile) {
+       formData.append("image", selectedFile);
+    } else if (!previewUrl) {
+       formData.append("imageUrl", ""); 
+    }
+
     setLoading(true);
     try {
       await axios.put(`/questions/update/${editingQuestionId}`, formData, getHeader(true));
@@ -317,7 +342,6 @@ const TeacherDashboard = () => {
     XLSX.writeFile(wb, `Bao_Cao_Hoc_Tap_Lop_${className}.xlsx`);
   };
 
-  // 👉 MỚI: HÀM XUẤT EXCEL CHO BẢNG THI ĐUA
   const handleExportLeaderboardExcel = () => {
     if (!leaderboardData || leaderboardData.length === 0) return alert("Không có dữ liệu để xuất!");
     const classObj = allClasses.find(c => (c._id || c) === selectedLeaderboardClass);
@@ -581,11 +605,11 @@ const TeacherDashboard = () => {
         {activeTab === "leaderboard" && (
           <LeaderboardTab 
             leaderboardTimeFilter={leaderboardTimeFilter} setLeaderboardTimeFilter={setLeaderboardTimeFilter} 
-            leaderboardSubjectFilter={leaderboardSubjectFilter} setLeaderboardSubjectFilter={setLeaderboardSubjectFilter} // 👉 PROPS MỚI
+            leaderboardSubjectFilter={leaderboardSubjectFilter} setLeaderboardSubjectFilter={setLeaderboardSubjectFilter} 
             selectedLeaderboardClass={selectedLeaderboardClass} setSelectedLeaderboardClass={setSelectedLeaderboardClass} 
             teacherProfile={teacherProfile} allClasses={allClasses} isLoadingLeaderboard={isLoadingLeaderboard} leaderboardData={leaderboardData} 
-            handleExportLeaderboardExcel={handleExportLeaderboardExcel} // 👉 PROPS MỚI
-            handleViewStudentDetails={handleViewStudentDetails} // 👉 PROPS MỚI (Để click xem chi tiết)
+            handleExportLeaderboardExcel={handleExportLeaderboardExcel} 
+            handleViewStudentDetails={handleViewStudentDetails} 
           />
         )}
 

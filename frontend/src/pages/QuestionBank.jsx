@@ -42,9 +42,6 @@ const QuestionBank = () => {
   const [editPreviewUrl, setEditPreviewUrl] = useState("");
   const [editSelectedFile, setEditSelectedFile] = useState(null);
 
-  // ==========================================
-  // HÀM XỬ LÝ ẢNH (BẢN CHỐNG LỖI TUYỆT ĐỐI)
-  // ==========================================
   const getImageUrl = (url) => {
       if (!url) return "";
       if (url.startsWith("http") || url.startsWith("blob:")) return url;
@@ -110,9 +107,9 @@ const QuestionBank = () => {
     } catch (e) { alert("Lỗi xóa câu hỏi!"); }
   };
 
-  // ==========================================
-  // XỬ LÝ KHI BẤM NÚT SỬA CÂU HỎI ĐÃ CÓ
-  // ==========================================
+  // ===============================================
+  // 👉 FIX LỖI 1: KHỚP CHÍNH XÁC ĐÁP ÁN KHI MỞ FORM SỬA
+  // ===============================================
   const handleEditClick = (q) => {
     setEditingQuestionId(q._id);
     let parsedOptions = ["", "", "", ""];
@@ -123,19 +120,27 @@ const QuestionBank = () => {
         try { parsedOptions = JSON.parse(q.options); } catch (e) { parsedOptions = [q.options, "", "", ""]; }
       } else { parsedOptions = q.options; }
     }
+    
     let correctKey = "A";
-    if (parsedOptions.length > 0) {
-      if (q.correctAnswer === parsedOptions[0]) correctKey = "A";
-      else if (q.correctAnswer === parsedOptions[1]) correctKey = "B";
-      else if (q.correctAnswer === parsedOptions[2]) correctKey = "C";
-      else if (q.correctAnswer === parsedOptions[3]) correctKey = "D";
+    if (q.type === 'multiple_choice' && parsedOptions.length > 0) {
+      // 1. Nếu Database đang lưu chuẩn là "A", "B", "C", "D"
+      if (["A", "B", "C", "D"].includes(q.correctAnswer)) {
+          correctKey = q.correctAnswer;
+      } 
+      // 2. Nếu Database cũ bị lưu thành Text nội dung -> Mò tìm index
+      else {
+          if (q.correctAnswer === parsedOptions[0]) correctKey = "A";
+          else if (q.correctAnswer === parsedOptions[1]) correctKey = "B";
+          else if (q.correctAnswer === parsedOptions[2]) correctKey = "C";
+          else if (q.correctAnswer === parsedOptions[3]) correctKey = "D";
+      }
     }
+
     setEditQuestionData({
       content: q.content, subject: q.subject, difficulty: q.difficulty, grade: q.grade || "6", type: q.type || "multiple_choice",
       optA: parsedOptions[0] || "", optB: parsedOptions[1] || "", optC: parsedOptions[2] || "", optD: parsedOptions[3] || "", correctAnswer: correctKey
     });
     
-    // 👉 ĐÃ SỬA: Bắt buộc dùng getImageUrl để load ảnh, tránh bị lỗi gạch chéo
     setEditPreviewUrl(getImageUrl(q.imageUrl));
     setIsEditDialogOpen(true);
   };
@@ -145,23 +150,27 @@ const QuestionBank = () => {
     if (file) { setEditSelectedFile(file); setEditPreviewUrl(URL.createObjectURL(file)); }
   };
 
+  // ===============================================
+  // 👉 FIX LỖI 2: ÉP BUỘC LƯU CHUẨN A,B,C,D
+  // ===============================================
   const handleUpdateQuestion = async (e) => {
     e.preventDefault();
     const formData = new FormData();
     formData.append("content", editQuestionData.content); formData.append("subject", editQuestionData.subject); 
     formData.append("difficulty", editQuestionData.difficulty); formData.append("grade", editQuestionData.grade); formData.append("type", editQuestionData.type);
+    
     if (editQuestionData.type === "multiple_choice") {
-      formData.append("correctAnswer", editQuestionData[`opt${editQuestionData.correctAnswer}`]);
+      // Bắt buộc lưu ký tự "A", "B", "C", "D" để đồng bộ
+      formData.append("correctAnswer", editQuestionData.correctAnswer);
       formData.append("options", JSON.stringify([editQuestionData.optA, editQuestionData.optB, editQuestionData.optC, editQuestionData.optD]));
     } else {
       formData.append("correctAnswer", ""); formData.append("options", "[]");
     }
 
-    // Xử lý gửi ảnh hoặc báo hiệu xóa ảnh
     if (editSelectedFile) {
       formData.append("image", editSelectedFile);
     } else if (!editPreviewUrl) {
-      formData.append("imageUrl", ""); // Gửi chuỗi rỗng để báo Backend xóa ảnh đi
+      formData.append("imageUrl", ""); // Lệnh xóa ảnh nếu có
     }
 
     setLoading(true);
@@ -171,7 +180,6 @@ const QuestionBank = () => {
       setIsEditDialogOpen(false); setEditPreviewUrl(""); setEditSelectedFile(null); fetchBankData();
     } catch (err) { alert("Lỗi cập nhật!"); } finally { setLoading(false); }
   };
-
 
   const handleDraftChange = (tempId, field, value) => {
     setDraftQuestions(draftQuestions.map(q => q.tempId === tempId ? { ...q, [field]: value } : q));
@@ -266,9 +274,6 @@ const QuestionBank = () => {
           )}
         </div>
 
-        {/* ========================================================================================= */}
-        {/* MÀN HÌNH 1: DANH SÁCH CÁC BỘ ĐỀ (THƯ MỤC) */}
-        {/* ========================================================================================= */}
         {viewMode === "list" && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-2xl shadow-sm border border-sky-100 gap-4">
@@ -321,9 +326,6 @@ const QuestionBank = () => {
           </div>
         )}
 
-        {/* ========================================================================================= */}
-        {/* MÀN HÌNH 2: BÊN TRONG 1 BỘ ĐỀ */}
-        {/* ========================================================================================= */}
         {viewMode === "detail" && currentSet && (
           <div className="space-y-6">
             <Card className="border-none shadow-xl rounded-3xl bg-white overflow-hidden">
@@ -445,15 +447,19 @@ const QuestionBank = () => {
                                    <p className="font-bold text-slate-800 text-base leading-relaxed">{q.content}</p>
                                    {q.imageUrl && <img src={getImageUrl(q.imageUrl)} className="max-h-40 mt-2 rounded-xl border border-slate-200 shadow-sm" alt="Đề bài" />}
                                    
+                                   {/* 👉 FIX LỖI 3: Render kiểm tra linh hoạt cho cả data chữ và data text cũ */}
                                    {q.type === 'multiple_choice' && q.options && q.options.length > 0 && (
                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                       {['A', 'B', 'C', 'D'].map((letter, idx) => (
-                                          <div key={idx} className="flex items-start gap-2 text-sm">
-                                            <span className={`font-bold ${q.correctAnswer === letter ? 'text-sky-600' : 'text-slate-400'}`}>{letter}.</span>
-                                            <span className={`${q.correctAnswer === letter ? 'font-bold text-sky-700' : 'text-slate-600'}`}>{q.options[idx]}</span>
-                                            {q.correctAnswer === letter && <CheckCircle2 className="w-4 h-4 text-sky-500 shrink-0"/>}
-                                          </div>
-                                       ))}
+                                       {['A', 'B', 'C', 'D'].map((letter, idx) => {
+                                          const isCorrect = q.correctAnswer === letter || q.correctAnswer === q.options[idx];
+                                          return (
+                                            <div key={idx} className="flex items-start gap-2 text-sm">
+                                              <span className={`font-bold ${isCorrect ? 'text-sky-600' : 'text-slate-400'}`}>{letter}.</span>
+                                              <span className={`${isCorrect ? 'font-bold text-sky-700' : 'text-slate-600'}`}>{q.options[idx]}</span>
+                                              {isCorrect && <CheckCircle2 className="w-4 h-4 text-sky-500 shrink-0"/>}
+                                            </div>
+                                          );
+                                       })}
                                      </div>
                                    )}
                                 </div>
@@ -471,9 +477,6 @@ const QuestionBank = () => {
           </div>
         )}
 
-        {/* ========================================================================================= */}
-        {/* MODAL TẠO BỘ ĐỀ (THƯ MỤC) MỚI */}
-        {/* ========================================================================================= */}
         <Dialog open={isCreateSetModalOpen} onOpenChange={setIsCreateSetModalOpen}>
           <DialogContent className="sm:max-w-[500px] w-[95%] rounded-3xl border-none p-6">
             <DialogHeader><DialogTitle className="text-2xl font-black text-sky-950 flex items-center gap-2"><FolderOpen className="w-6 h-6 text-sky-500"/> Tạo Thư Mục (Bộ Đề) Mới</DialogTitle></DialogHeader>
@@ -497,9 +500,6 @@ const QuestionBank = () => {
           </DialogContent>
         </Dialog>
 
-        {/* ========================================================================================= */}
-        {/* MODAL SỬA CÂU HỎI TRONG BỘ ĐỀ */}
-        {/* ========================================================================================= */}
         <Dialog open={isEditDialogOpen} onOpenChange={(val) => { setIsEditDialogOpen(val); if(!val) {setEditPreviewUrl(""); setEditSelectedFile(null);}}}>
           <DialogContent className="sm:max-w-[700px] w-[95%] max-h-[90vh] overflow-y-auto rounded-3xl border-none shadow-2xl p-4 sm:p-8 bg-slate-50">
             <DialogHeader><DialogTitle className="text-xl sm:text-2xl font-black text-sky-950 flex items-center gap-2 border-b border-sky-100 pb-3"><Pencil className="h-5 sm:h-6 w-5 sm:w-6 text-sky-500"/> Chỉnh sửa câu hỏi</DialogTitle></DialogHeader>

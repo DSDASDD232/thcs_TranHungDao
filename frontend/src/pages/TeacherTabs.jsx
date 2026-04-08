@@ -20,19 +20,26 @@ const getRankMedal = (index) => {
 };
 
 // ==========================================
-// 1. TAB QUẢN LÝ LỚP
+// 1. TAB QUẢN LÝ LỚP (ĐÃ CHUYỂN SANG DẠNG BẢNG)
 // ==========================================
 export const MyClassesTab = ({ isLoadingData, filteredClasses, allClasses, classStatsMap, isFetchingStats, searchClassQuery, setSearchClassQuery, setIsSelectClassDialogOpen, handleViewStudentList, handleExportClassReport }) => (
   <div className="space-y-6">
-    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-sky-100">
       <div>
-        <h2 className="text-xl sm:text-2xl font-bold text-sky-950">Tiến độ & Thi đua</h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-sky-950 flex items-center gap-2">
+          <School className="w-6 h-6 text-sky-500" /> Tiến độ & Thi đua
+        </h2>
         <p className="text-slate-500 text-xs sm:text-sm mt-1">Báo cáo tổng quan các lớp thầy/cô đang phụ trách.</p>
       </div>
       <div className="flex gap-3 w-full sm:w-auto flex-col sm:flex-row">
         <div className="relative w-full sm:w-64">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input placeholder="Tìm tên lớp (VD: 6A)..." className="pl-9 h-11 rounded-xl bg-white border-sky-100 font-medium" value={searchClassQuery} onChange={(e) => setSearchClassQuery(e.target.value)} />
+          <Input 
+            placeholder="Tìm tên lớp (VD: 6A)..." 
+            className="pl-9 h-11 rounded-xl bg-slate-50 border-sky-100 focus-visible:ring-sky-500 font-medium" 
+            value={searchClassQuery} 
+            onChange={(e) => setSearchClassQuery(e.target.value)} 
+          />
         </div>
         <Button onClick={() => setIsSelectClassDialogOpen(true)} className="bg-white border border-sky-200 text-sky-700 hover:bg-sky-50 h-11 px-5 rounded-xl shadow-sm font-bold whitespace-nowrap">
           <Settings className="w-4 h-4 mr-2" /> Thay đổi lớp
@@ -40,53 +47,109 @@ export const MyClassesTab = ({ isLoadingData, filteredClasses, allClasses, class
       </div>
     </div>
 
-    {isLoadingData ? <div className="text-center py-10"><Loader2 className="w-10 h-10 animate-spin mx-auto text-sky-500"/></div> : (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {!filteredClasses || filteredClasses.length === 0 ? (
-            <div className="col-span-full bg-white border border-dashed border-sky-200 rounded-3xl p-10 sm:p-12 text-center">
-              <School className="w-16 h-16 text-sky-200 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-slate-600 mb-2">Chưa có lớp nào phù hợp</h3>
-              <p className="text-slate-400">Hãy thử tìm tên khác hoặc bấm "Thay đổi lớp" để chọn lớp phụ trách.</p>
-            </div>
-        ) : (
-          filteredClasses.map(cls => {
-            const classId = cls._id || cls;
-            const classObj = allClasses.find(c => c._id === classId) || cls;
-            const stats = classStatsMap[classId] || { totalSubmissions: 0, averageScore: 0 };
-            
-            return (
-              <Card key={classId} className="border-sky-100 shadow-sm rounded-3xl bg-white hover:shadow-md transition-shadow overflow-hidden flex flex-col">
-                <CardHeader className="border-b border-sky-50 bg-sky-50/30 pb-4 pt-5 px-6">
-                  <CardTitle className="flex justify-between items-center">
-                    <span className="text-xl sm:text-2xl font-black text-sky-950">{classObj.name || cls.name}</span>
-                    <Badge className="bg-sky-100 text-sky-700 shadow-none font-bold">Khối {classObj.grade || cls.grade}</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-5 sm:p-6 flex-1 flex flex-col justify-between space-y-4">
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center border-b border-slate-50 pb-3">
-                      <div className="flex items-center text-slate-500"><Users className="w-4 h-4 mr-2"/> Sĩ số</div>
-                      <span className="font-black text-slate-700 text-lg">{classObj.studentCount || 0} em</span>
-                    </div>
-                    <div className="flex justify-between items-center border-b border-slate-50 pb-3">
-                      <div className="flex items-center text-slate-500"><CheckSquare className="w-4 h-4 mr-2"/> Làm bài</div>
-                      {isFetchingStats ? <Loader2 className="w-4 h-4 animate-spin text-teal-500" /> : <span className="font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md text-xs sm:text-sm">{stats.totalSubmissions} lượt</span>}
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center text-slate-500"><BarChart className="w-4 h-4 mr-2"/> ĐTB Lớp</div>
-                      {isFetchingStats ? <Loader2 className="w-4 h-4 animate-spin text-blue-500" /> : <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md text-xs sm:text-sm">{stats.averageScore}</span>}
-                    </div>
-                  </div>
-                  <div className="pt-2 flex gap-2">
-                    <Button onClick={() => handleViewStudentList(classId, classObj.name || cls.name)} className="flex-1 bg-sky-50 text-sky-600 hover:bg-sky-100 font-bold shadow-none text-xs sm:text-sm">Xem DS</Button>
-                    <Button onClick={() => handleExportClassReport(classId, classObj.name || cls.name)} className="flex-1 bg-sky-500 hover:bg-sky-600 text-white font-bold shadow-sm text-xs sm:text-sm"><Download className="w-4 h-4 mr-1 sm:mr-2"/> Báo cáo</Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })
-        )}
+    {isLoadingData ? (
+      <div className="text-center py-20 bg-white rounded-3xl border border-sky-100">
+        <Loader2 className="w-10 h-10 animate-spin mx-auto text-sky-500"/>
+        <p className="mt-4 text-slate-500 font-medium">Đang tải dữ liệu lớp học...</p>
       </div>
+    ) : !filteredClasses || filteredClasses.length === 0 ? (
+      <div className="bg-white border border-dashed border-sky-200 rounded-3xl p-10 sm:p-16 text-center">
+        <School className="w-16 h-16 text-sky-200 mx-auto mb-4" />
+        <h3 className="text-xl font-bold text-slate-600 mb-2">Chưa có lớp nào phù hợp</h3>
+        <p className="text-slate-400">Hãy thử tìm tên khác hoặc bấm "Thay đổi lớp" để chọn lớp phụ trách.</p>
+      </div>
+    ) : (
+      <Card className="border-sky-100/50 shadow-sm rounded-3xl overflow-hidden bg-white">
+        <div className="overflow-x-auto">
+          <Table className="min-w-[800px]">
+            <TableHeader className="bg-sky-50/80">
+              <TableRow>
+                <TableHead className="w-16 text-center font-bold text-sky-800 h-12">STT</TableHead>
+                <TableHead className="font-bold text-sky-800">Tên Lớp</TableHead>
+                <TableHead className="text-center font-bold text-sky-800">Khối</TableHead>
+                <TableHead className="text-center font-bold text-sky-800">Sĩ số</TableHead>
+                <TableHead className="text-center font-bold text-sky-800">Lượt làm bài</TableHead>
+                <TableHead className="text-center font-bold text-sky-800">Điểm TB Lớp</TableHead>
+                <TableHead className="text-right pr-6 font-bold text-sky-800">Thao tác</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredClasses.map((cls, idx) => {
+                const classId = cls._id || cls;
+                const classObj = allClasses.find(c => c._id === classId) || cls;
+                const stats = classStatsMap[classId] || { totalSubmissions: 0, averageScore: 0 };
+                
+                return (
+                  <TableRow key={classId} className="hover:bg-sky-50/50 transition-colors border-sky-50 group">
+                    <TableCell className="text-center font-bold text-slate-400">{idx + 1}</TableCell>
+                    
+                    <TableCell className="font-black text-sky-900 text-lg">
+                      {classObj.name || cls.name}
+                    </TableCell>
+                    
+                    <TableCell className="text-center">
+                      <Badge className="bg-sky-100 text-sky-700 shadow-none font-bold border-0 hover:bg-sky-200">
+                        Khối {classObj.grade || cls.grade}
+                      </Badge>
+                    </TableCell>
+                    
+                    <TableCell className="text-center font-bold text-slate-700">
+                      <div className="flex items-center justify-center">
+                        <Users className="w-4 h-4 mr-1.5 text-slate-400" />
+                        {classObj.studentCount || 0} em
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell className="text-center">
+                      {isFetchingStats ? (
+                        <Loader2 className="w-4 h-4 animate-spin mx-auto text-teal-500" />
+                      ) : (
+                        <Badge className="bg-teal-50 text-teal-700 border-0 shadow-none hover:bg-teal-100 px-3">
+                          <CheckSquare className="w-3.5 h-3.5 mr-1.5" />
+                          {stats.totalSubmissions} lượt
+                        </Badge>
+                      )}
+                    </TableCell>
+                    
+                    <TableCell className="text-center">
+                      {isFetchingStats ? (
+                        <Loader2 className="w-4 h-4 animate-spin mx-auto text-blue-500" />
+                      ) : (
+                        <Badge className="bg-blue-50 text-blue-700 border-0 shadow-none hover:bg-blue-100 px-3 text-sm">
+                          {stats.averageScore}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    
+                    <TableCell className="text-right pr-6 py-4">
+                      <div className="flex justify-end gap-2">
+                        <Button 
+                          onClick={() => handleViewStudentList(classId, classObj.name || cls.name)} 
+                          variant="outline" 
+                          size="sm" 
+                          className="text-sky-600 border-sky-200 hover:bg-sky-50 hover:text-sky-700 font-bold shadow-sm"
+                        >
+                          <Eye className="w-4 h-4 sm:mr-2" />
+                          <span className="hidden sm:inline">Xem DS</span>
+                        </Button>
+                        
+                        <Button 
+                          onClick={() => handleExportClassReport(classId, classObj.name || cls.name)} 
+                          size="sm" 
+                          className="bg-sky-500 hover:bg-sky-600 text-white font-bold shadow-sm"
+                        >
+                          <Download className="w-4 h-4 sm:mr-2" />
+                          <span className="hidden sm:inline">Báo cáo</span>
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      </Card>
     )}
   </div>
 );
@@ -96,11 +159,11 @@ export const MyClassesTab = ({ isLoadingData, filteredClasses, allClasses, class
 // ==========================================
 export const LeaderboardTab = ({ 
   leaderboardTimeFilter, setLeaderboardTimeFilter, 
-  leaderboardSubjectFilter, setLeaderboardSubjectFilter, // Bổ sung lọc môn
+  leaderboardSubjectFilter, setLeaderboardSubjectFilter,
   selectedLeaderboardClass, setSelectedLeaderboardClass, 
   teacherProfile, allClasses, isLoadingLeaderboard, leaderboardData,
-  handleExportLeaderboardExcel, // Bổ sung hàm xuất excel
-  handleViewStudentDetails // Bổ sung hàm click xem chi tiết
+  handleExportLeaderboardExcel,
+  handleViewStudentDetails
 }) => (
   <div className="space-y-6">
     <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-sky-100">
@@ -247,8 +310,6 @@ export const AssignmentsTab = ({ isLoadingData, assignments, handleDeleteAssignm
                   <TableCell className="text-slate-500 text-sm font-medium">{new Date(assig.dueDate).toLocaleString("vi-VN")}</TableCell>
                   <TableCell className="text-right pr-4 sm:pr-8">
                     <div className="flex justify-end gap-1 sm:gap-2">
-                      
-                      {/* HIỂN THỊ NÚT TƯƠNG ỨNG VỚI STATUS */}
                       {assig.status === 'draft' ? (
                          <Button onClick={() => handleEditAssignment(assig._id)} variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-amber-600 hover:bg-amber-100 rounded-xl" title="Sửa bản nháp">
                            <PenTool className="h-4 w-4" />
@@ -258,7 +319,6 @@ export const AssignmentsTab = ({ isLoadingData, assignments, handleDeleteAssignm
                            <FileText className="h-4 w-4" />
                          </Button>
                       )}
-
                       <Button onClick={() => handleDeleteAssignment(assig._id, assig.title)} variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-rose-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl" title="Xóa bài">
                         <Trash2 className="h-4 w-4" />
                       </Button>

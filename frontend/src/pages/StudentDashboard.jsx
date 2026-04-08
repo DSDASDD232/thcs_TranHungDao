@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "../lib/axios"; 
-import * as XLSX from "xlsx"; 
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,168 @@ import {
   PlayCircle, Trophy, History, Calendar, Loader2, Download, Search, Filter 
 } from "lucide-react";
 
+// ==========================================
+// COMPONENT NHẬP VÀ CHỌN NGÀY DD/MM/YYYY
+// ==========================================
+const CustomDateInput = ({ label, value, onChange }) => {
+  const [textVal, setTextVal] = useState("");
+
+  useEffect(() => {
+    if (value) {
+      const [y, m, d] = value.split("-");
+      setTextVal(`${d}/${m}/${y}`);
+    } else {
+      setTextVal("");
+    }
+  }, [value]);
+
+  const handleTextChange = (e) => {
+    let val = e.target.value.replace(/[^0-9/]/g, ""); 
+    setTextVal(val);
+    
+    if (val.length === 10) {
+      const [d, m, y] = val.split("/");
+      if (d && m && y?.length === 4) onChange(`${y}-${m}-${d}`); 
+    } else if (val === "") {
+      onChange("");
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm shrink-0">
+      <span className="text-xs font-bold text-slate-500 uppercase">{label}</span>
+      <Input 
+        type="text" 
+        placeholder="dd/mm/yyyy" 
+        value={textVal} 
+        onChange={handleTextChange} 
+        maxLength={10}
+        className="h-8 border-0 p-0 text-sm font-bold w-[90px] bg-transparent text-slate-700 focus:ring-0 placeholder:font-normal placeholder:text-slate-400" 
+      />
+      <div className="relative w-6 h-6 flex items-center justify-center cursor-pointer hover:bg-slate-200 rounded-md transition-colors">
+         <Calendar className="w-4 h-4 text-sky-600 pointer-events-none absolute" />
+         <input 
+           type="date" 
+           value={value} 
+           onChange={(e) => onChange(e.target.value)} 
+           className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" 
+           title="Mở lịch"
+         />
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// HÀM XUẤT EXCEL CÓ MÀU SẮC, KẺ Ô VÀ CĂN DÒNG
+// ==========================================
+const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) => {
+  if (!dataList || dataList.length === 0) {
+    return alert("Không có dữ liệu để xuất báo cáo!");
+  }
+
+  const today = new Date();
+  const dateStr = `Ngày ${today.getDate().toString().padStart(2, '0')} tháng ${(today.getMonth() + 1).toString().padStart(2, '0')} năm ${today.getFullYear()}`;
+
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Lịch Sử Học Tập', {
+    views: [{ showGridLines: false }] 
+  });
+
+  // Tùy chỉnh độ rộng cột cho phù hợp với nội dung học sinh
+  sheet.columns = [
+    { width: 10 }, { width: 45 }, { width: 20 }, { width: 25 }, { width: 15 }, 
+  ];
+
+  // Header Quốc Hiệu, Tiêu Ngữ
+  sheet.addRow(["UBND HUYỆN THỦY NGUYÊN", "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"]);
+  sheet.addRow(["TRƯỜNG THCS TRẦN HƯNG ĐẠO", "", "", "Độc lập - Tự do - Hạnh phúc"]);
+  
+  sheet.mergeCells('A1:C1'); sheet.mergeCells('A2:C2');
+  sheet.mergeCells('D1:E1'); sheet.mergeCells('D2:E2');
+
+  const formatGovHeader = (rowNum, isBold) => {
+    const row = sheet.getRow(rowNum);
+    row.height = 25; 
+    row.eachCell(cell => {
+      cell.font = { name: 'Times New Roman', size: 12, bold: isBold };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    });
+  };
+  formatGovHeader(1, true);
+  formatGovHeader(2, true);
+  sheet.getCell('D2').font = { name: 'Times New Roman', size: 13, bold: true, underline: true }; 
+
+  sheet.addRow([]); 
+
+  // Tiêu đề báo cáo
+  const titleRow = sheet.addRow([reportTitle.toUpperCase()]);
+  sheet.mergeCells('A4:E4');
+  titleRow.height = 40;
+  const titleCell = sheet.getCell('A4');
+  titleCell.font = { name: 'Times New Roman', size: 16, bold: true, color: { argb: 'FF0070C0' } }; 
+  titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+  sheet.addRow([]); 
+
+  // Tiêu đề các cột dữ liệu (Màu xanh, chữ trắng)
+  const tableHeaders = Object.keys(dataList[0]);
+  const headerRow = sheet.addRow(tableHeaders);
+  headerRow.height = 30; 
+  
+  headerRow.eachCell((cell) => {
+    cell.font = { name: 'Times New Roman', size: 12, bold: true, color: { argb: 'FFFFFFFF' } }; 
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0070C0' } }; 
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }; 
+  });
+
+  // Đổ dữ liệu học sinh
+  dataList.forEach(obj => {
+    const row = sheet.addRow(Object.values(obj));
+    row.height = 25; 
+    row.eachCell((cell, colNumber) => {
+      cell.font = { name: 'Times New Roman', size: 12 };
+      cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+      if(colNumber === 1 || colNumber >= 3) {
+         cell.alignment = { vertical: 'middle', horizontal: 'center' }; // Căn giữa STT, Môn, Ngày, Điểm
+      } else {
+         cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 }; // Căn trái Tên bài
+      }
+    });
+  });
+
+  sheet.addRow([]); sheet.addRow([]);
+  
+  // Footer chữ ký
+  const dateRowNum = sheet.rowCount + 1;
+  sheet.addRow(["", "", "", dateStr]);
+  sheet.mergeCells(`D${dateRowNum}:E${dateRowNum}`);
+  sheet.getCell(`D${dateRowNum}`).font = { name: 'Times New Roman', size: 12, italic: true };
+  sheet.getCell(`D${dateRowNum}`).alignment = { horizontal: 'center' };
+
+  const signRowNum = sheet.rowCount + 1;
+  sheet.addRow(["", "", "", "Học sinh nộp bài tập"]); // Đổi thành Học sinh
+  sheet.mergeCells(`D${signRowNum}:E${signRowNum}`);
+  sheet.getCell(`D${signRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
+  sheet.getCell(`D${signRowNum}`).alignment = { horizontal: 'center' };
+
+  sheet.addRow([]); sheet.addRow([]); sheet.addRow([]); sheet.addRow([]);
+
+  const nameRowNum = sheet.rowCount + 1;
+  sheet.addRow(["", "", "", studentName]);
+  sheet.mergeCells(`D${nameRowNum}:E${nameRowNum}`);
+  sheet.getCell(`D${nameRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
+  sheet.getCell(`D${nameRowNum}`).alignment = { horizontal: 'center' };
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  saveAs(blob, `${fileName}.xlsx`);
+};
+
+// ==========================================
+// TRANG DASHBOARD HỌC SINH
+// ==========================================
 const StudentDashboard = () => {
   const navigate = useNavigate();
   const fullName = localStorage.getItem("fullName") || "Học sinh";
@@ -26,7 +189,8 @@ const StudentDashboard = () => {
   const [allAssignmentsForRef, setAllAssignmentsForRef] = useState([]);
 
   const [historySearch, setHistorySearch] = useState("");
-  const [historySubject, setHistorySubject] = useState(""); 
+  const [historySubject, setHistorySubject] = useState("all"); 
+  
   const [historyDateFrom, setHistoryDateFrom] = useState("");
   const [historyDateTo, setHistoryDateTo] = useState("");
 
@@ -92,6 +256,18 @@ const StudentDashboard = () => {
       return "-";
   };
 
+  const formatDateVN = (dateString) => {
+    if (!dateString) return "-";
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return "-";
+    const day = d.getDate().toString().padStart(2, '0');
+    const month = (d.getMonth() + 1).toString().padStart(2, '0');
+    const year = d.getFullYear(); 
+    const hours = d.getHours().toString().padStart(2, '0');
+    const mins = d.getMinutes().toString().padStart(2, '0');
+    return `${day}/${month}/${year} ${hours}:${mins}`;
+  };
+
   const filteredHistory = completedAssignments.filter(sub => {
     const assign = sub.assignment || {};
     const matchSearch = (assign.title || "").toLowerCase().includes(historySearch.toLowerCase());
@@ -101,6 +277,7 @@ const StudentDashboard = () => {
     
     let matchDate = true;
     const subDate = new Date(sub.createdAt).getTime();
+    
     if (historyDateFrom) {
        matchDate = matchDate && (subDate >= new Date(historyDateFrom).setHours(0,0,0,0));
     }
@@ -111,22 +288,23 @@ const StudentDashboard = () => {
     return matchSearch && matchSubject && matchDate;
   });
 
-  const handleExportExcel = () => {
+  const handleExportClick = () => {
     if (filteredHistory.length === 0) return alert("Không có dữ liệu để xuất!");
     
     const dataToExport = filteredHistory.map((sub, idx) => ({
       "STT": idx + 1,
       "Tên Bài Tập": sub.assignment?.title || "Bài tập đã xóa",
       "Môn Học": getSubject(sub),
-      "Thời Gian Nộp": new Date(sub.createdAt).toLocaleString('vi-VN'),
-      // 👉 CẬP NHẬT: Xuất Excel ghi chữ "Chờ chấm" nếu trạng thái là pending
+      "Thời Gian Nộp": formatDateVN(sub.createdAt), 
       "Điểm Số": sub.status === 'pending' ? 'Chờ chấm' : sub.score 
     }));
 
-    const ws = XLSX.utils.json_to_sheet(dataToExport);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Lich_Su_Hoc_Tap");
-    XLSX.writeFile(wb, `Lich_Su_Hoc_Tap_${fullName.replace(/\s+/g, '_')}.xlsx`);
+    exportFormalExcel(
+      dataToExport,
+      `BẢNG ĐIỂM CÁ NHÂN: LỚP ${profile?.classId?.name || profile?.className || ""}`,
+      `Lich_Su_Hoc_Tap_${fullName.replace(/\s+/g, '_')}`,
+      fullName
+    );
   };
 
   return (
@@ -244,7 +422,6 @@ const StudentDashboard = () => {
               </div>
             )}
 
-            {/* TAB LỊCH SỬ ĐIỂM SỐ */}
             {activeTab === "completed" && (
               <Card className="border-none shadow-xl rounded-3xl bg-white overflow-hidden mb-10">
                 <div className="p-6 bg-sky-100 border-b border-sky-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -252,7 +429,7 @@ const StudentDashboard = () => {
                      <h3 className="text-xl sm:text-2xl font-black text-sky-900 flex items-center"><History className="w-6 h-6 mr-2 text-sky-600"/> Lịch Sử Học Tập</h3>
                      <p className="text-sky-700 font-medium text-sm mt-1">Bảng Điểm Cá Nhân</p>
                    </div>
-                   <Button onClick={handleExportExcel} variant="outline" className="bg-white text-sky-700 border-sky-300 hover:bg-sky-50 font-bold rounded-xl h-11 shadow-sm">
+                   <Button onClick={handleExportClick} variant="outline" className="bg-white text-sky-700 border-sky-300 hover:bg-sky-50 font-bold rounded-xl h-11 shadow-sm">
                      <Download className="w-4 h-4 mr-2"/> Xuất Excel
                    </Button>
                 </div>
@@ -283,14 +460,16 @@ const StudentDashboard = () => {
                       </SelectContent>
                     </Select>
                     
-                    <div className="flex items-center gap-2 bg-slate-50 px-3 py-1 rounded-xl border border-slate-200 shadow-sm shrink-0">
-                      <span className="text-xs font-bold text-slate-500 uppercase">Từ</span>
-                      <Input type="date" value={historyDateFrom} onChange={(e) => setHistoryDateFrom(e.target.value)} className="h-8 border-0 p-0 text-sm font-medium w-max bg-transparent text-slate-600 focus:ring-0" />
-                    </div>
-                    <div className="flex items-center gap-2 bg-slate-50 px-3 py-1 rounded-xl border border-slate-200 shadow-sm shrink-0">
-                      <span className="text-xs font-bold text-slate-500 uppercase">Đến</span>
-                      <Input type="date" value={historyDateTo} onChange={(e) => setHistoryDateTo(e.target.value)} className="h-8 border-0 p-0 text-sm font-medium w-max bg-transparent text-slate-600 focus:ring-0" />
-                    </div>
+                    <CustomDateInput 
+                       label="Từ" 
+                       value={historyDateFrom} 
+                       onChange={setHistoryDateFrom} 
+                    />
+                    <CustomDateInput 
+                       label="Đến" 
+                       value={historyDateTo} 
+                       onChange={setHistoryDateTo} 
+                    />
                   </div>
                 </div>
 
@@ -324,10 +503,9 @@ const StudentDashboard = () => {
                                <span className="text-sm font-medium text-slate-600">{getSubject(sub)}</span>
                             </TableCell>
                             <TableCell className="text-center font-medium text-slate-600 text-sm">
-                               {new Date(sub.createdAt).toLocaleString('vi-VN')}
+                               {formatDateVN(sub.createdAt)}
                             </TableCell>
                             <TableCell className="text-center">
-                               {/* 👉 CẬP NHẬT: Hiển thị Chờ chấm nếu trạng thái là pending */}
                                {sub.status === 'pending' ? (
                                   <Badge className="font-bold text-sm px-3 py-1 shadow-none border-0 bg-amber-100 text-amber-700">
                                     Chờ chấm

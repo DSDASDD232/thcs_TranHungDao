@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "../lib/axios";
-import * as XLSX from "xlsx";
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,107 @@ import {
 } from "lucide-react";
 
 import { MyClassesTab, LeaderboardTab, AssignmentsTab, QuestionsTab } from "./TeacherTabs";
+
+// ==========================================
+// HÀM XUẤT EXCEL CÓ MÀU SẮC, KẺ Ô VÀ CĂN DÒNG
+// ==========================================
+const exportFormalExcel = async (dataList, reportTitle, fileName, teacherName) => {
+  if (!dataList || dataList.length === 0) {
+    return alert("Không có dữ liệu để xuất báo cáo!");
+  }
+
+  const today = new Date();
+  const dateStr = `Ngày ${today.getDate().toString().padStart(2, '0')} tháng ${(today.getMonth() + 1).toString().padStart(2, '0')} năm ${today.getFullYear()}`;
+
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Báo Cáo', {
+    views: [{ showGridLines: false }] 
+  });
+
+  sheet.columns = [
+    { width: 10 }, { width: 35 }, { width: 25 }, { width: 25 }, { width: 20 }, 
+  ];
+
+  sheet.addRow(["UBND HUYỆN THỦY NGUYÊN", "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"]);
+  sheet.addRow(["TRƯỜNG THCS TRẦN HƯNG ĐẠO", "", "", "Độc lập - Tự do - Hạnh phúc"]);
+  
+  sheet.mergeCells('A1:C1'); sheet.mergeCells('A2:C2');
+  sheet.mergeCells('D1:E1'); sheet.mergeCells('D2:E2');
+
+  const formatGovHeader = (rowNum, isBold) => {
+    const row = sheet.getRow(rowNum);
+    row.height = 25; 
+    row.eachCell(cell => {
+      cell.font = { name: 'Times New Roman', size: 12, bold: isBold };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    });
+  };
+  formatGovHeader(1, true);
+  formatGovHeader(2, true);
+  sheet.getCell('D2').font = { name: 'Times New Roman', size: 13, bold: true, underline: true }; 
+
+  sheet.addRow([]); 
+
+  const titleRow = sheet.addRow([reportTitle.toUpperCase()]);
+  sheet.mergeCells('A4:E4');
+  titleRow.height = 40;
+  const titleCell = sheet.getCell('A4');
+  titleCell.font = { name: 'Times New Roman', size: 16, bold: true, color: { argb: 'FF0070C0' } }; 
+  titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+  sheet.addRow([]); 
+
+  const tableHeaders = Object.keys(dataList[0]);
+  const headerRow = sheet.addRow(tableHeaders);
+  headerRow.height = 30; 
+  
+  headerRow.eachCell((cell) => {
+    cell.font = { name: 'Times New Roman', size: 12, bold: true, color: { argb: 'FFFFFFFF' } }; 
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0070C0' } }; 
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }; 
+  });
+
+  dataList.forEach(obj => {
+    const row = sheet.addRow(Object.values(obj));
+    row.height = 25; 
+    row.eachCell((cell, colNumber) => {
+      cell.font = { name: 'Times New Roman', size: 12 };
+      cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+      if(colNumber === 1 || colNumber >= 4) {
+         cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      } else {
+         cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+      }
+    });
+  });
+
+  sheet.addRow([]); sheet.addRow([]);
+  
+  const dateRowNum = sheet.rowCount + 1;
+  sheet.addRow(["", "", "", dateStr]);
+  sheet.mergeCells(`D${dateRowNum}:E${dateRowNum}`);
+  sheet.getCell(`D${dateRowNum}`).font = { name: 'Times New Roman', size: 12, italic: true };
+  sheet.getCell(`D${dateRowNum}`).alignment = { horizontal: 'center' };
+
+  const signRowNum = sheet.rowCount + 1;
+  sheet.addRow(["", "", "", "Người xuất báo cáo"]);
+  sheet.mergeCells(`D${signRowNum}:E${signRowNum}`);
+  sheet.getCell(`D${signRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
+  sheet.getCell(`D${signRowNum}`).alignment = { horizontal: 'center' };
+
+  sheet.addRow([]); sheet.addRow([]); sheet.addRow([]); sheet.addRow([]);
+
+  const nameRowNum = sheet.rowCount + 1;
+  sheet.addRow(["", "", "", teacherName]);
+  sheet.mergeCells(`D${nameRowNum}:E${nameRowNum}`);
+  sheet.getCell(`D${nameRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
+  sheet.getCell(`D${nameRowNum}`).alignment = { horizontal: 'center' };
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  saveAs(blob, `${fileName}.xlsx`);
+};
 
 const TeacherDashboard = () => {
   const navigate = useNavigate();
@@ -76,7 +178,6 @@ const TeacherDashboard = () => {
     return { headers };
   };
 
-  // 👉 HÀM LẤY ẢNH CHUẨN CHỐNG RÁCH
   const getImageUrl = (url) => {
       if (!url) return "";
       if (url.startsWith("http") || url.startsWith("blob:")) return url;
@@ -217,9 +318,6 @@ const TeacherDashboard = () => {
     return matchesSearch && matchesGrade && matchesSubject;
   });
 
-  // =========================================================
-  // 👉 FIX: Khớp chính xác đáp án A B C D khi mở form ở Dashboard
-  // =========================================================
   const handleEditClick = (q) => {
     setEditingQuestionId(q._id);
     let parsedOptions = ["", "", "", ""];
@@ -252,9 +350,6 @@ const TeacherDashboard = () => {
     setIsEditDialogOpen(true);
   };
 
-  // =========================================================
-  // 👉 FIX: Ép lưu chuẩn ký tự "A", "B", "C", "D"
-  // =========================================================
   const handleUpdateQuestion = async (e) => {
     e.preventDefault();
     const formData = new FormData();
@@ -333,17 +428,28 @@ const TeacherDashboard = () => {
   const handleExportClassReport = (classId, className) => {
     const stats = classStatsMap[classId];
     if (!stats || !stats.leaderboard || stats.leaderboard.length === 0) return alert(`Chưa có dữ liệu làm bài của lớp ${className} để xuất báo cáo!`);
+    
     const dataToExport = stats.leaderboard.map((st, idx) => ({
-      "Hạng": idx + 1, "Họ và Tên": st.fullName, "Tài Khoản": st.username || "", "Số lượt nộp": st.totalTests, "Điểm Trung Bình": parseFloat(st.averageScore || 0)
+      "Hạng": idx + 1, 
+      "Họ và Tên": st.fullName, 
+      "Tài Khoản": st.username || "", 
+      "Số lượt nộp": st.totalTests, 
+      "Điểm Trung Bình": parseFloat(st.averageScore || 0)
     }));
-    const ws = XLSX.utils.json_to_sheet(dataToExport);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `BaoCao_${className}`);
-    XLSX.writeFile(wb, `Bao_Cao_Hoc_Tap_Lop_${className}.xlsx`);
+
+    const teacherName = teacherProfile?.fullName || fullName || "Giáo viên phụ trách";
+
+    exportFormalExcel(
+      dataToExport, 
+      `BÁO CÁO HỌC TẬP LỚP ${className}`, 
+      `Bao_Cao_Hoc_Tap_Lop_${className}`, 
+      teacherName
+    );
   };
 
   const handleExportLeaderboardExcel = () => {
     if (!leaderboardData || leaderboardData.length === 0) return alert("Không có dữ liệu để xuất!");
+    
     const classObj = allClasses.find(c => (c._id || c) === selectedLeaderboardClass);
     const className = classObj ? classObj.name : "Lop";
     
@@ -355,10 +461,14 @@ const TeacherDashboard = () => {
       "Điểm Trung Bình": parseFloat(st.averageScore || 0)
     }));
     
-    const ws = XLSX.utils.json_to_sheet(dataToExport);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `ThiDua_${className}`);
-    XLSX.writeFile(wb, `Bang_Thi_Dua_${className}.xlsx`);
+    const teacherName = teacherProfile?.fullName || fullName || "Giáo viên phụ trách";
+
+    exportFormalExcel(
+      dataToExport, 
+      `BẢNG THI ĐUA LỚP ${className}`, 
+      `Bang_Thi_Dua_${className}`, 
+      teacherName
+    );
   };
 
   const processedStudents = classStudents
@@ -415,9 +525,10 @@ const TeacherDashboard = () => {
               </Button>
             )}
 
+            {/* ĐỔI TÊN NÚT THÀNH KHO CÂU HỎI */}
             {activeTab === "questions" && (
               <Button onClick={() => navigate("/teacher/question-bank")} className="bg-sky-500 hover:bg-sky-600 whitespace-nowrap text-white h-11 px-6 rounded-xl shadow-md flex items-center font-bold">
-                <Database className="mr-2 h-5 w-5" /> Quản lý Bộ đề
+                <Database className="mr-2 h-5 w-5" /> Quản lý Kho câu hỏi
               </Button>
             )}
           </div>

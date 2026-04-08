@@ -10,14 +10,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { 
   ArrowLeft, PenTool, FileText, UploadCloud, Sparkles, PlusCircle, Trash2, 
-  Loader2, Database, Image as ImageIcon, CheckCircle2, FolderOpen, BookOpen, Layers, Save, Pencil, Search
-} from "lucide-react"; 
+  Loader2, Database, Image as ImageIcon, CheckCircle2, FolderOpen, BookOpen, Layers, Save, Pencil, Search, FileQuestion 
+} from "lucide-react";
 
 const QuestionBank = () => {
   const navigate = useNavigate();
   const assignmentFileRef = useRef(null);
   const editFileInputRef = useRef(null);
-  const serverUrl = axios.defaults.baseURL.replace('/api', '');
+  const serverUrl = axios.defaults.baseURL?.replace('/api', '') || '';
   
   const [loading, setLoading] = useState(false);
   const [dbQuestions, setDbQuestions] = useState([]); 
@@ -50,26 +50,21 @@ const QuestionBank = () => {
       return `${serverUrl}${cleanUrl}`;
   };
 
+  // 👉 CẬP NHẬT 1: Gọi API mới để lấy danh sách thư mục từ Database
   const fetchBankData = async () => {
     setLoading(true);
     try {
-      const res = await axios.get("/questions/all", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
-      const questions = res.data.questions || [];
-      setDbQuestions(questions);
+      const res = await axios.get("/question-sets/all", { 
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } 
+      });
+      
+      // Backend mới sẽ trả về mảng groupedSets
+      const sets = res.data.groupedSets || [];
+      setGroupedSets(sets);
 
-      const groups = questions.reduce((acc, q) => {
-        const setName = q.questionSet || "Ngân hàng chung";
-        if (!acc[setName]) {
-          acc[setName] = { setName, subject: q.subject, grade: q.grade, questions: [] };
-        }
-        acc[setName].questions.push(q);
-        return acc;
-      }, {});
-
-      setGroupedSets(Object.values(groups));
-
+      // Nếu đang xem chi tiết 1 kho, cập nhật lại dữ liệu của kho đó
       if (currentSet) {
-         const updatedSet = Object.values(groups).find(g => g.setName === currentSet.setName);
+         const updatedSet = sets.find(g => g.setName === currentSet.setName);
          if (updatedSet) setCurrentSet(updatedSet);
          else setViewMode("list"); 
       }
@@ -83,14 +78,42 @@ const QuestionBank = () => {
 
   useEffect(() => { fetchBankData(); }, []);
 
-  const handleCreateNewSet = () => {
-    if (!newSetInfo.setName.trim()) return alert("Vui lòng nhập tên bộ đề!");
-    const emptySet = { ...newSetInfo, questions: [] };
-    setCurrentSet(emptySet);
-    setIsCreateSetModalOpen(false);
-    setViewMode("detail");
-    setIsAddingNew(true); 
-    setDraftQuestions([{ tempId: Date.now(), content: "", type: "multiple_choice", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium", imageFile: null, previewUrl: "" }]);
+  // 👉 CẬP NHẬT 2: Gọi API POST để lưu thư mục mới xuống Database
+  const handleCreateNewSet = async () => {
+    const trimmedName = newSetInfo.setName.trim();
+    if (!trimmedName) return alert("Vui lòng nhập tên Kho câu hỏi!");
+    
+    // Kiểm tra trùng tên ở Frontend cho nhanh
+    const isExist = groupedSets.find(s => s.setName.toLowerCase() === trimmedName.toLowerCase());
+    if (isExist) return alert("Tên Kho câu hỏi này đã tồn tại!");
+
+    setLoading(true);
+    try {
+      await axios.post("/question-sets/create", {
+          setName: trimmedName,
+          subject: newSetInfo.subject,
+          grade: newSetInfo.grade
+      }, { 
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } 
+      });
+      
+      alert("✅ Tạo Kho câu hỏi mới thành công!");
+      setIsCreateSetModalOpen(false);
+      setNewSetInfo({ setName: "", subject: "Toán", grade: "6" }); 
+      
+      // Load lại dữ liệu từ Backend để đảm bảo đồng bộ
+      await fetchBankData();
+
+      // Tự động mở kho vừa tạo
+      const newEmptySet = { setName: trimmedName, subject: newSetInfo.subject, grade: newSetInfo.grade, questions: [] };
+      handleOpenSet(newEmptySet);
+
+    } catch (err) {
+      const msg = err.response?.data?.message || "Lỗi khi tạo Kho câu hỏi!";
+      alert(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleOpenSet = (set) => {
@@ -100,39 +123,43 @@ const QuestionBank = () => {
   };
 
   const handleDeleteDbQuestion = async (id) => {
-    if(!window.confirm("Bạn có chắc chắn muốn xóa câu hỏi này khỏi bộ đề?")) return;
+    if(!window.confirm("Bạn có chắc chắn muốn xóa câu hỏi này khỏi kho?")) return;
     try {
         await axios.delete(`/questions/delete/${id}`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
         fetchBankData(); 
     } catch (e) { alert("Lỗi xóa câu hỏi!"); }
   };
 
-  // ===============================================
-  // 👉 FIX LỖI 1: KHỚP CHÍNH XÁC ĐÁP ÁN KHI MỞ FORM SỬA
-  // ===============================================
   const handleEditClick = (q) => {
     setEditingQuestionId(q._id);
     let parsedOptions = ["", "", "", ""];
-    if (q.options && q.options.length > 0) {
-      if (typeof q.options[0] === 'string' && q.options[0].startsWith('[')) {
-        try { parsedOptions = JSON.parse(q.options[0]); } catch (e) { parsedOptions = [q.options[0], "", "", ""]; }
-      } else if (typeof q.options === 'string') {
-        try { parsedOptions = JSON.parse(q.options); } catch (e) { parsedOptions = [q.options, "", "", ""]; }
-      } else { parsedOptions = q.options; }
+    
+    if (Array.isArray(q.options) && q.options.length > 0) {
+      parsedOptions = q.options;
+    } else if (typeof q.options === 'string') {
+      try { 
+        parsedOptions = JSON.parse(q.options); 
+        if (typeof parsedOptions[0] === 'string' && parsedOptions[0].startsWith('[')) {
+            parsedOptions = JSON.parse(parsedOptions[0]);
+        }
+      } catch (e) { 
+        parsedOptions = [q.options, "", "", ""]; 
+      }
     }
     
+    while (parsedOptions.length < 4) parsedOptions.push("");
+    
     let correctKey = "A";
-    if (q.type === 'multiple_choice' && parsedOptions.length > 0) {
-      // 1. Nếu Database đang lưu chuẩn là "A", "B", "C", "D"
+    if (q.type === 'multiple_choice') {
       if (["A", "B", "C", "D"].includes(q.correctAnswer)) {
           correctKey = q.correctAnswer;
       } 
-      // 2. Nếu Database cũ bị lưu thành Text nội dung -> Mò tìm index
       else {
-          if (q.correctAnswer === parsedOptions[0]) correctKey = "A";
-          else if (q.correctAnswer === parsedOptions[1]) correctKey = "B";
-          else if (q.correctAnswer === parsedOptions[2]) correctKey = "C";
-          else if (q.correctAnswer === parsedOptions[3]) correctKey = "D";
+          const index = parsedOptions.findIndex(opt => opt === q.correctAnswer);
+          if (index === 0) correctKey = "A";
+          else if (index === 1) correctKey = "B";
+          else if (index === 2) correctKey = "C";
+          else if (index === 3) correctKey = "D";
       }
     }
 
@@ -150,9 +177,6 @@ const QuestionBank = () => {
     if (file) { setEditSelectedFile(file); setEditPreviewUrl(URL.createObjectURL(file)); }
   };
 
-  // ===============================================
-  // 👉 FIX LỖI 2: ÉP BUỘC LƯU CHUẨN A,B,C,D
-  // ===============================================
   const handleUpdateQuestion = async (e) => {
     e.preventDefault();
     const formData = new FormData();
@@ -160,7 +184,6 @@ const QuestionBank = () => {
     formData.append("difficulty", editQuestionData.difficulty); formData.append("grade", editQuestionData.grade); formData.append("type", editQuestionData.type);
     
     if (editQuestionData.type === "multiple_choice") {
-      // Bắt buộc lưu ký tự "A", "B", "C", "D" để đồng bộ
       formData.append("correctAnswer", editQuestionData.correctAnswer);
       formData.append("options", JSON.stringify([editQuestionData.optA, editQuestionData.optB, editQuestionData.optC, editQuestionData.optD]));
     } else {
@@ -170,7 +193,7 @@ const QuestionBank = () => {
     if (editSelectedFile) {
       formData.append("image", editSelectedFile);
     } else if (!editPreviewUrl) {
-      formData.append("imageUrl", ""); // Lệnh xóa ảnh nếu có
+      formData.append("imageUrl", ""); 
     }
 
     setLoading(true);
@@ -211,7 +234,7 @@ const QuestionBank = () => {
       const formattedQs = res.data.questions.map(q => ({ ...q, tempId: Date.now() + Math.random(), imageFile: null, previewUrl: "" }));
       setDraftQuestions(formattedQs);
       setCreationMethod("manual"); 
-      alert("✅ Bóc tách xong! Thầy/cô vui lòng kiểm tra lại trước khi lưu vào Bộ đề.");
+      alert("✅ Bóc tách xong! Thầy/cô vui lòng kiểm tra lại trước khi lưu vào Kho câu hỏi.");
     } catch (error) { alert("Lỗi bóc tách file Word!"); } 
     finally { setLoading(false); }
   };
@@ -236,12 +259,12 @@ const QuestionBank = () => {
 
       await axios.post("/questions/create-set", formData, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "Content-Type": "multipart/form-data" } });
       
-      alert(`✅ Đã lưu thêm ${draftQuestions.length} câu hỏi vào Bộ đề: ${currentSet.setName}`);
+      alert(`✅ Đã lưu thêm ${draftQuestions.length} câu hỏi vào Kho: ${currentSet.setName}`);
       setIsAddingNew(false);
       setDraftQuestions([]);
       setAssignmentFile(null);
       fetchBankData(); 
-    } catch (err) { alert("Lỗi khi lưu bộ đề!"); } 
+    } catch (err) { alert("Lỗi khi lưu câu hỏi!"); } 
     finally { setLoading(false); }
   };
 
@@ -259,8 +282,8 @@ const QuestionBank = () => {
                <Database className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-black text-sky-950">Kho Bộ Đề</h1>
-              <p className="text-slate-500 font-medium text-sm sm:text-base">Quản lý và lưu trữ câu hỏi theo từng thư mục</p>
+              <h1 className="text-2xl sm:text-3xl font-black text-sky-950">Kho Câu Hỏi</h1>
+              <p className="text-slate-500 font-medium text-sm sm:text-base">Quản lý và phân loại câu hỏi theo từng thư mục</p>
             </div>
           </div>
           {viewMode === "list" ? (
@@ -269,7 +292,7 @@ const QuestionBank = () => {
              </Button>
           ) : (
              <Button onClick={() => setViewMode("list")} variant="outline" className="border-slate-200 text-slate-700 hover:bg-slate-100 font-bold rounded-xl">
-               <ArrowLeft className="w-4 h-4 mr-2" /> Về danh sách Bộ đề
+               <ArrowLeft className="w-4 h-4 mr-2" /> Trở lại danh sách Kho
              </Button>
           )}
         </div>
@@ -282,7 +305,7 @@ const QuestionBank = () => {
                  <div className="relative w-full max-w-sm">
                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                    <Input 
-                     placeholder="Tìm tên bộ đề..." 
+                     placeholder="Tìm tên Kho câu hỏi..." 
                      className="pl-9 h-10 bg-slate-50 border-sky-100 focus-visible:ring-sky-500 rounded-xl"
                      value={searchQuery}
                      onChange={(e) => setSearchQuery(e.target.value)}
@@ -290,7 +313,7 @@ const QuestionBank = () => {
                  </div>
                </div>
                <Button onClick={() => setIsCreateSetModalOpen(true)} className="bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl shadow-md w-full sm:w-auto">
-                 <PlusCircle className="w-4 h-4 mr-2"/> Tạo Bộ Đề Mới
+                 <PlusCircle className="w-4 h-4 mr-2"/> Tạo Kho Mới
                </Button>
             </div>
 
@@ -300,23 +323,23 @@ const QuestionBank = () => {
                <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-sky-200">
                   <FolderOpen className="w-16 h-16 text-sky-200 mx-auto mb-4" />
                   <h3 className="text-xl font-bold text-slate-700">Kho đang trống</h3>
-                  <p className="text-slate-500 mb-6 mt-2">Không tìm thấy bộ đề nào phù hợp.</p>
+                  <p className="text-slate-500 mb-6 mt-2">Không tìm thấy kho câu hỏi nào phù hợp.</p>
                </div>
             ) : (
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                  {filteredSets.map((set, idx) => (
-                    <Card key={idx} onClick={() => handleOpenSet(set)} className="border-sky-100 shadow-sm hover:shadow-xl hover:border-sky-300 transition-all cursor-pointer group bg-white rounded-3xl overflow-hidden">
+                    <Card key={idx} onClick={() => handleOpenSet(set)} className="border-sky-100 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-sky-300 transition-all cursor-pointer group bg-white rounded-3xl overflow-hidden">
                        <CardContent className="p-6">
                          <div className="flex justify-between items-start mb-4">
-                           <div className="w-12 h-12 bg-sky-50 text-sky-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                             <FolderOpen className="w-6 h-6" />
+                           <div className="w-14 h-14 bg-sky-50 text-sky-600 rounded-2xl flex items-center justify-center group-hover:bg-sky-100 transition-colors">
+                             <FolderOpen className="w-7 h-7" />
                            </div>
-                           <Badge className="bg-sky-100 text-sky-700 border-0 shadow-none font-bold">{set.questions.length} Câu hỏi</Badge>
+                           <Badge className="bg-sky-100 text-sky-700 border-0 shadow-none font-bold">{set.questions.length} Câu</Badge>
                          </div>
-                         <h3 className="text-xl font-black text-sky-950 mb-2 line-clamp-2">{set.setName}</h3>
-                         <div className="flex gap-2">
-                           <Badge variant="outline" className="border-slate-200 text-slate-500 text-xs">Môn: {set.subject}</Badge>
-                           <Badge variant="outline" className="border-slate-200 text-slate-500 text-xs">Khối: {set.grade}</Badge>
+                         <h3 className="text-xl font-black text-sky-950 mb-3 line-clamp-2 group-hover:text-sky-600 transition-colors">{set.setName}</h3>
+                         <div className="flex gap-2 border-t border-slate-50 pt-3">
+                           <Badge variant="outline" className="border-slate-200 text-slate-500 font-medium">Khối {set.grade}</Badge>
+                           <Badge variant="outline" className="border-slate-200 text-slate-500 font-medium">{set.subject}</Badge>
                          </div>
                        </CardContent>
                     </Card>
@@ -332,7 +355,7 @@ const QuestionBank = () => {
               <CardHeader className="bg-sky-500 text-white p-6 sm:p-8 border-b border-sky-600 flex flex-row justify-between items-center">
                 <div>
                   <CardTitle className="text-2xl sm:text-3xl font-black flex items-center gap-3">
-                    <BookOpen className="w-7 h-7 sm:w-8 sm:h-8"/> {currentSet.setName}
+                    <BookOpen className="w-7 h-7 sm:w-8 sm:h-8"/> Kho: {currentSet.setName}
                   </CardTitle>
                   <p className="text-sky-50 font-medium mt-2 text-sm sm:text-base">Môn: {currentSet.subject} • Khối: {currentSet.grade} • Tổng: {currentSet.questions.length} câu</p>
                 </div>
@@ -341,16 +364,16 @@ const QuestionBank = () => {
               <CardContent className="p-4 sm:p-8 bg-slate-50/50 min-h-[400px]">
                  {!isAddingNew && (
                     <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-2xl border border-sky-100 shadow-sm">
-                       <h3 className="font-bold text-sky-900 text-lg">Danh sách câu hỏi hiện tại</h3>
-                       <Button onClick={() => { setIsAddingNew(true); setDraftQuestions([{ tempId: Date.now(), content: "", type: "multiple_choice", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium", imageFile: null, previewUrl: "" }]); }} className="bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl shadow-md h-11 px-6">
-                         <PlusCircle className="w-4 h-4 mr-2"/> Thêm câu hỏi vào Bộ đề
+                       <h3 className="font-bold text-sky-900 text-lg">Danh sách câu hỏi trong kho</h3>
+                       <Button onClick={() => { setIsAddingNew(true); setDraftQuestions([{ tempId: Date.now(), content: "", type: "multiple_choice", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium", imageFile: null, previewUrl: "" }]); }} className="bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl shadow-md h-11 px-6 transition-all hover:scale-105">
+                         <PlusCircle className="w-4 h-4 mr-2"/> Thêm câu hỏi
                        </Button>
                     </div>
                  )}
 
                  {isAddingNew && (
                     <div className="bg-white border border-sky-200 rounded-3xl p-6 shadow-sm mb-8 relative">
-                       <Button onClick={() => setIsAddingNew(false)} variant="ghost" className="absolute top-4 right-4 text-slate-400 hover:text-rose-500">Hủy thêm</Button>
+                       <Button onClick={() => setIsAddingNew(false)} variant="ghost" className="absolute top-4 right-4 text-slate-400 hover:text-rose-500">Hủy bỏ</Button>
                        <h3 className="text-xl font-black text-sky-800 mb-4 flex items-center"><Layers className="w-5 h-5 mr-2"/> Bổ sung câu hỏi mới</h3>
                        
                        <div className="flex bg-slate-100 rounded-xl w-full p-1 mb-6">
@@ -424,7 +447,7 @@ const QuestionBank = () => {
                             </Button>
                             
                             <Button onClick={handleSaveDraftsToSet} disabled={loading} className="w-full h-14 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-lg shadow-xl shadow-sky-200 transition-all mt-4">
-                                {loading ? <Loader2 className="animate-spin mr-2 h-6 w-6" /> : <Save className="mr-2 h-6 w-6" />} LƯU CÁC CÂU NÀY VÀO BỘ ĐỀ
+                                {loading ? <Loader2 className="animate-spin mr-2 h-6 w-6" /> : <Save className="mr-2 h-6 w-6" />} LƯU CÁC CÂU NÀY VÀO KHO
                             </Button>
                           </div>
                         )}
@@ -432,22 +455,23 @@ const QuestionBank = () => {
                  )}
 
                  {currentSet.questions.length === 0 && !isAddingNew ? (
-                    <div className="text-center py-10 bg-white rounded-2xl border border-dashed border-slate-200">
-                       <p className="text-slate-500 mb-4">Bộ đề này hiện chưa có câu hỏi nào.</p>
-                       <Button onClick={() => setIsAddingNew(true)} className="bg-sky-500 text-white rounded-xl font-bold"><PlusCircle className="w-4 h-4 mr-2"/> Thêm câu đầu tiên</Button>
+                    <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-sky-200 shadow-sm">
+                       <FileQuestion className="w-16 h-16 text-sky-100 mx-auto mb-3" />
+                       <h3 className="text-xl font-bold text-slate-700">Chưa có câu hỏi</h3>
+                       <p className="text-slate-500 mb-6 mt-1">Kho này hiện đang trống, hãy thêm câu hỏi vào nhé.</p>
+                       <Button onClick={() => setIsAddingNew(true)} className="bg-sky-500 hover:bg-sky-600 text-white rounded-xl font-bold h-11 px-6"><PlusCircle className="w-4 h-4 mr-2"/> Thêm câu đầu tiên</Button>
                     </div>
                  ) : (
                     <div className={`space-y-4 ${isAddingNew ? 'opacity-50 pointer-events-none' : ''}`}>
                        {currentSet.questions.map((q, i) => (
                           <Card key={q._id} className="border-sky-100 shadow-sm bg-white hover:border-sky-300 transition-colors">
-                             <div className="p-4 sm:p-5 flex flex-col sm:flex-row gap-4 relative">
+                              <div className="p-4 sm:p-5 flex flex-col sm:flex-row gap-4 relative">
                                 <div className="absolute top-0 left-0 w-1 sm:w-1.5 h-full bg-sky-400 rounded-l-3xl"></div>
                                 <div className="font-black text-sky-700 bg-sky-100 px-3 py-1 rounded-lg h-max shrink-0 w-max">Câu {i+1}</div>
                                 <div className="flex-1 space-y-3">
                                    <p className="font-bold text-slate-800 text-base leading-relaxed">{q.content}</p>
                                    {q.imageUrl && <img src={getImageUrl(q.imageUrl)} className="max-h-40 mt-2 rounded-xl border border-slate-200 shadow-sm" alt="Đề bài" />}
                                    
-                                   {/* 👉 FIX LỖI 3: Render kiểm tra linh hoạt cho cả data chữ và data text cũ */}
                                    {q.type === 'multiple_choice' && q.options && q.options.length > 0 && (
                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
                                        {['A', 'B', 'C', 'D'].map((letter, idx) => {
@@ -467,7 +491,7 @@ const QuestionBank = () => {
                                    <Button onClick={() => handleEditClick(q)} variant="outline" size="sm" className="text-sky-600 border-sky-200 hover:bg-sky-50 rounded-lg flex-1 sm:flex-none"><Pencil className="w-4 h-4 sm:mr-2"/><span className="hidden sm:inline">Sửa</span></Button>
                                    <Button onClick={() => handleDeleteDbQuestion(q._id)} variant="outline" size="sm" className="text-rose-500 border-rose-200 hover:bg-rose-50 rounded-lg flex-1 sm:flex-none"><Trash2 className="w-4 h-4 sm:mr-2"/><span className="hidden sm:inline">Xóa</span></Button>
                                 </div>
-                             </div>
+                              </div>
                           </Card>
                        ))}
                     </div>
@@ -479,11 +503,11 @@ const QuestionBank = () => {
 
         <Dialog open={isCreateSetModalOpen} onOpenChange={setIsCreateSetModalOpen}>
           <DialogContent className="sm:max-w-[500px] w-[95%] rounded-3xl border-none p-6">
-            <DialogHeader><DialogTitle className="text-2xl font-black text-sky-950 flex items-center gap-2"><FolderOpen className="w-6 h-6 text-sky-500"/> Tạo Thư Mục (Bộ Đề) Mới</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle className="text-2xl font-black text-sky-950 flex items-center gap-2"><FolderOpen className="w-6 h-6 text-sky-500"/> Tạo Kho Câu Hỏi Mới</DialogTitle></DialogHeader>
             <div className="space-y-4 pt-4">
               <div className="space-y-2">
-                <label className="font-bold text-slate-700">Tên Bộ Đề <span className="text-rose-500">*</span></label>
-                <Input placeholder="VD: Toán 6 - Học kì 1..." className="h-12 rounded-xl bg-slate-50 font-bold border-sky-200 focus-visible:ring-sky-500" value={newSetInfo.setName} onChange={(e) => setNewSetInfo({...newSetInfo, setName: e.target.value})} />
+                <label className="font-bold text-slate-700">Tên Kho Câu Hỏi <span className="text-rose-500">*</span></label>
+                <Input placeholder="VD: Kho câu hỏi thi Học kì 1..." className="h-12 rounded-xl bg-slate-50 font-bold border-sky-200 focus-visible:ring-sky-500" value={newSetInfo.setName} onChange={(e) => setNewSetInfo({...newSetInfo, setName: e.target.value})} autoFocus />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -495,7 +519,7 @@ const QuestionBank = () => {
                   <Select value={newSetInfo.grade} onValueChange={(val) => setNewSetInfo({...newSetInfo, grade: val})}><SelectTrigger className="h-12 rounded-xl bg-slate-50 border-sky-200 font-bold"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent></Select>
                 </div>
               </div>
-              <Button onClick={handleCreateNewSet} className="w-full h-12 mt-4 bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl shadow-md text-lg">Tạo Bộ Đề Này</Button>
+              <Button onClick={handleCreateNewSet} className="w-full h-12 mt-4 bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl shadow-md text-lg">Xác nhận Tạo</Button>
             </div>
           </DialogContent>
         </Dialog>

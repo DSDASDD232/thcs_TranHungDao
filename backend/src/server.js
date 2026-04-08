@@ -14,6 +14,7 @@ import submissionRoutes from "./routes/submission.js";
 import adminRoutes from "./routes/admin.js";
 import classRoutes from "./routes/classes.js"; 
 import teacherRoutes from "./routes/teacher.js";
+import questionSetRoutes from "./routes/questionSet.js"; // 👉 1. THÊM DÒNG NÀY
 
 dotenv.config();
 
@@ -81,6 +82,7 @@ app.use("/api/submissions", submissionRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/classes", classRoutes); 
 app.use("/api/teacher", teacherRoutes);
+app.use("/api/question-sets", questionSetRoutes); // 👉 2. THÊM DÒNG NÀY
 
 // ==========================================
 // 5. CATCH-ALL CHO REACT ROUTER (ĐẶT CUỐI CÙNG)

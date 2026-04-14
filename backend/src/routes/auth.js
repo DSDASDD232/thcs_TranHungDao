@@ -56,6 +56,13 @@ router.post("/login", async (req, res) => {
             return res.status(400).json({ message: "Sai tên đăng nhập hoặc mật khẩu!" });
         }
 
+        // 👉 CHỐT CHẶN: Kiểm tra xem tài khoản có bị khóa không?
+        if (user.isLocked) {
+            return res.status(403).json({ 
+                message: "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ Quản trị viên để biết thêm chi tiết!" 
+            });
+        }
+
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(400).json({ message: "Sai tên đăng nhập hoặc mật khẩu!" });

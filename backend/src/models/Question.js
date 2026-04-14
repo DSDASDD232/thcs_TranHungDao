@@ -63,6 +63,14 @@ const questionSchema = new mongoose.Schema(
             required: true,
         },
 
+
+        // Thêm dòng này vào trong Schema
+        points: {
+        type: Number,
+         default: 0
+            },
+
+
         isBank: { type: Boolean, default: false }
     },
     { timestamps: true }

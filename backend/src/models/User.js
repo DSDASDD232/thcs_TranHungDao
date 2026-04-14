@@ -57,10 +57,18 @@ const userSchema = new mongoose.Schema(
             type: String,
             default: "",
         },
+        
+        // Dành cho giáo viên (Danh sách các lớp được phân công giảng dạy)
         assignedClasses: [{
             type: mongoose.Schema.Types.ObjectId,
             ref: "Class"
-        }]
+        }],
+
+        // 👉 THÊM MỚI: Trạng thái khóa tài khoản (Cấm đăng nhập)
+        isLocked: {
+            type: Boolean,
+            default: false, // Mặc định tài khoản mới tạo sẽ không bị khóa
+        }
     },
     { 
         timestamps: true 

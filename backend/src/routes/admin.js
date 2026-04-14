@@ -1,6 +1,6 @@
 import express from "express";
 import User from "../models/User.js";
-import Class from "../models/Class.js"; // <--- Đã thêm dòng này để gọi model Lớp học
+import Class from "../models/Class.js"; 
 import Question from "../models/Question.js";
 import Assignment from "../models/Assignment.js";
 import Submission from "../models/Submission.js";
@@ -8,7 +8,7 @@ import { verifyToken, isAdmin } from "../middleware/auth.js";
 import multer from "multer";
 import xlsx from "xlsx";
 import bcrypt from "bcryptjs"; 
-
+import Subject from "../models/Subject.js";
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -127,12 +127,24 @@ router.post("/users/import-json", verifyToken, isAdmin, async (req, res) => {
 });
 
 // ==========================================
-// 4. [DELETE] Xóa tài khoản
+// 4. [DELETE] XÓA TÀI KHOẢN VÀ BÀI NỘP LIÊN QUAN
 // ==========================================
 router.delete("/users/:id", verifyToken, isAdmin, async (req, res) => {
     try {
-        await User.findByIdAndDelete(req.params.id);
-        res.status(200).json({ message: "Đã xóa tài khoản thành công!" });
+        const userId = req.params.id;
+
+        const userToDelete = await User.findById(userId);
+        if (!userToDelete) {
+            return res.status(404).json({ message: "Không tìm thấy tài khoản!" });
+        }
+
+        if (userToDelete.role === "student") {
+            await Submission.deleteMany({ student: userId }); 
+        }
+
+        await User.findByIdAndDelete(userId);
+
+        res.status(200).json({ message: "Đã xóa tài khoản và mọi dữ liệu liên quan thành công!" });
     } catch (error) {
         console.error("Lỗi xóa tài khoản:", error);
         res.status(500).json({ message: "Lỗi server khi xóa tài khoản", error });
@@ -140,25 +152,55 @@ router.delete("/users/:id", verifyToken, isAdmin, async (req, res) => {
 });
 
 // ==========================================
-// 5. [PUT] Cập nhật thông tin tài khoản
+// 5. [PUT] CẬP NHẬT TÀI KHOẢN (Thông tin, Khóa acc, Reset Mật khẩu, Tổ chuyên môn)
 // ==========================================
 router.put("/users/:id", verifyToken, isAdmin, async (req, res) => {
     try {
-        const { fullName, role, grade, className, subject, classId, assignedClasses } = req.body;
+        const userId = req.params.id;
+        const { fullName, role, grade, classId, assignedClasses, isLocked, password, subject } = req.body;
         
-        const updatedUser = await User.findByIdAndUpdate(
-            req.params.id,
-            { 
-                fullName, role, grade, className, subject,
-                classId: classId || null,
-                assignedClasses: assignedClasses || [] 
-            },
-            { new: true }
-        ).populate("classId", "name grade").populate("assignedClasses", "name");
+        // BƯỚC KIỂM TRA: Tìm user hiện tại trong DB
+        const existingUser = await User.findById(userId);
+        if (!existingUser) return res.status(404).json({ message: "Không tìm thấy người dùng!" });
 
-        if (!updatedUser) {
-            return res.status(404).json({ message: "Không tìm thấy người dùng!" });
+        let updateFields = {};
+
+        // RÀNG BUỘC: Nếu là giáo viên và đang muốn đổi môn học
+        if (subject !== undefined && existingUser.role === "teacher") {
+            // Nếu đổi môn mới KHÁC môn cũ, VÀ giáo viên đang có lớp phụ trách -> Chặn lại
+            if (existingUser.subject !== subject && existingUser.assignedClasses && existingUser.assignedClasses.length > 0) {
+                return res.status(400).json({ 
+                    message: `Thầy/Cô đang phụ trách ${existingUser.assignedClasses.length} lớp. Vui lòng vào "Quản lý Lớp học" gỡ quyền phụ trách trước khi đổi tổ bộ môn!` 
+                });
+            }
+            updateFields.subject = subject; // Nếu an toàn thì cho đổi
         }
+
+        // ... (Các phần cập nhật fullName, role, grade, password, isLocked giữ nguyên như cũ)
+        if (fullName) updateFields.fullName = fullName;
+        if (role) updateFields.role = role;
+        if (grade !== undefined) updateFields.grade = grade;
+        
+        if (role === "student") {
+            if (classId !== undefined) updateFields.classId = classId || null;
+            updateFields.$unset = { assignedClasses: "" }; 
+        } else if (role === "teacher") {
+            if (assignedClasses) updateFields.assignedClasses = assignedClasses;
+            updateFields.classId = null; 
+        }
+
+        if (isLocked !== undefined) updateFields.isLocked = isLocked;
+
+        if (password) {
+            const salt = await bcrypt.genSalt(10);
+            updateFields.password = await bcrypt.hash(password, salt);
+        }
+
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            updateFields,
+            { returnDocument: 'after' } 
+        ).populate("classId", "name grade").populate("assignedClasses", "name");
 
         res.status(200).json({ message: "Cập nhật thành công!", user: updatedUser });
     } catch (error) {
@@ -174,14 +216,12 @@ router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
     try {
         const { timeframe, grade } = req.query;
 
-        // 1. Lọc Lớp theo Khối (Nếu chọn "Tất cả" thì lấy toàn trường)
         let classQuery = {};
         if (grade && grade !== 'all') {
             classQuery.grade = grade;
         }
         const classes = await Class.find(classQuery);
 
-        // 2. Lọc theo Thời gian (Tuần, Tháng, Năm)
         let dateFilter = {};
         const now = new Date();
         if (timeframe === 'week') {
@@ -196,13 +236,10 @@ router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
             dateFilter = { createdAt: { $gte: firstDayOfYear } };
         }
 
-        // 3. Tính toán điểm thi đua cho từng Lớp
         let leaderboard = await Promise.all(classes.map(async (cls) => {
-            // Lấy danh sách ID học sinh thuộc lớp này
             const students = await User.find({ classId: cls._id, role: 'student' }).select('_id');
             const studentIds = students.map(s => s._id);
 
-            // Lấy toàn bộ bài nộp của các học sinh này trong thời gian đã chọn
             const submissions = await Submission.find({
                 student: { $in: studentIds },
                 ...dateFilter
@@ -211,7 +248,6 @@ router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
             const totalTests = submissions.length;
             const totalScore = submissions.reduce((sum, sub) => sum + sub.score, 0);
             
-            // Tính điểm trung bình của Lớp
             const averageScore = totalTests > 0 ? (totalScore / totalTests).toFixed(2) : 0;
 
             return {
@@ -224,10 +260,8 @@ router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
             };
         }));
 
-        // Lọc bỏ những lớp chưa có bài làm nào (tùy chọn)
         leaderboard = leaderboard.filter(cls => cls.totalTests > 0);
 
-        // 4. Sắp xếp: Ưu tiên Điểm TB giảm dần -> Số lượt làm bài giảm dần
         leaderboard.sort((a, b) => {
             if (b.averageScore !== a.averageScore) return b.averageScore - a.averageScore;
             return b.totalTests - a.totalTests;
@@ -239,5 +273,51 @@ router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
         res.status(500).json({ message: "Lỗi server", error });
     }
 });
+
+
+
+// ==========================================
+// [GET] LẤY DANH MỤC MÔN HỌC CHUNG
+// ==========================================
+router.get("/subjects", verifyToken, async (req, res) => {
+    try {
+        const subjects = await Subject.find().sort({ createdAt: 1 });
+        res.status(200).json(subjects);
+    } catch (error) {
+        res.status(500).json({ message: "Lỗi lấy danh sách môn học" });
+    }
+});
+
+// ==========================================
+// [POST] THÊM MÔN HỌC MỚI VÀO HỆ THỐNG
+// ==========================================
+router.post("/subjects", verifyToken, isAdmin, async (req, res) => {
+    try {
+        const { name } = req.body;
+        if (!name) return res.status(400).json({ message: "Vui lòng nhập tên môn học!" });
+
+        const existing = await Subject.findOne({ name: name.trim() });
+        if (existing) return res.status(400).json({ message: "Môn học này đã tồn tại trong hệ thống!" });
+
+        const newSubject = new Subject({ name: name.trim() });
+        await newSubject.save();
+        res.status(201).json({ message: "Thêm môn học thành công!", subject: newSubject });
+    } catch (error) {
+        res.status(500).json({ message: "Lỗi thêm môn học" });
+    }
+});
+
+// ==========================================
+// [DELETE] XÓA MÔN HỌC KHỎI HỆ THỐNG
+// ==========================================
+router.delete("/subjects/:id", verifyToken, isAdmin, async (req, res) => {
+    try {
+        await Subject.findByIdAndDelete(req.params.id);
+        res.status(200).json({ message: "Đã xóa môn học khỏi danh mục chung!" });
+    } catch (error) {
+        res.status(500).json({ message: "Lỗi xóa môn học" });
+    }
+});
+
 
 export default router;

@@ -13,13 +13,14 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   ShieldCheck, Users, GraduationCap, School, LogOut, TrendingUp, UserPlus, 
-  CheckCircle, Loader2, Trash2, Edit, Search, Filter, UploadCloud, 
-  FileSpreadsheet, Sparkles, PenTool, Download, Trophy, Medal, BarChart, Calendar, Menu, X, Key, Lock, Unlock, Library, Database
+  CheckCircle, Loader2, Trash2, Edit, Search, Filter, UploadCloud, FileCheck, 
+  FileSpreadsheet, Sparkles, PenTool, Download, Trophy, Medal, BarChart, Calendar, 
+  Menu, X, Key, Lock, Unlock, Library, Database, ChevronLeft, ChevronRight
 } from "lucide-react";
 
 import AdminClassManagement from "./AdminClassManagement";
 import AdminDepartmentManagement from "./AdminDepartmentManagement";
-import AdminQuestionBank from "./AdminQuestionBank"; // 👉 Đã import component Kho câu hỏi
+import AdminQuestionBank from "./AdminQuestionBank";
 
 const exportFormalExcel = async (dataList, reportTitle, fileName, adminName) => {
   if (!dataList || dataList.length === 0) return alert("Không có dữ liệu để xuất báo cáo!");
@@ -30,7 +31,6 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, adminName) => 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Báo Cáo', { views: [{ showGridLines: false }] });
 
-  // Tăng số cột và độ rộng để chứa thêm Tổ chuyên môn
   sheet.columns = [ { width: 10 }, { width: 30 }, { width: 30 }, { width: 25 }, { width: 40 } ];
 
   sheet.addRow(["UBND HUYỆN THỦY NGUYÊN", "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"]);
@@ -131,6 +131,25 @@ const AdminDashboard = () => {
   const [previewData, setPreviewData] = useState([]); 
   const [uploadGrade, setUploadGrade] = useState("");
   const [uploadClassId, setUploadClassId] = useState("");
+
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const carouselImages = [
+    "/slide1.jpg", 
+    "/slide2.jpg", 
+    "/slide3.jpg", 
+    "/slide4.jpg",
+    "/slide5.jpg"
+  ];
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentImageIndex((prev) => (prev === carouselImages.length - 1 ? 0 : prev + 1));
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [carouselImages.length]);
+
+  const nextSlide = () => setCurrentImageIndex((prev) => (prev === carouselImages.length - 1 ? 0 : prev + 1));
+  const prevSlide = () => setCurrentImageIndex((prev) => (prev === 0 ? carouselImages.length - 1 : prev - 1));
 
   const getHeader = () => {
     const token = localStorage.getItem("token");
@@ -360,44 +379,41 @@ const AdminDashboard = () => {
   });
 
   return (
-    <div className="min-h-screen bg-sky-50/40 flex font-sans text-slate-800 relative">
+    <div className="min-h-screen bg-slate-50 flex font-sans text-slate-800 relative">
       
       {isMobileMenuOpen && (
         <div className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden" onClick={() => setIsMobileMenuOpen(false)}/>
       )}
 
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-sky-100 flex flex-col h-screen shadow-xl transform transition-transform duration-300 lg:translate-x-0 lg:static lg:shadow-[4px_0_24px_rgba(14,165,233,0.05)] ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="p-6 flex items-center justify-between gap-3 border-b border-sky-50">
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-100 flex flex-col h-screen shadow-xl transform transition-transform duration-300 lg:translate-x-0 lg:static lg:shadow-[4px_0_24px_rgba(15,23,42,0.04)] ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="p-6 flex items-center justify-between gap-3 border-b border-slate-50">
           <div className="flex items-center gap-3">
             <div className="bg-sky-100 p-2 rounded-xl text-sky-600"><ShieldCheck className="h-6 w-6" /></div>
-            <span className="font-black text-xl text-sky-950 tracking-tight">Hệ Thống<br/>Admin</span>
+            <span className="font-black text-xl text-slate-800 tracking-tight">Hệ Thống<br/>Admin</span>
           </div>
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setIsMobileMenuOpen(false)}>
             <X className="w-5 h-5 text-slate-500" />
           </Button>
         </div>
         <nav className="flex-1 p-4 space-y-2 mt-4 overflow-y-auto">
-          <Button onClick={() => handleMenuClick("overview")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'overview' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'text-slate-500 hover:bg-sky-50 hover:text-sky-600'}`}><TrendingUp className="mr-3 h-5 w-5" /> Tổng quan</Button>
-          <Button onClick={() => handleMenuClick("classes")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'classes' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'text-slate-500 hover:bg-sky-50 hover:text-sky-600'}`}><School className="mr-3 h-5 w-5" /> Quản lý Lớp học</Button>
-          <Button onClick={() => handleMenuClick("departments")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'departments' ? 'bg-indigo-500 text-white shadow-md shadow-indigo-200' : 'text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'}`}><Library className="mr-3 h-5 w-5" /> Quản lý Tổ chuyên môn</Button>
-          
-          {/* 👉 NÚT KHO CÂU HỎI */}
-          <Button onClick={() => handleMenuClick("questions")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'questions' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'text-slate-500 hover:bg-sky-50 hover:text-sky-600'}`}><Database className="mr-3 h-5 w-5" /> Quản lý Kho câu hỏi</Button>
-
-          <Button onClick={() => handleMenuClick("accounts")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'accounts' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'text-slate-500 hover:bg-sky-50 hover:text-sky-600'}`}><Users className="mr-3 h-5 w-5" /> Quản lý Tài khoản</Button>
-          <Button onClick={() => handleMenuClick("leaderboard")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'leaderboard' ? 'bg-amber-500 text-white shadow-md shadow-amber-200' : 'text-slate-500 hover:bg-amber-50 hover:text-amber-600'}`}><Trophy className="mr-3 h-5 w-5" /> Thi đua toàn trường</Button>
+          <Button onClick={() => handleMenuClick("overview")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'overview' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><TrendingUp className="mr-3 h-5 w-5" /> Tổng quan</Button>
+          <Button onClick={() => handleMenuClick("classes")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'classes' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><School className="mr-3 h-5 w-5" /> Quản lý Lớp học</Button>
+          <Button onClick={() => handleMenuClick("departments")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'departments' ? 'bg-indigo-500 text-white shadow-md shadow-indigo-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><Library className="mr-3 h-5 w-5" /> Quản lý Tổ chuyên môn</Button>
+          <Button onClick={() => handleMenuClick("questions")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'questions' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><Database className="mr-3 h-5 w-5" /> Quản lý Kho câu hỏi</Button>
+          <Button onClick={() => handleMenuClick("accounts")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'accounts' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><Users className="mr-3 h-5 w-5" /> Quản lý Tài khoản</Button>
+          <Button onClick={() => handleMenuClick("leaderboard")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'leaderboard' ? 'bg-amber-500 text-white shadow-md shadow-amber-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><Trophy className="mr-3 h-5 w-5" /> Thi đua toàn trường</Button>
         </nav>
-        <div className="p-5 border-t border-sky-50"><Button onClick={handleLogout} variant="ghost" className="w-full h-11 rounded-xl text-rose-500 hover:bg-rose-50 font-bold"><LogOut className="mr-2 h-5 w-5" /> Đăng xuất</Button></div>
+        <div className="p-5 border-t border-slate-50"><Button onClick={handleLogout} variant="ghost" className="w-full h-11 rounded-xl text-rose-500 hover:bg-rose-50 font-bold"><LogOut className="mr-2 h-5 w-5" /> Đăng xuất</Button></div>
       </aside>
 
       <main className="flex-1 p-4 sm:p-8 lg:p-10 w-full overflow-y-auto overflow-x-hidden max-w-[100vw]">
         
         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-8 gap-4">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="lg:hidden bg-white shadow-sm rounded-xl border border-sky-100" onClick={() => setIsMobileMenuOpen(true)}>
-              <Menu className="w-5 h-5 text-sky-900" />
+            <Button variant="ghost" size="icon" className="lg:hidden bg-white shadow-sm rounded-xl border border-slate-200" onClick={() => setIsMobileMenuOpen(true)}>
+              <Menu className="w-5 h-5 text-slate-800" />
             </Button>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-sky-950 tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
               {activeTab === "overview" ? "Tổng quan hệ thống" : 
                activeTab === "classes" ? "Quản lý Lớp học" : 
                activeTab === "departments" ? "Quản lý Tổ chuyên môn" : 
@@ -414,11 +430,101 @@ const AdminDashboard = () => {
         </header>
 
         {activeTab === "overview" && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            <Card className="border-sky-100/50 shadow-sm rounded-2xl sm:rounded-3xl bg-white"><CardContent className="p-4 sm:p-6 flex flex-col sm:flex-row gap-3 sm:gap-4 items-center text-center sm:text-left"><div className="w-12 h-12 sm:w-14 sm:h-14 bg-sky-100 rounded-2xl flex items-center justify-center"><Users className="w-6 h-6 sm:w-7 sm:h-7 text-sky-600" /></div><div><p className="text-xs sm:text-sm font-semibold text-slate-400">Học sinh</p><h3 className="text-xl sm:text-2xl font-black text-sky-950">{dashboardStats.students}</h3></div></CardContent></Card>
-            <Card className="border-sky-100/50 shadow-sm rounded-2xl sm:rounded-3xl bg-white"><CardContent className="p-4 sm:p-6 flex flex-col sm:flex-row gap-3 sm:gap-4 items-center text-center sm:text-left"><div className="w-12 h-12 sm:w-14 sm:h-14 bg-teal-100 rounded-2xl flex items-center justify-center"><GraduationCap className="w-6 h-6 sm:w-7 sm:h-7 text-teal-600" /></div><div><p className="text-xs sm:text-sm font-semibold text-slate-400">Giáo viên</p><h3 className="text-xl sm:text-2xl font-black text-sky-950">{dashboardStats.teachers}</h3></div></CardContent></Card>
-            <Card className="border-sky-100/50 shadow-sm rounded-2xl sm:rounded-3xl bg-white"><CardContent className="p-4 sm:p-6 flex flex-col sm:flex-row gap-3 sm:gap-4 items-center text-center sm:text-left"><div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-100 rounded-2xl flex items-center justify-center"><School className="w-6 h-6 sm:w-7 sm:h-7 text-blue-600" /></div><div><p className="text-xs sm:text-sm font-semibold text-slate-400">Lớp học</p><h3 className="text-xl sm:text-2xl font-black text-sky-950">{classesList.length}</h3></div></CardContent></Card>
-            <Card className="border-sky-100/50 shadow-sm rounded-2xl sm:rounded-3xl bg-white"><CardContent className="p-4 sm:p-6 flex flex-col sm:flex-row gap-3 sm:gap-4 items-center text-center sm:text-left"><div className="w-12 h-12 sm:w-14 sm:h-14 bg-cyan-100 rounded-2xl flex items-center justify-center"><CheckCircle className="w-6 h-6 sm:w-7 sm:h-7 text-cyan-600" /></div><div><p className="text-xs sm:text-sm font-semibold text-slate-400">Lượt nộp bài</p><h3 className="text-xl sm:text-2xl font-black text-sky-950">{dashboardStats.submissions}</h3></div></CardContent></Card>
+          <div className="space-y-6 sm:space-y-8">
+            
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+              <Card className="border-none shadow-sm hover:shadow-md transition-shadow rounded-[2rem] bg-white overflow-hidden relative group cursor-default">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-blue-400 to-sky-300 rounded-bl-full z-0 opacity-20 group-hover:opacity-30 transition-opacity"></div>
+                <CardContent className="p-6 flex items-center gap-4 relative z-10">
+                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-sky-400 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200 shrink-0 group-hover:-translate-y-1 transition-transform">
+                    <Users className="w-7 h-7 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-500">Học sinh</p>
+                    <h3 className="text-3xl font-black text-slate-800">{dashboardStats.students}</h3>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-none shadow-sm hover:shadow-md transition-shadow rounded-[2rem] bg-white overflow-hidden relative group cursor-default">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-emerald-400 to-teal-300 rounded-bl-full z-0 opacity-20 group-hover:opacity-30 transition-opacity"></div>
+                <CardContent className="p-6 flex items-center gap-4 relative z-10">
+                  <div className="w-14 h-14 bg-gradient-to-br from-emerald-500 to-teal-400 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-200 shrink-0 group-hover:-translate-y-1 transition-transform">
+                    <GraduationCap className="w-7 h-7 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-500">Giáo viên</p>
+                    <h3 className="text-3xl font-black text-slate-800">{dashboardStats.teachers}</h3>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-none shadow-sm hover:shadow-md transition-shadow rounded-[2rem] bg-white overflow-hidden relative group cursor-default">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-indigo-400 to-purple-300 rounded-bl-full z-0 opacity-20 group-hover:opacity-30 transition-opacity"></div>
+                <CardContent className="p-6 flex items-center gap-4 relative z-10">
+                  <div className="w-14 h-14 bg-gradient-to-br from-indigo-500 to-violet-400 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200 shrink-0 group-hover:-translate-y-1 transition-transform">
+                    <School className="w-7 h-7 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-500">Lớp học</p>
+                    <h3 className="text-3xl font-black text-slate-800">{classesList.length}</h3>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-none shadow-sm hover:shadow-md transition-shadow rounded-[2rem] bg-white overflow-hidden relative group cursor-default">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-rose-400 to-pink-300 rounded-bl-full z-0 opacity-20 group-hover:opacity-30 transition-opacity"></div>
+                <CardContent className="p-6 flex items-center gap-4 relative z-10">
+                  <div className="w-14 h-14 bg-gradient-to-br from-rose-500 to-pink-400 rounded-2xl flex items-center justify-center shadow-lg shadow-rose-200 shrink-0 group-hover:-translate-y-1 transition-transform">
+                    <FileCheck className="w-7 h-7 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-500">Lượt nộp bài</p>
+                    <h3 className="text-3xl font-black text-slate-800">{dashboardStats.submissions}</h3>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* HIỆU ỨNG ẢNH MỜ TRÀN VIỀN - GIỮ NGUYÊN TỈ LỆ ẢNH CHÍNH */}
+            <div className="relative w-full h-[350px] sm:h-[450px] lg:h-[550px] rounded-3xl overflow-hidden shadow-sm border border-sky-100 bg-white group">
+              <div 
+                className="w-full h-full flex transition-transform duration-700 ease-[cubic-bezier(0.25,1,0.5,1)]" 
+                style={{ transform: `translateX(-${currentImageIndex * 100}%)` }}
+              >
+                {carouselImages.map((src, idx) => (
+                  <div key={idx} className="w-full h-full shrink-0 relative flex items-center justify-center bg-slate-100 overflow-hidden">
+                     {/* Lớp nền mờ */}
+                     <img 
+                       src={src} 
+                       className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-60 scale-110 pointer-events-none" 
+                       alt="Nền mở ảo" 
+                       onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=2000&auto=format&fit=crop'; }}
+                     />
+                     {/* Lớp ảnh chính */}
+                     <img 
+                       src={src} 
+                       alt={`Slide ${idx + 1}`} 
+                       className="relative z-10 w-full h-full object-contain" 
+                       onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=2000&auto=format&fit=crop'; }}
+                     />
+                  </div>
+                ))}
+              </div>
+
+              <button onClick={prevSlide} className="absolute left-4 top-1/2 -translate-y-1/2 z-20 bg-white/70 hover:bg-white text-sky-900 p-2 sm:p-3 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 shadow-md">
+                <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+              </button>
+              <button onClick={nextSlide} className="absolute right-4 top-1/2 -translate-y-1/2 z-20 bg-white/70 hover:bg-white text-sky-900 p-2 sm:p-3 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 shadow-md">
+                <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
+              </button>
+
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex gap-2">
+                {carouselImages.map((_, idx) => (
+                  <button key={idx} onClick={() => setCurrentImageIndex(idx)} className={`h-2 sm:h-2.5 rounded-full transition-all duration-500 ease-in-out ${idx === currentImageIndex ? 'bg-sky-500 w-6 sm:w-8 shadow-sm' : 'bg-white/70 w-2 sm:w-2.5 hover:bg-white'}`} />
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
@@ -437,37 +543,36 @@ const AdminDashboard = () => {
           />
         )}
 
-        {/* 👉 RENDER KHO CÂU HỎI */}
         {activeTab === "questions" && (
           <AdminQuestionBank />
         )}
 
         {activeTab === "leaderboard" && (
           <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-sky-100">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-slate-100">
               <div>
-                <h2 className="text-xl sm:text-2xl font-bold text-sky-950 flex items-center gap-2"><Trophy className="w-6 h-6 text-amber-500" /> Thi đua toàn trường</h2>
+                <h2 className="text-xl sm:text-2xl font-bold text-slate-800 flex items-center gap-2"><Trophy className="w-6 h-6 text-amber-500" /> Thi đua toàn trường</h2>
               </div>
               <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
                 <Select value={lbTimeFilter} onValueChange={setLbTimeFilter}>
-                  <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[120px] border-none font-bold text-sky-800 shadow-sm"><Calendar className="w-4 h-4 mr-2" /><span className="truncate">{lbTimeFilter === 'week' ? 'Tuần này' : lbTimeFilter === 'month' ? 'Tháng này' : lbTimeFilter === 'year' ? 'Năm nay' : 'Tất cả'}</span></SelectTrigger>
+                  <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-slate-50 min-w-[120px] border-none font-bold text-slate-700 shadow-sm"><Calendar className="w-4 h-4 mr-2" /><span className="truncate">{lbTimeFilter === 'week' ? 'Tuần này' : lbTimeFilter === 'month' ? 'Tháng này' : lbTimeFilter === 'year' ? 'Năm nay' : 'Tất cả'}</span></SelectTrigger>
                   <SelectContent><SelectItem value="all">Tất cả</SelectItem><SelectItem value="week">Tuần này</SelectItem><SelectItem value="month">Tháng này</SelectItem><SelectItem value="year">Năm nay</SelectItem></SelectContent>
                 </Select>
                 <Select value={lbGradeFilter} onValueChange={setLbGradeFilter}>
-                  <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[120px] border-none font-bold text-sky-800 shadow-sm"><Filter className="w-4 h-4 mr-2" /><span className="truncate">{lbGradeFilter === "all" ? "Tất cả Khối" : `Khối ${lbGradeFilter}`}</span></SelectTrigger>
+                  <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-slate-50 min-w-[120px] border-none font-bold text-slate-700 shadow-sm"><Filter className="w-4 h-4 mr-2" /><span className="truncate">{lbGradeFilter === "all" ? "Tất cả Khối" : `Khối ${lbGradeFilter}`}</span></SelectTrigger>
                   <SelectContent><SelectItem value="all">Tất cả Khối</SelectItem><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent>
                 </Select>
               </div>
             </div>
 
             {isLoadingLb ? (
-              <div className="text-center py-20 bg-white rounded-3xl border border-sky-100"><Loader2 className="w-12 h-12 animate-spin mx-auto text-sky-500 mb-4"/></div>
+              <div className="text-center py-20 bg-white rounded-3xl border border-slate-100"><Loader2 className="w-12 h-12 animate-spin mx-auto text-sky-500 mb-4"/></div>
             ) : adminLeaderboard.length === 0 ? (
-              <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-sky-200"><BarChart className="w-16 h-16 text-slate-200 mx-auto mb-4" /><p className="text-slate-500 font-medium">Chưa có dữ liệu</p></div>
+              <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200"><BarChart className="w-16 h-16 text-slate-200 mx-auto mb-4" /><p className="text-slate-500 font-medium">Chưa có dữ liệu</p></div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-1 space-y-4">
-                  <h3 className="font-black text-sky-900 text-lg uppercase tracking-wider flex items-center gap-2"><Sparkles className="w-5 h-5 text-amber-500"/> Lớp xuất sắc nhất</h3>
+                  <h3 className="font-black text-slate-800 text-lg uppercase tracking-wider flex items-center gap-2"><Sparkles className="w-5 h-5 text-amber-500"/> Lớp xuất sắc nhất</h3>
                   {adminLeaderboard.slice(0, 3).map((cls, idx) => (
                     <Card key={cls._id} className={`border-none shadow-md rounded-2xl ${idx === 0 ? 'bg-gradient-to-br from-amber-100 to-amber-50' : idx === 1 ? 'bg-gradient-to-br from-slate-200 to-slate-100' : 'bg-gradient-to-br from-orange-200 to-orange-100'}`}>
                       <CardContent className="p-4 flex items-center justify-between">
@@ -480,7 +585,7 @@ const AdminDashboard = () => {
                   ))}
                 </div>
                 
-                <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-sky-100 overflow-hidden">
+                <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
                   <div className="overflow-x-auto">
                     <Table className="min-w-[500px]">
                       <TableHeader><TableRow><TableHead className="w-16 text-center">Hạng</TableHead><TableHead>Tên Lớp</TableHead><TableHead className="text-center">Khối</TableHead><TableHead className="text-center">Đã nộp</TableHead><TableHead className="text-right pr-6">Điểm TB</TableHead></TableRow></TableHeader>
@@ -504,8 +609,8 @@ const AdminDashboard = () => {
         )}
 
         {activeTab === "accounts" && (
-          <Card className="border-sky-100/50 shadow-sm rounded-3xl overflow-hidden bg-white">
-            <div className="bg-white border-b border-sky-50 px-4 sm:px-8 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <Card className="border-slate-100 shadow-sm rounded-3xl overflow-hidden bg-white">
+            <div className="bg-white border-b border-slate-50 px-4 sm:px-8 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
                 <Button onClick={() => handleSubTabChange("all")} variant={subTab === "all" ? "default" : "ghost"} className={`rounded-xl whitespace-nowrap px-4 sm:px-6 font-bold ${subTab === "all" ? "bg-sky-500 text-white" : "text-slate-500"}`}>Tất cả</Button>
                 <Button onClick={() => handleSubTabChange("teacher")} variant={subTab === "teacher" ? "default" : "ghost"} className={`rounded-xl whitespace-nowrap px-4 sm:px-6 font-bold ${subTab === "teacher" ? "bg-sky-500 text-white" : "text-slate-500"}`}>Giáo viên</Button>
@@ -546,7 +651,7 @@ const AdminDashboard = () => {
               </div>
             </div>
 
-            <div className="bg-slate-50/40 border-b border-sky-50 px-4 sm:px-8 py-4 flex flex-col md:flex-row gap-4">
+            <div className="bg-slate-50/40 border-b border-slate-50 px-4 sm:px-8 py-4 flex flex-col md:flex-row gap-4">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input placeholder="Tìm tên/tài khoản..." className="pl-10 rounded-xl bg-white h-11" value={searchName} onChange={(e) => setSearchName(e.target.value)} />
@@ -568,7 +673,7 @@ const AdminDashboard = () => {
 
             <div className="overflow-x-auto">
               <Table className="min-w-[700px]">
-                <TableHeader className="bg-sky-50/50"><TableRow><TableHead className="pl-4 sm:pl-8 font-bold text-sky-800">Tên ĐN</TableHead><TableHead className="font-bold text-sky-800">Họ và tên</TableHead><TableHead className="font-bold text-sky-800">Vai trò</TableHead><TableHead className="font-bold text-sky-800">Phân công</TableHead><TableHead className="text-right pr-4 sm:pr-8 font-bold text-sky-800 w-[180px]">Thao tác</TableHead></TableRow></TableHeader>
+                <TableHeader className="bg-slate-50"><TableRow><TableHead className="pl-4 sm:pl-8 font-bold text-slate-700">Tên ĐN</TableHead><TableHead className="font-bold text-slate-700">Họ và tên</TableHead><TableHead className="font-bold text-slate-700">Vai trò</TableHead><TableHead className="font-bold text-slate-700">Phân công</TableHead><TableHead className="text-right pr-4 sm:pr-8 font-bold text-slate-700 w-[180px]">Thao tác</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {filteredUsers.map((user) => (
                     <TableRow key={user._id} className={user.isLocked ? 'bg-slate-50 opacity-60' : ''}>

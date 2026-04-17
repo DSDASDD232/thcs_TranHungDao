@@ -59,12 +59,33 @@ const TakeQuiz = () => {
             initialAnswers[qId] = { text: "", imageFile: null, previewUrl: "" };
           });
 
+          // 👉 SỬA LOGIC TÍNH GIỜ: Cân nhắc cả thời lượng bài thi và Hạn chót
+          let initialTimeLeft = res.data.duration ? res.data.duration * 60 : 2700;
+          const now = new Date().getTime();
+          
+          if (res.data.dueDate) {
+              const dueTime = new Date(res.data.dueDate).getTime();
+              const timeUntilDueInSeconds = Math.floor((dueTime - now) / 1000);
+              
+              // Nếu quá hạn thì đóng luôn không cho làm
+              if (timeUntilDueInSeconds <= 0) {
+                  alert("Bài tập này đã quá hạn nộp!");
+                  return navigate("/student-dashboard");
+              }
+              
+              // Lấy thời gian nhỏ hơn giữa (Thời gian làm bài gốc) và (Thời gian còn lại đến hạn chót)
+              initialTimeLeft = Math.min(initialTimeLeft, timeUntilDueInSeconds);
+          }
+
+          // Kiểm tra xem đã có lịch sử làm bài trước đó lưu ở LocalStorage chưa
           const savedProgress = localStorage.getItem(`quiz_progress_${id}`);
           if (savedProgress) {
               try {
                   const parsedProgress = JSON.parse(savedProgress);
-                  if (parsedProgress.timeLeft) setTimeLeft(parsedProgress.timeLeft);
-                  else setTimeLeft(res.data.duration ? res.data.duration * 60 : 2700);
+                  // Nếu thời gian lưu trong máy < thời gian tính toán ở trên thì lấy theo máy (trừ lùi tiếp)
+                  if (parsedProgress.timeLeft && parsedProgress.timeLeft < initialTimeLeft) {
+                      initialTimeLeft = parsedProgress.timeLeft;
+                  }
 
                   if (parsedProgress.answers) {
                       Object.keys(parsedProgress.answers).forEach(qId => {
@@ -74,12 +95,11 @@ const TakeQuiz = () => {
                       });
                   }
               } catch(e) {
-                  setTimeLeft(res.data.duration ? res.data.duration * 60 : 2700);
+                  console.error("Lỗi parse lịch sử làm bài", e);
               }
-          } else {
-              setTimeLeft(res.data.duration ? res.data.duration * 60 : 2700);
           }
 
+          setTimeLeft(initialTimeLeft);
           setAnswers(initialAnswers);
         }
       } catch (err) {
@@ -89,11 +109,12 @@ const TakeQuiz = () => {
       }
     };
     fetchAssignment();
-  }, [id]);
+  }, [id, navigate]);
 
   useEffect(() => {
     if (loading || !assignment || result) return;
     
+    // Nếu hết giờ -> Tự động nộp bài
     if (timeLeft <= 0) {
       handleSubmit(); 
       return;
@@ -225,7 +246,6 @@ const TakeQuiz = () => {
     let parsedOptions = [];
     try { parsedOptions = typeof q?.options === 'string' ? JSON.parse(q.options) : (q?.options || []); } catch (e) { parsedOptions = []; }
 
-    // 👉 THIẾT QUÂN LUẬT: Ép chỉ lấy 4 đáp án (A, B, C, D) và ẩn đáp án rỗng
     const finalOptions = parsedOptions.slice(0, 4);
 
     return (
@@ -254,7 +274,7 @@ const TakeQuiz = () => {
           {q.type === "multiple_choice" ? (
               <RadioGroup value={currentAnswer.text} onValueChange={(val) => handleAnswerChange(qId, val)} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {finalOptions.map((opt, oIdx) => {
-                  if (!opt || opt.trim() === "") return null; // Ẩn nếu đáp án bị rỗng
+                  if (!opt || opt.trim() === "") return null; 
                   const optLabel = String.fromCharCode(65 + oIdx); 
                   const isSelected = currentAnswer.text === optLabel;
                   return (
@@ -315,7 +335,7 @@ const TakeQuiz = () => {
       <header className="bg-gradient-to-r from-sky-50/80 via-white to-sky-50/80 backdrop-blur-md border-b border-sky-100 sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-4">
           <h1 className="font-extrabold text-base sm:text-lg text-sky-900 truncate flex-1 flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-sky-500 hidden sm:block" /> {assignment.title}
+            <Sparkles className="w-5 h-5 text-sky-500 hidden sm:block" /> {assignment?.title}
           </h1>
           
           <div className="flex items-center gap-3 shrink-0">

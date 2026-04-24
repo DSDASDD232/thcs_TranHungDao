@@ -59,7 +59,6 @@ const TakeQuiz = () => {
             initialAnswers[qId] = { text: "", imageFile: null, previewUrl: "" };
           });
 
-          // 👉 SỬA LOGIC TÍNH GIỜ: Cân nhắc cả thời lượng bài thi và Hạn chót
           let initialTimeLeft = res.data.duration ? res.data.duration * 60 : 2700;
           const now = new Date().getTime();
           
@@ -67,22 +66,18 @@ const TakeQuiz = () => {
               const dueTime = new Date(res.data.dueDate).getTime();
               const timeUntilDueInSeconds = Math.floor((dueTime - now) / 1000);
               
-              // Nếu quá hạn thì đóng luôn không cho làm
               if (timeUntilDueInSeconds <= 0) {
                   alert("Bài tập này đã quá hạn nộp!");
                   return navigate("/student-dashboard");
               }
               
-              // Lấy thời gian nhỏ hơn giữa (Thời gian làm bài gốc) và (Thời gian còn lại đến hạn chót)
               initialTimeLeft = Math.min(initialTimeLeft, timeUntilDueInSeconds);
           }
 
-          // Kiểm tra xem đã có lịch sử làm bài trước đó lưu ở LocalStorage chưa
           const savedProgress = localStorage.getItem(`quiz_progress_${id}`);
           if (savedProgress) {
               try {
                   const parsedProgress = JSON.parse(savedProgress);
-                  // Nếu thời gian lưu trong máy < thời gian tính toán ở trên thì lấy theo máy (trừ lùi tiếp)
                   if (parsedProgress.timeLeft && parsedProgress.timeLeft < initialTimeLeft) {
                       initialTimeLeft = parsedProgress.timeLeft;
                   }
@@ -114,7 +109,6 @@ const TakeQuiz = () => {
   useEffect(() => {
     if (loading || !assignment || result) return;
     
-    // Nếu hết giờ -> Tự động nộp bài
     if (timeLeft <= 0) {
       handleSubmit(); 
       return;
@@ -251,13 +245,15 @@ const TakeQuiz = () => {
     return (
       <Card key={qId} id={`question-card-${idx}`} className="rounded-3xl shadow-sm border border-sky-100/60 overflow-hidden bg-white mb-8 hover:shadow-md transition-shadow">
         <CardHeader className="bg-sky-50/30 border-b border-sky-50/80 p-5 sm:p-7 flex flex-row justify-between items-start">
-          <div>
+          <div className="w-full">
               <Badge className="mb-3 bg-sky-100 text-sky-700 font-black border-0 px-3 sm:px-4 py-1.5 text-xs sm:text-sm uppercase tracking-wider shadow-sm">
                 Câu {idx + 1}
               </Badge>
-              <CardTitle className="text-lg sm:text-xl font-bold text-slate-800 leading-relaxed whitespace-pre-wrap">
-                {q?.content}
-              </CardTitle>
+              {/* 👉 ĐÃ SỬA: Hiển thị đề bài bằng dangerouslySetInnerHTML để dịch mã HTML */}
+              <div 
+                  className="text-lg sm:text-xl font-bold text-slate-800 leading-relaxed whitespace-pre-wrap q-content-view w-full"
+                  dangerouslySetInnerHTML={{ __html: q?.content }}
+              />
           </div>
           <Badge variant="outline" className="text-slate-500 bg-white border-slate-200 font-bold text-sm shrink-0 whitespace-nowrap ml-4 shadow-sm">
               {item.points} Điểm
@@ -291,7 +287,11 @@ const TakeQuiz = () => {
                         <span className={`flex shrink-0 items-center justify-center w-8 h-8 rounded-full text-sm font-black transition-colors ${isSelected ? 'bg-sky-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
                           {optLabel}
                         </span> 
-                        <span className={isSelected ? 'text-sky-950 font-bold' : 'text-slate-600'}>{opt}</span>
+                        {/* 👉 ĐÃ SỬA: Hiển thị các đáp án A B C D bằng dangerouslySetInnerHTML */}
+                        <div 
+                            className={`q-content-view w-full ${isSelected ? 'text-sky-950 font-bold' : 'text-slate-600'}`}
+                            dangerouslySetInnerHTML={{ __html: opt }}
+                        />
                       </Label>
                     </div>
                   );
@@ -299,6 +299,7 @@ const TakeQuiz = () => {
               </RadioGroup>
           ) : (
               <div className="space-y-4">
+                {/* Textarea nhập tự luận của học sinh không bị HTML vì nó là text thuần, giữ nguyên */}
                 <Textarea 
                   placeholder="Gõ câu trả lời của em vào đây..." 
                   className="min-h-[160px] rounded-2xl bg-slate-50/50 border-slate-200 text-base font-medium focus-visible:ring-sky-500 p-5 shadow-inner transition-colors focus:bg-white"
@@ -333,28 +334,29 @@ const TakeQuiz = () => {
       {isMobileMapOpen && <div className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden" onClick={() => setIsMobileMapOpen(false)} />}
 
       <header className="bg-gradient-to-r from-sky-50/80 via-white to-sky-50/80 backdrop-blur-md border-b border-sky-100 sticky top-0 z-40 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-4">
-          <h1 className="font-extrabold text-base sm:text-lg text-sky-900 truncate flex-1 flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-sky-500 hidden sm:block" /> {assignment?.title}
+        <div className="max-w-7xl mx-auto px-3 sm:px-8 h-16 flex items-center justify-between gap-2 sm:gap-4">
+          <h1 className="font-extrabold text-sm sm:text-lg text-sky-900 truncate flex-1 flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-sky-500 hidden sm:block" /> 
+            <span className="truncate">{assignment?.title || "Bài kiểm tra"}</span>
           </h1>
           
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="hidden sm:flex bg-white p-1 rounded-xl border border-sky-100 shadow-sm">
-               <button onClick={() => setViewMode("single")} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold text-sm transition-all ${viewMode === 'single' ? 'bg-sky-500 text-white shadow-md' : 'text-slate-500 hover:text-sky-600 hover:bg-sky-50'}`}>
-                  <SquareMousePointer className="w-4 h-4"/> 1 Câu
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+            <div className="flex bg-white p-1 rounded-xl border border-sky-100 shadow-sm shrink-0">
+               <button onClick={() => setViewMode("single")} className={`flex items-center justify-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg font-bold text-xs sm:text-sm transition-all ${viewMode === 'single' ? 'bg-sky-500 text-white shadow-md' : 'text-slate-500 hover:text-sky-600 hover:bg-sky-50'}`}>
+                  <SquareMousePointer className="w-3.5 h-3.5 sm:w-4 sm:h-4"/> <span className="hidden sm:inline">1 Câu</span><span className="sm:hidden">1</span>
                </button>
-               <button onClick={() => setViewMode("multiple")} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold text-sm transition-all ${viewMode === 'multiple' ? 'bg-sky-500 text-white shadow-md' : 'text-slate-500 hover:text-sky-600 hover:bg-sky-50'}`}>
-                  <GalleryVerticalEnd className="w-4 h-4"/> 10 Câu
+               <button onClick={() => setViewMode("multiple")} className={`flex items-center justify-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg font-bold text-xs sm:text-sm transition-all ${viewMode === 'multiple' ? 'bg-sky-500 text-white shadow-md' : 'text-slate-500 hover:text-sky-600 hover:bg-sky-50'}`}>
+                  <GalleryVerticalEnd className="w-3.5 h-3.5 sm:w-4 sm:h-4"/> <span className="hidden sm:inline">10 Câu</span><span className="sm:hidden">10</span>
                </button>
             </div>
 
-            <div className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl font-black text-sm sm:text-lg border-2 shadow-sm bg-white ${timeLeft < 60 ? 'border-rose-200 text-rose-600 animate-pulse' : 'border-sky-100 text-sky-700'}`}>
+            <div className={`flex items-center gap-1.5 px-2 sm:px-4 py-1.5 sm:py-2 rounded-xl font-black text-sm sm:text-lg border-2 shadow-sm bg-white shrink-0 ${timeLeft < 60 ? 'border-rose-200 text-rose-600 animate-pulse' : 'border-sky-100 text-sky-700'}`}>
               <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-sky-500" />
               {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, "0")}
             </div>
 
-            <Button onClick={() => setIsMobileMapOpen(true)} variant="outline" size="icon" className="lg:hidden h-10 w-10 rounded-xl border-sky-200 text-sky-700 bg-sky-50">
-              <LayoutGrid className="w-5 h-5" />
+            <Button onClick={() => setIsMobileMapOpen(true)} variant="outline" size="icon" className="lg:hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl border-sky-200 text-sky-700 bg-sky-50 shrink-0">
+              <LayoutGrid className="w-4 h-4 sm:w-5 sm:h-5" />
             </Button>
           </div>
         </div>
@@ -384,11 +386,11 @@ const TakeQuiz = () => {
                   {totalPages > 1 && (
                      <div className="flex justify-center items-center gap-4 mt-10 pt-6 border-t border-slate-200">
                         <Button variant="outline" onClick={() => {setCurrentPage(p => Math.max(0, p - 1)); window.scrollTo({top:0});}} disabled={currentPage === 0} className="rounded-xl border-sky-200 text-sky-700 hover:bg-sky-50 bg-white font-bold h-12 px-6 shadow-sm">
-                          <ChevronLeft className="mr-2 w-5 h-5" /> Trang trước
+                          <ChevronLeft className="mr-2 w-5 h-5" /> <span className="hidden sm:inline">Trang trước</span>
                         </Button>
                         <span className="font-bold text-sky-900 bg-sky-100 px-4 py-2 rounded-xl shadow-inner border border-sky-200">Trang {currentPage + 1} / {totalPages}</span>
                         <Button onClick={() => {setCurrentPage(p => Math.min(totalPages - 1, p + 1)); window.scrollTo({top:0});}} disabled={currentPage === totalPages - 1} className="rounded-xl bg-sky-500 text-white hover:bg-sky-600 shadow-md font-bold h-12 px-6">
-                          Trang sau <ChevronRight className="ml-2 w-5 h-5" />
+                          <span className="hidden sm:inline">Trang sau</span> <ChevronRight className="ml-2 w-5 h-5" />
                         </Button>
                      </div>
                   )}

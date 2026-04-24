@@ -69,13 +69,13 @@ const submissionSchema = new mongoose.Schema(
         status: {
             type: String,
             enum: ["submitted", "pending", "graded"], 
-            // submitted: Đã nộp
-            // pending: Có câu tự luận, đang chờ giáo viên vào chấm ảnh
+            // submitted: Đã nộp (toàn trắc nghiệm)
+            // pending: Có câu tự luận, đang chờ giáo viên vào chấm
             // graded: Đã có điểm chính thức
             default: "submitted",
         },
 
-        // Lời phê của giáo viên cho toàn bài
+        
         feedback: {
             type: String,
             default: "",

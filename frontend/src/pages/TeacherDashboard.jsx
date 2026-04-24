@@ -17,7 +17,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { 
   BookOpen, FileQuestion, LogOut, CheckSquare, School,
   Loader2, PlusCircle, Trash2, Pencil, Image as ImageIcon, X,
-  UserCircle, Users, CheckCircle2, ArrowUpDown, Menu, Trophy, History, Database, Search, Filter
+  UserCircle, Users, CheckCircle2, ArrowUpDown, Menu, Trophy, History, Database, Search, Filter,
+  CalendarClock // 👉 THÊM ICON ĐỒNG HỒ TẠI ĐÂY
 } from "lucide-react";
 
 // Import các Tab
@@ -129,7 +130,6 @@ const TeacherDashboard = () => {
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(false);
   const [selectedLeaderboardClass, setSelectedLeaderboardClass] = useState("");
   const [leaderboardTimeFilter, setLeaderboardTimeFilter] = useState("all");
-  // 👉 Môn học cho bảng thi đua sẽ được lock theo tổ GV
   const [leaderboardSubjectFilter, setLeaderboardSubjectFilter] = useState("all"); 
 
   const [searchClassQuery, setSearchClassQuery] = useState("");
@@ -140,7 +140,6 @@ const TeacherDashboard = () => {
   const [previewUrl, setPreviewUrl] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterGrade, setFilterGrade] = useState("all");
-  // 👉 Sẽ tự gán theo môn của GV
   const [filterSubject, setFilterSubject] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterPoints, setFilterPoints] = useState("");
@@ -148,6 +147,12 @@ const TeacherDashboard = () => {
   const initialQuestionState = { content: "", subject: "", type: "multiple_choice", difficulty: "medium", grade: "6", optA: "", optB: "", optC: "", optD: "", correctAnswer: "A" };
   const [editingQuestionId, setEditingQuestionId] = useState(null);
   const [editQuestionData, setEditQuestionData] = useState(initialQuestionState);
+
+  // 👉 THÊM STATE ĐỔI HẠN NỘP
+  const [isDeadlineModalOpen, setIsDeadlineModalOpen] = useState(false);
+  const [selectedAssignmentForDeadline, setSelectedAssignmentForDeadline] = useState(null);
+  const [newDeadline, setNewDeadline] = useState("");
+  const [isUpdatingDeadline, setIsUpdatingDeadline] = useState(false);
 
   const getHeader = (isMultipart = false) => {
     const token = localStorage.getItem("token");
@@ -183,7 +188,6 @@ const TeacherDashboard = () => {
       setQuestions(questionsRes.data?.questions || []);
       setAssignments(assignmentsRes.data?.assignments || []);
 
-      // 👉 TỰ GÁN MÔN HỌC CỦA GV VÀO BỘ LỌC
       const tSubject = tProfile.subject || "Chưa phân tổ";
       setFilterSubject(tSubject);
       setLeaderboardSubjectFilter(tSubject);
@@ -261,7 +265,6 @@ const TeacherDashboard = () => {
   const filteredQuestions = questions.filter(q => {
     const matchesSearch = (q.content || "").toLowerCase().includes(searchQuery.toLowerCase());
     const matchesGrade = filterGrade === "all" || String(q.grade) === filterGrade;
-    // 👉 Luôn lấy khớp với môn của GV (Đã lấy ở Backend, Frontend lọc lại cho chắc)
     const matchesSubject = !filterSubject || q.subject === filterSubject;
     const matchesType = filterType === "all" || q.type === filterType;
     const matchesPoints = filterType !== "essay" || !filterPoints || Number(q.points) === Number(filterPoints);
@@ -292,7 +295,7 @@ const TeacherDashboard = () => {
 
     setEditQuestionData({
       content: q.content, 
-      subject: q.subject || teacherProfile?.subject, // Gán cứng môn
+      subject: q.subject || teacherProfile?.subject, 
       difficulty: q.difficulty, grade: q.grade || "6", type: q.type || "multiple_choice",
       optA: parsedOptions[0] || "", optB: parsedOptions[1] || "", optC: parsedOptions[2] || "", optD: parsedOptions[3] || "", correctAnswer: correctKey
     });
@@ -303,7 +306,7 @@ const TeacherDashboard = () => {
     e.preventDefault();
     const formData = new FormData();
     formData.append("content", editQuestionData.content); 
-    formData.append("subject", teacherProfile?.subject || "Chung"); // Ép gửi đúng môn của GV
+    formData.append("subject", teacherProfile?.subject || "Chung"); 
     formData.append("difficulty", editQuestionData.difficulty); formData.append("grade", editQuestionData.grade); formData.append("type", editQuestionData.type);
     
     if (editQuestionData.type === "multiple_choice") {
@@ -382,6 +385,31 @@ const TeacherDashboard = () => {
     exportFormalExcel(dataToExport, `BẢNG THI ĐUA LỚP ${className}`, `Bang_Thi_Dua_${className}`, teacherProfile?.fullName || fullName || "Giáo viên phụ trách");
   };
 
+  // 👉 CÁC HÀM MỞ POPUP ĐỔI GIỜ
+  const openDeadlineModal = (assignment) => {
+    setSelectedAssignmentForDeadline(assignment);
+    const formattedDate = new Date(assignment.dueDate).toISOString().slice(0, 16);
+    setNewDeadline(formattedDate);
+    setIsDeadlineModalOpen(true);
+  };
+
+  const handleUpdateDeadline = async () => {
+    setIsUpdatingDeadline(true);
+    try {
+        await axios.patch(`/assignments/update-deadline/${selectedAssignmentForDeadline._id}`, 
+            { newDueDate: newDeadline }, 
+            getHeader()
+        );
+        alert("Cập nhật hạn nộp thành công!");
+        setIsDeadlineModalOpen(false);
+        fetchData(); // Tải lại danh sách
+    } catch (error) {
+        alert("Lỗi khi cập nhật hạn nộp!");
+    } finally {
+        setIsUpdatingDeadline(false);
+    }
+  };
+
   const filteredClasses = (teacherProfile?.assignedClasses || []).filter(c => {
     const classObj = allClasses.find(ac => ac._id === c._id || ac._id === c) || c;
     return (classObj.name || "").toLowerCase().includes(searchClassQuery.toLowerCase());
@@ -447,7 +475,6 @@ const TeacherDashboard = () => {
                 <Select value={editQuestionData.type} onValueChange={(v) => setEditQuestionData({...editQuestionData, type: v})}><SelectTrigger className="h-12 rounded-xl bg-slate-50 border-sky-100 font-bold"><span className="truncate">{editQuestionData.type === "multiple_choice" ? "Trắc nghiệm" : "Tự luận"}</span></SelectTrigger><SelectContent><SelectItem value="multiple_choice">Trắc nghiệm</SelectItem><SelectItem value="essay">Tự luận</SelectItem></SelectContent></Select>
                 <Select value={editQuestionData.grade} onValueChange={(v) => setEditQuestionData({...editQuestionData, grade: v})}><SelectTrigger className="h-12 rounded-xl bg-slate-50 border-sky-100 font-bold"><span className="truncate">{editQuestionData.grade ? `Khối ${editQuestionData.grade}` : "Chọn khối"}</span></SelectTrigger><SelectContent><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent></Select>
                 
-                {/* 👉 ĐÃ SỬA: Thay Select chọn môn bằng Input ReadOnly */}
                 <Input 
                    value={`Môn: ${teacherProfile?.subject || "Chưa phân tổ"}`} 
                    readOnly 
@@ -588,6 +615,40 @@ const TeacherDashboard = () => {
           </DialogContent>
         </Dialog>
 
+        {/* 👉 MODAL ĐỔI HẠN NỘP VỪA THÊM */}
+        <Dialog open={isDeadlineModalOpen} onOpenChange={setIsDeadlineModalOpen}>
+            <DialogContent className="sm:max-w-[400px] rounded-3xl border-none p-6 bg-white shadow-2xl">
+                <DialogHeader>
+                    <DialogTitle className="text-xl font-black text-sky-950 flex items-center gap-2">
+                        <CalendarClock className="w-6 h-6 text-amber-500" /> Gia hạn bài tập
+                    </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 pt-4">
+                    <p className="text-sm font-bold text-slate-600">
+                        Tên bài tập: <span className="text-sky-600">{selectedAssignmentForDeadline?.title}</span>
+                    </p>
+                    <div className="space-y-2">
+                        <label className="font-bold text-slate-700">Chọn hạn nộp mới</label>
+                        <input 
+                            type="datetime-local" 
+                            className="flex h-12 w-full rounded-xl border border-sky-200 bg-slate-50 px-3 py-2 font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                            value={newDeadline} 
+                            onChange={(e) => setNewDeadline(e.target.value)} 
+                        />
+                    </div>
+                    <div className="flex justify-end gap-3 pt-4">
+                        <Button variant="ghost" onClick={() => setIsDeadlineModalOpen(false)} className="rounded-xl font-bold text-slate-500 hover:text-slate-800">
+                            Hủy
+                        </Button>
+                        <Button onClick={handleUpdateDeadline} disabled={isUpdatingDeadline} className="bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-md">
+                            {isUpdatingDeadline ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                            Lưu hạn nộp
+                        </Button>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+
         {activeTab === "my-classes" && (
           <MyClassesTab 
             isLoadingData={isLoadingData} filteredClasses={filteredClasses} allClasses={allClasses} classStatsMap={classStatsMap} 
@@ -613,6 +674,8 @@ const TeacherDashboard = () => {
             assignments={assignments} 
             handleDeleteAssignment={handleDeleteAssignment} 
             handleEditAssignment={(id) => navigate(`/teacher/edit-assignment/${id}`)}
+            // 👉 THÊM HÀM NÀY VÀO TRONG PROPS CỦA AssignmentsTab
+            openDeadlineModal={openDeadlineModal}
           />
         )}
 
@@ -620,14 +683,13 @@ const TeacherDashboard = () => {
           <QuestionsTab 
             searchQuery={searchQuery} setSearchQuery={setSearchQuery} 
             filterGrade={filterGrade} setFilterGrade={setFilterGrade} 
-            // 👉 ĐÃ SỬA: Ẩn Select chọn môn ở QuestionsTab, thay bằng prop cố định
             filterSubject={filterSubject} setFilterSubject={setFilterSubject} 
             filterType={filterType} setFilterType={setFilterType} 
             filterPoints={filterPoints} setFilterPoints={setFilterPoints} 
             filteredQuestions={filteredQuestions} 
             isLoadingData={isLoadingData} serverUrl={serverUrl} 
             handleEditClick={handleEditClick} handleDeleteQuestion={handleDeleteQuestion} 
-            teacherProfile={teacherProfile} // Truyền Profile xuống để hiển thị
+            teacherProfile={teacherProfile} 
           />
         )}
 

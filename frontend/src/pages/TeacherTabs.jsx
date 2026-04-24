@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"; // 👉 ĐÃ THÊM IMPORT NÀY
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   School, Loader2, Users, CheckSquare, BarChart, Download, Settings, Search,
   Trophy, Calendar, Sparkles, Medal, Eye, Trash2, Filter, Pencil, Image as ImageIcon,
-  PenTool, FileText, FileQuestion 
+  PenTool, FileText, FileQuestion, CalendarClock // Đảm bảo CalendarClock có ở đây
 } from "lucide-react";
 
 const getRankMedal = (index) => {
@@ -186,7 +186,7 @@ export const LeaderboardTab = ({
 // ==========================================
 // 3. TAB BÀI TẬP ĐÃ GIAO
 // ==========================================
-export const AssignmentsTab = ({ isLoadingData, assignments, handleDeleteAssignment, handleEditAssignment }) => {
+export const AssignmentsTab = ({ isLoadingData, assignments, handleDeleteAssignment, handleEditAssignment, openDeadlineModal }) => {
   const navigate = useNavigate();
   return (
     <Card className="border-sky-100/50 shadow-sm rounded-3xl overflow-hidden bg-white">
@@ -198,7 +198,7 @@ export const AssignmentsTab = ({ isLoadingData, assignments, handleDeleteAssignm
               <TableHead className="text-center font-bold text-sky-800">Lớp</TableHead>
               <TableHead className="text-center font-bold text-sky-800">Số câu</TableHead>
               <TableHead className="font-bold text-sky-800">Hạn nộp</TableHead>
-              <TableHead className="text-right pr-4 sm:pr-8 font-bold text-sky-800 w-[150px]">Thao tác</TableHead>
+              <TableHead className="text-right pr-4 sm:pr-8 font-bold text-sky-800 w-[180px]">Thao tác</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -217,14 +217,32 @@ export const AssignmentsTab = ({ isLoadingData, assignments, handleDeleteAssignm
                   </TableCell>
                   <TableCell className="text-center"><Badge className="bg-sky-100 text-sky-700 font-bold px-3 shadow-none hover:bg-sky-200">{assig.targetClass}</Badge></TableCell>
                   <TableCell className="font-semibold text-center text-slate-600">{assig.questions?.length || 0}</TableCell>
-                  <TableCell className="text-slate-500 text-sm font-medium">{new Date(assig.dueDate).toLocaleString("vi-VN")}</TableCell>
+                  <TableCell className="text-slate-500 text-sm font-medium">
+                    {new Date(assig.dueDate).toLocaleString("vi-VN", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit"
+                    })}
+                  </TableCell>
                   <TableCell className="text-right pr-4 sm:pr-8">
                     <div className="flex justify-end gap-1 sm:gap-2">
+                      <Button 
+                        onClick={() => openDeadlineModal(assig)} 
+                        variant="ghost" 
+                        className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-amber-500 hover:bg-amber-50 hover:text-amber-600 rounded-xl" 
+                        title="Gia hạn nộp bài"
+                      >
+                        <CalendarClock className="h-4 w-4" />
+                      </Button>
+
                       {assig.status === 'draft' ? (
                          <Button onClick={() => handleEditAssignment(assig._id)} variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-amber-600 hover:bg-amber-100 rounded-xl" title="Sửa bản nháp"><PenTool className="h-4 w-4" /></Button>
                       ) : (
                          <Button onClick={() => navigate(`/teacher/assignment/${assig._id}/grades`)} variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-sky-600 hover:bg-sky-100 rounded-xl" title="Xem điểm"><FileText className="h-4 w-4" /></Button>
                       )}
+                      
                       <Button onClick={() => handleDeleteAssignment(assig._id, assig.title)} variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-rose-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl" title="Xóa bài"><Trash2 className="h-4 w-4" /></Button>
                     </div>
                   </TableCell>
@@ -342,7 +360,7 @@ export const QuestionsTab = ({
                          {q.imageUrl ? <ImageIcon className="w-5 h-5 text-sky-500" /> : <FileQuestion className="w-5 h-5 text-slate-400" />}
                       </div>
                       <div className="space-y-1">
-                         <p className="font-bold text-slate-700 text-sm line-clamp-2">{q.content}</p>
+                         <div className="font-bold text-slate-700 text-sm line-clamp-2 q-content-view" dangerouslySetInnerHTML={{ __html: q.content }} />
                          <div className="flex flex-wrap gap-2">
                            <Badge variant="outline" className="bg-sky-50 text-sky-600 border-sky-200 text-[10px]">{q.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'}</Badge>
                            {q.type === 'essay' && q.points > 0 && <Badge variant="outline" className="bg-indigo-50 text-indigo-600 border-indigo-200 text-[10px] font-black">{q.points} Điểm</Badge>}

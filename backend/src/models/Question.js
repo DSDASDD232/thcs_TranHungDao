@@ -13,16 +13,30 @@ const questionSchema = new mongoose.Schema(
             type: String,
             enum: ["multiple_choice", "essay"],
             required: true,
-            default: "multiple_choice" // Mặc định là trắc nghiệm
+            default: "multiple_choice"
         },
 
-        // Mảng chứa các đáp án (Cách viết [String] sẽ gọn và chuẩn hơn cho Mongoose)
+        // Mảng chứa các đáp án (dành cho trắc nghiệm)
         options: [String],
 
-        // Đáp án đúng
+        // Đáp án đúng (Chỉ bắt buộc điền nếu là câu trắc nghiệm)
         correctAnswer: {
             type: String,
-            required: true,
+            required: function() {
+                return this.type === "multiple_choice";
+            },
+        },
+
+        // Đáp án tự luận dạng chữ
+        essayAnswerText: {
+            type: String,
+            default: ""
+        },
+
+        // Đáp án tự luận dạng ảnh (Ảnh phụ)
+        essayAnswerImageUrl: {
+            type: String,
+            default: ""
         },
 
         // Môn học (Toán, Ngữ Văn, Tiếng Anh...)
@@ -45,33 +59,36 @@ const questionSchema = new mongoose.Schema(
             default: "medium",
         },
 
-        // Đường dẫn ảnh (Lưu link từ thư mục /uploads/)
+        // Đường dẫn ảnh đề bài (Ảnh chính)
         imageUrl: {
             type: String,
             default: "" 
         },
 
+        // Phân loại bộ đề trong kho
         questionSet: { 
-        type: String, 
-        default: "Ngân hàng chung" 
+            type: String, 
+            default: "Ngân hàng chung" 
         },
         
-        // ĐỔI TÊN TỪ createdBy THÀNH teacher ĐỂ KHỚP VỚI FILE ROUTES
+        // Người tạo (Giáo viên)
         teacher: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User", 
             required: true,
         },
 
-
-        // Thêm dòng này vào trong Schema
+        // Điểm số của câu hỏi
         points: {
-        type: Number,
-         default: 0
-            },
+            type: Number,
+            default: 0
+        },
 
-
-        isBank: { type: Boolean, default: false }
+        // Đánh dấu câu hỏi này có nằm trong Kho vĩnh viễn hay không
+        isBank: { 
+            type: Boolean, 
+            default: false 
+        }
     },
     { timestamps: true }
 );

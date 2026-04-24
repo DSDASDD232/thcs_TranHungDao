@@ -11,6 +11,9 @@ import {
   Loader2, Database, Search, Filter, FileQuestion, Image as ImageIcon, Eye, Trash2, CheckCircle2 
 } from "lucide-react";
 
+// 👉 Thêm css để render html nội dung câu hỏi
+import 'katex/dist/katex.min.css';
+
 const AdminQuestionBank = () => {
   const [questions, setQuestions] = useState([]);
   const [subjectList, setSubjectList] = useState([]);
@@ -43,10 +46,9 @@ const AdminQuestionBank = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Gọi API lấy môn học và toàn bộ câu hỏi
       const [subjectRes, questionRes] = await Promise.all([
         axios.get("/admin/subjects", getHeader()),
-        axios.get("/questions/all", getHeader()) // API này tự động trả về ALL câu hỏi nếu là Admin
+        axios.get("/questions/all", getHeader()) 
       ]);
       setSubjectList(subjectRes.data || []);
       setQuestions(questionRes.data.questions || []);
@@ -72,9 +74,10 @@ const AdminQuestionBank = () => {
     }
   };
 
-  // Lọc dữ liệu
   const filteredQuestions = questions.filter(q => {
-    const matchesSearch = (q.content || "").toLowerCase().includes(searchQuery.toLowerCase());
+    // Dọn HTML tags để tìm kiếm text thuần túy
+    const cleanContent = q.content ? q.content.replace(/<[^>]*>?/gm, '') : "";
+    const matchesSearch = cleanContent.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesGrade = filterGrade === "all" || String(q.grade) === filterGrade;
     const matchesSubject = filterSubject === "all" || q.subject === filterSubject;
     const matchesType = filterType === "all" || q.type === filterType;
@@ -84,15 +87,15 @@ const AdminQuestionBank = () => {
 
   return (
     <div className="space-y-6">
-      <Card className="border-sky-100/50 shadow-sm rounded-3xl bg-white overflow-hidden">
-        <CardHeader className="bg-sky-50/50 border-b border-sky-50 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <Card className="border-sky-100/50 shadow-sm rounded-3xl bg-white overflow-hidden flex flex-col h-[calc(100vh-140px)]">
+        <CardHeader className="bg-sky-50/50 border-b border-sky-50 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
           <CardTitle className="text-xl font-bold text-sky-900 flex items-center gap-2">
             <Database className="w-6 h-6 text-sky-500" /> Quản lý Toàn bộ Kho Câu Hỏi
           </CardTitle>
           <Badge className="bg-sky-500 text-white shadow-none border-0 text-sm py-1">Tổng: {questions.length} câu</Badge>
         </CardHeader>
         
-        <div className="p-4 sm:p-6 border-b border-slate-100">
+        <div className="p-4 sm:p-6 border-b border-slate-100 shrink-0">
            <div className="flex flex-wrap items-center gap-3">
               <div className="relative flex-1 min-w-[250px]">
                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -145,15 +148,17 @@ const AdminQuestionBank = () => {
            </div>
         </div>
 
-        <div className="overflow-x-auto p-4">
-          <Table className="min-w-[800px]">
-            <TableHeader>
+        {/* 👉 SỬA: Thêm flex-1 overflow-auto để cuộn bảng, thiết lập độ rộng cứng cho các cột */}
+        <div className="overflow-auto flex-1 p-4">
+          <Table className="min-w-[800px] border-collapse relative">
+            <TableHeader className="sticky top-0 bg-white z-10 shadow-sm">
               <TableRow>
-                <TableHead className="w-16 text-center font-bold text-sky-800">STT</TableHead>
+                <TableHead className="w-[60px] text-center font-bold text-sky-800">STT</TableHead>
+                {/* Cột Nội dung sẽ tự động dãn ra chiếm hết khoảng trống còn lại */}
                 <TableHead className="font-bold text-sky-800">Nội dung</TableHead>
-                <TableHead className="font-bold text-center text-sky-800">Thông tin</TableHead>
-                <TableHead className="font-bold text-center text-sky-800">Người tạo</TableHead>
-                <TableHead className="text-right font-bold text-sky-800 w-[120px]">Thao tác</TableHead>
+                <TableHead className="w-[140px] font-bold text-center text-sky-800">Thông tin</TableHead>
+                <TableHead className="w-[160px] font-bold text-center text-sky-800">Người tạo</TableHead>
+                <TableHead className="w-[100px] text-center font-bold text-sky-800">Thao tác</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -164,24 +169,29 @@ const AdminQuestionBank = () => {
               ) : (
                 filteredQuestions.map((q, index) => (
                   <TableRow key={q._id} className="hover:bg-sky-50/50 transition-colors">
-                    <TableCell className="text-center font-bold text-slate-400">{index + 1}</TableCell>
-                    <TableCell>
-                      <div className="flex items-start gap-3">
+                    <TableCell className="text-center font-bold text-slate-400 align-top pt-4">{index + 1}</TableCell>
+                    
+                    {/* 👉 SỬA: Ép cột Nội dung ngắt dòng (break-words) và tối đa hiển thị 3 dòng */}
+                    <TableCell className="align-top pt-4">
+                      <div className="flex items-start gap-3 w-full">
                          {q.imageUrl && <ImageIcon className="w-5 h-5 text-sky-500 shrink-0 mt-0.5" />}
-                         <p className="font-bold text-slate-700 text-sm line-clamp-2">{q.content}</p>
+                         <div className="font-medium text-slate-700 text-sm line-clamp-3 break-words q-content-view" dangerouslySetInnerHTML={{ __html: q.content }} />
                       </div>
                     </TableCell>
-                    <TableCell className="text-center">
-                       <div className="flex flex-col items-center gap-1">
-                          <Badge variant="outline" className="bg-sky-50 text-sky-700 border-0">{q.subject} - Khối {q.grade}</Badge>
-                          <Badge variant="outline" className="bg-slate-50 text-slate-500 border-slate-200 text-[10px]">{q.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'}</Badge>
+
+                    <TableCell className="text-center align-top pt-4">
+                       <div className="flex flex-col items-center gap-1.5">
+                          <Badge variant="outline" className="bg-sky-50 text-sky-700 border-0 whitespace-nowrap">{q.subject} - Khối {q.grade}</Badge>
+                          <Badge variant="outline" className="bg-slate-50 text-slate-500 border-slate-200 text-[10px] whitespace-nowrap">{q.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'}</Badge>
                        </div>
                     </TableCell>
-                    <TableCell className="text-center font-medium text-slate-600 text-sm">
+                    
+                    <TableCell className="text-center font-medium text-slate-600 text-sm align-top pt-4">
                        {q.teacher ? q.teacher.fullName : "Hệ thống"}
                     </TableCell>
-                    <TableCell className="text-right">
-                       <div className="flex justify-end gap-1">
+                    
+                    <TableCell className="text-center align-top pt-3">
+                       <div className="flex justify-center gap-1">
                          <Button onClick={() => setViewQuestion(q)} variant="ghost" size="icon" className="h-8 w-8 text-sky-500 hover:bg-sky-100 rounded-lg"><Eye className="w-4 h-4" /></Button>
                          <Button onClick={() => handleDeleteQuestion(q._id)} variant="ghost" size="icon" className="h-8 w-8 text-rose-400 hover:bg-rose-50 hover:text-rose-500 rounded-lg"><Trash2 className="w-4 h-4" /></Button>
                        </div>
@@ -196,27 +206,54 @@ const AdminQuestionBank = () => {
 
       {/* DIALOG XEM CHI TIẾT CÂU HỎI */}
       <Dialog open={!!viewQuestion} onOpenChange={(open) => { if(!open) setViewQuestion(null) }}>
-        <DialogContent className="sm:max-w-[600px] w-[95%] rounded-3xl border-none p-6 bg-white shadow-2xl">
-          <DialogHeader><DialogTitle className="text-xl font-black text-sky-950 border-b border-sky-100 pb-3 flex items-center justify-between">Chi tiết câu hỏi <Badge className="bg-sky-100 text-sky-700 shadow-none border-0">{viewQuestion?.subject}</Badge></DialogTitle></DialogHeader>
+        <DialogContent className="sm:max-w-[700px] w-[95%] rounded-[2rem] border-none p-0 bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="bg-slate-50 px-8 py-6 border-b border-slate-100 flex flex-row items-center justify-between">
+              <DialogTitle className="text-xl font-black text-sky-950 flex items-center gap-3">
+                  <Eye className="w-6 h-6 text-sky-500" /> Chi tiết câu hỏi
+              </DialogTitle>
+              <Badge className="bg-sky-100 text-sky-700 shadow-none border-0 px-3 py-1 text-sm">{viewQuestion?.subject} - Khối {viewQuestion?.grade}</Badge>
+          </DialogHeader>
+          
           {viewQuestion && (
-            <div className="space-y-4 pt-2">
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                 <p className="font-bold text-slate-800 text-base leading-relaxed">{viewQuestion.content}</p>
-                 {viewQuestion.imageUrl && <img src={getImageUrl(viewQuestion.imageUrl)} className="max-h-48 mt-3 rounded-xl border border-slate-200 shadow-sm mx-auto" alt="Ảnh minh họa" />}
+            <div className="space-y-6 p-8">
+              <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-200 shadow-sm">
+                  {/* 👉 SỬA: Hiển thị đúng HTML của nội dung */}
+                  <div className="font-bold text-slate-800 text-lg leading-relaxed q-content-view" dangerouslySetInnerHTML={{ __html: viewQuestion.content }} />
+                  {viewQuestion.imageUrl && <img src={getImageUrl(viewQuestion.imageUrl)} className="max-w-full max-h-72 mt-4 rounded-xl border border-slate-200 shadow-sm mx-auto" alt="Ảnh minh họa" />}
               </div>
+
+              {/* Hướng dẫn giải tự luận */}
+              {viewQuestion.type === "essay" && (viewQuestion.essayAnswerText || viewQuestion.essayAnswerImageUrl) && (
+                  <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-200 shadow-sm">
+                      <p className="font-bold text-emerald-700 text-sm uppercase tracking-widest mb-3 flex items-center"><CheckCircle2 className="w-5 h-5 mr-2"/> Hướng dẫn giải</p>
+                      {viewQuestion.essayAnswerText && (
+                        <div className="font-medium text-emerald-900 text-base leading-relaxed whitespace-pre-wrap q-content-view bg-white p-4 rounded-xl border border-emerald-100" dangerouslySetInnerHTML={{ __html: viewQuestion.essayAnswerText }} />
+                      )}
+                      {viewQuestion.essayAnswerImageUrl && <img src={getImageUrl(viewQuestion.essayAnswerImageUrl)} className="max-w-full max-h-72 mt-4 rounded-xl border border-emerald-200 shadow-sm mx-auto" alt="Ảnh hướng dẫn giải" />}
+                  </div>
+              )}
+
               {viewQuestion.type === "multiple_choice" && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {(() => {
                     let parsedOpts = [];
                     try { parsedOpts = typeof viewQuestion.options === 'string' ? JSON.parse(viewQuestion.options) : (viewQuestion.options || []); } catch(e) {}
                     return parsedOpts.map((opt, idx) => {
                       const letter = String.fromCharCode(65 + idx);
                       const isCorrect = viewQuestion.correctAnswer === letter || viewQuestion.correctAnswer === opt;
-                      return (<div key={idx} className={`p-3 rounded-xl border-2 flex items-start gap-2 ${isCorrect ? 'bg-sky-50 border-sky-400' : 'bg-white border-slate-100'}`}><span className={`font-bold ${isCorrect ? 'text-sky-600' : 'text-slate-400'}`}>{letter}.</span><span className={`text-sm ${isCorrect ? 'font-bold text-sky-700' : 'text-slate-600 font-medium'}`}>{opt}</span>{isCorrect && <CheckCircle2 className="w-4 h-4 text-sky-500 shrink-0 ml-auto"/>}</div>)
+                      return (
+                          <div key={idx} className={`p-4 rounded-2xl border-2 flex items-center gap-3 transition-colors ${isCorrect ? 'bg-sky-50 border-sky-400 shadow-sm' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black shrink-0 ${isCorrect ? 'bg-sky-500 text-white' : 'bg-slate-100 text-slate-500'}`}>{letter}</div>
+                              {/* 👉 SỬA: Hiển thị đúng HTML của đáp án */}
+                              <span className={`text-base q-content-view break-words ${isCorrect ? 'font-bold text-sky-800' : 'text-slate-700 font-medium'}`} dangerouslySetInnerHTML={{ __html: opt }} />
+                              {isCorrect && <CheckCircle2 className="w-6 h-6 text-sky-500 shrink-0 ml-auto"/>}
+                          </div>
+                      )
                     });
                   })()}
                 </div>
               )}
+              <div className="flex gap-2 justify-end pt-4"><Button onClick={() => setViewQuestion(null)} className="h-12 rounded-xl bg-slate-800 text-white hover:bg-slate-700 font-bold px-8 transition-transform active:scale-95">Đóng xem trước</Button></div>
             </div>
           )}
         </DialogContent>

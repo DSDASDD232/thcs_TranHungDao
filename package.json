@@ -17,6 +17,8 @@
   "type": "commonjs",
   "dependencies": {
     "exceljs": "^4.4.0",
-    "file-saver": "^2.0.5"
+    "file-saver": "^2.0.5",
+    "katex": "^0.16.45",
+    "react-quill-new": "^3.8.3"
   }
 }

@@ -1,20 +1,23 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "../lib/axios"; 
+import mammoth from "mammoth"; 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress"; 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
   ArrowLeft, UploadCloud, CheckCircle, CheckCircle2, AlertTriangle, Eraser,
   Sparkles, FileText, Loader2, Image as ImageIcon, ListChecks, Layers,
-  PenTool, Database, Calculator, Save, Search, Filter, Eye, Trash2, PlusCircle
+  PenTool, Database, Calculator, Save, Search, Filter, Eye, Trash2, PlusCircle, ArrowRight, FolderOpen
 } from "lucide-react";
+
+import RichTextEditor from "@/components/ui/RichTextEditor";
+import 'katex/dist/katex.min.css';
 
 const CreateAssignment = () => {
   const navigate = useNavigate();
@@ -27,14 +30,14 @@ const CreateAssignment = () => {
 
   const [creationMethod, setCreationMethod] = useState("manual"); 
   const [viewQuestion, setViewQuestion] = useState(null);
+  
+  const [isReviewingExtraction, setIsReviewingExtraction] = useState(false);
+  const [rawExtractedText, setRawExtractedText] = useState("");
+  const [extractedQuestions, setExtractedQuestions] = useState([]);
 
   const [step, setStep] = useState(1);
   const [templateConfig, setTemplateConfig] = useState({
-    type: null, 
-    mcqCount: 0,
-    essayCount: 0,
-    essayPoints: [], 
-    totalPoints: 10
+    type: null, mcqCount: 0, essayCount: 0, essayPoints: [], totalPoints: 10
   });
 
   const getDefaultDueDate = () => {
@@ -54,13 +57,13 @@ const CreateAssignment = () => {
 
   const [bankSearch, setBankSearch] = useState("");
   const [bankGrade, setBankGrade] = useState("all");
-  // 👉 Sửa state môn học mặc định thành rỗng, sẽ tự cập nhật khi lấy profile
   const [bankSubject, setBankSubject] = useState("");
   const [bankSetName, setBankSetName] = useState("all"); 
   const [bankType, setBankType] = useState("all"); 
   const [bankPoints, setBankPoints] = useState(""); 
-
   const [bankSelected, setBankSelected] = useState([]); 
+
+  const [isSetSelectionEnabled, setIsSetSelectionEnabled] = useState(true);
 
   const serverUrl = axios.defaults.baseURL?.replace('/api', '') || '';
 
@@ -79,11 +82,8 @@ const CreateAssignment = () => {
         const data = res.data;
 
         setNewAssignment({
-          title: data.title,
-          targetClass: data.targetClass,
-          subject: data.subject,
-          duration: data.duration.toString(),
-          dueDate: new Date(data.dueDate).toISOString().slice(0, 16),
+          title: data.title, targetClass: data.targetClass, subject: data.subject,
+          duration: data.duration.toString(), dueDate: new Date(data.dueDate).toISOString().slice(0, 16),
         });
 
         if (data.questions && data.questions.length > 0) {
@@ -120,7 +120,9 @@ const CreateAssignment = () => {
             return {
               _id: q._id, tempId, content: q.content, type: q.type || "multiple_choice",
               options: parsedOptions, correctAnswer: correctKey, difficulty: q.difficulty || "medium",
-              imageFile: null, previewUrl: q.imageUrl ? `${serverUrl}${q.imageUrl}` : "", existingImageUrl: q.imageUrl 
+              imageFile: null, previewUrl: q.imageUrl ? `${serverUrl}${q.imageUrl}` : "", existingImageUrl: q.imageUrl,
+              essayAnswerText: q.essayAnswerText || "",
+              essayAnswerPreviewUrl: q.essayAnswerImageUrl ? `${serverUrl}${q.essayAnswerImageUrl}` : "",
             };
           });
 
@@ -137,7 +139,7 @@ const CreateAssignment = () => {
           setStep(3); 
         }
       } catch (error) {
-        alert("Không thể tải bản nháp. Bài tập có thể đã bị xóa.");
+        alert("Không thể tải bản nháp.");
         navigate("/teacher-dashboard");
       }
     };
@@ -156,34 +158,16 @@ const CreateAssignment = () => {
         const teacherInfo = profRes.data;
         setTeacherProfile(teacherInfo);
         
-        // 👉 TỰ ĐỘNG GÁN MÔN HỌC LÚC TẠO MỚI (Dựa vào tổ của GV)
         if (!id) {
             const subject = teacherInfo.subject || "Chưa phân tổ";
-            setNewAssignment(prev => ({ ...prev, subject: subject }));
-            setBankSubject(subject); // Khóa bộ lọc Kho câu hỏi
+            setNewAssignment(prev => ({ ...prev, subject }));
+            setBankSubject(subject); 
         }
-
         setQuestions(questionsRes.data?.questions || []);
       } catch (error) {}
     };
     fetchData();
   }, [navigate, id]);
-
-  useEffect(() => { setBankSetName("all"); }, [bankGrade, bankSubject]);
-
-  const isSetSelectionEnabled = bankGrade !== "all" && bankSubject !== "all";
-  const availableSets = [...new Set(questions.filter(q => q.grade === bankGrade && q.subject === bankSubject).map(q => q.questionSet || "Ngân hàng chung").filter(Boolean))];
-  
-  const filteredBankQuestions = questions.filter(q => {
-    const matchSearch = q.content.toLowerCase().includes(bankSearch.toLowerCase());
-    const matchGrade = bankGrade === "all" || q.grade === bankGrade;
-    const matchSubject = bankSubject === "all" || q.subject === bankSubject;
-    const matchSet = bankSetName === "all" || q.questionSet === bankSetName || (!q.questionSet && bankSetName === "Ngân hàng chung");
-    const matchType = bankType === "all" || q.type === bankType;
-    const matchPoints = bankType !== "essay" || !bankPoints || Number(q.points) === Number(bankPoints);
-
-    return matchSearch && matchGrade && matchSubject && matchSet && matchType && matchPoints;
-  });
 
   const handleSelectTemplate = (type) => {
     setTemplateConfig({ ...templateConfig, type, mcqCount: 0, essayCount: 0, essayPoints: [] });
@@ -195,7 +179,7 @@ const CreateAssignment = () => {
     const newPts = [...templateConfig.essayPoints];
     if (count > newPts.length) { while (newPts.length < count) newPts.push(""); } 
     else { newPts.length = count; }
-    setTemplateConfig({...templateConfig, essayCount: e.target.value, essayPoints: newPts});
+    setTemplateConfig({...templateConfig, essayCount: count, essayPoints: newPts});
   };
 
   const checkPointValidity = () => {
@@ -212,18 +196,16 @@ const CreateAssignment = () => {
       return { valid: true, msg: `Hợp lệ: Máy sẽ tự chia mỗi câu ${pt.toFixed(2)} điểm.` };
     }
     if (templateConfig.type === 'full_essay') {
-      if (essay > 0 && essayPtsNum.some(p => p <= 0)) return { valid: false, msg: "Vui lòng nhập điểm (>0) cho TẤT CẢ các câu Tự luận." };
-      if (totalEssayPoints !== 10) return { valid: false, msg: `LỖI: Tổng điểm đang là ${totalEssayPoints}. Yêu cầu tổng phải bằng đúng 10.` };
+      if (essay > 0 && essayPtsNum.some(p => p <= 0)) return { valid: false, msg: "Vui lòng nhập điểm cho các câu Tự luận." };
+      if (totalEssayPoints !== 10) return { valid: false, msg: `LỖI: Tổng điểm đang là ${totalEssayPoints}. Phải bằng 10.` };
       return { valid: true, msg: `Hợp lệ: Đề có tổng 10 điểm.` };
     }
     if (templateConfig.type === 'mixed') {
-      if (mcq === 0 || essay === 0) return { valid: false, msg: "Đề hỗn hợp cần nhập số lượng cho cả Trắc nghiệm và Tự luận." };
-      if (essayPtsNum.some(p => p <= 0)) return { valid: false, msg: "Vui lòng nhập điểm (>0) cho TẤT CẢ các câu Tự luận trước." };
-      if (totalEssayPoints >= 10) return { valid: false, msg: `LỖI: Tổng tự luận (${totalEssayPoints}) phải nhỏ hơn 10 để còn chia cho Trắc nghiệm.` };
-      const remaining = 10 - totalEssayPoints;
-      const mcqPt = remaining / mcq;
-      if ((mcqPt * 100) % 5 !== 0) return { valid: false, msg: `CẢNH BÁO: Trắc nghiệm bị lẻ (${mcqPt.toFixed(2)} đ/câu). Hãy điều chỉnh lại số lượng hoặc điểm tự luận!` };
-      return { valid: true, msg: `Hợp lệ: Tổng Tự luận ${totalEssayPoints}đ. Trắc nghiệm sẽ là ${mcqPt.toFixed(2)}đ/câu.` };
+      if (mcq === 0 || essay === 0) return { valid: false, msg: "Đề hỗn hợp cần nhập cả Trắc nghiệm và Tự luận." };
+      if (totalEssayPoints >= 10) return { valid: false, msg: `LỖI: Tổng tự luận phải nhỏ hơn 10.` };
+      const mcqPt = (10 - totalEssayPoints) / mcq;
+      if ((mcqPt * 100) % 5 !== 0) return { valid: false, msg: `CẢNH BÁO: Trắc nghiệm bị lẻ (${mcqPt.toFixed(2)} đ/câu).` };
+      return { valid: true, msg: `Hợp lệ: Tổng Tự luận ${totalEssayPoints}đ. Trắc nghiệm ${mcqPt.toFixed(2)}đ/câu.` };
     }
   };
 
@@ -236,25 +218,22 @@ const CreateAssignment = () => {
     const essayCount = Number(templateConfig.essayCount);
     let mcqPt = 0;
     if (templateConfig.type === 'full_mcq') mcqPt = 10 / mcqCount;
-    else if (templateConfig.type === 'mixed') {
-        const totalEssay = templateConfig.essayPoints.reduce((a, b) => a + (Number(b)||0), 0);
-        mcqPt = (10 - totalEssay) / mcqCount;
-    }
+    else if (templateConfig.type === 'mixed') mcqPt = (10 - templateConfig.essayPoints.reduce((a, b) => a + (Number(b)||0), 0)) / mcqCount;
+    
     const newPoints = {};
     for (let i = 0; i < mcqCount; i++) {
         const tempId = `mcq_${Date.now()}_${i}`;
-        generatedSlots.push({ tempId, type: "multiple_choice", content: "", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium", imageFile: null, previewUrl: "" });
+        generatedSlots.push({ tempId, type: "multiple_choice", content: "", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium" });
         newPoints[tempId] = mcqPt; 
     }
     for (let i = 0; i < essayCount; i++) {
         const tempId = `essay_${Date.now()}_${i}`;
-        generatedSlots.push({ tempId, type: "essay", content: "", options: [], correctAnswer: "", difficulty: "medium", imageFile: null, previewUrl: "" });
+        generatedSlots.push({ tempId, type: "essay", content: "", options: [], correctAnswer: "", difficulty: "medium", essayAnswerText: "" });
         newPoints[tempId] = Number(templateConfig.essayPoints[i]) || 0; 
     }
     setManualQuestions(generatedSlots);
     setQuestionPoints(newPoints);
     setCreationMethod("manual");
-    recalculatePoints(generatedSlots, newPoints);
     setStep(3);
   };
 
@@ -264,8 +243,7 @@ const CreateAssignment = () => {
     const essays = questionsArr.filter(q => q.type === "essay");
     if (mcqs.length > 0) {
         const totalEssay = essays.reduce((sum, q) => sum + (updatedPoints[q.tempId] || 0), 0);
-        const remaining = 10 - totalEssay;
-        const mcqPt = remaining > 0 ? (remaining / mcqs.length) : 0;
+        const mcqPt = (10 - totalEssay) > 0 ? (10 - totalEssay) / mcqs.length : 0;
         mcqs.forEach(q => { updatedPoints[q.tempId] = mcqPt; });
     }
     setQuestionPoints(updatedPoints);
@@ -281,73 +259,66 @@ const CreateAssignment = () => {
   const roundedTotal = Math.round(totalPoints * 100) / 100; 
   const isPointsValid = roundedTotal === 10; 
 
+  useEffect(() => { setBankSetName("all"); }, [bankGrade, bankSubject]);
+
   const fillEmptySlots = (importedQs) => {
     let newManuals = [...manualQuestions];
+    let updatedPoints = { ...questionPoints };
     let filledCount = 0;
     let duplicateCount = 0;
-    let mismatchedEssayCount = 0;
-    const existingContents = new Set(newManuals.map(q => q.content.trim().toLowerCase()).filter(c => c !== ""));
+    
+    const stripHtml = (html) => {
+      let tmp = document.createElement("DIV");
+      tmp.innerHTML = html;
+      return tmp.textContent || tmp.innerText || "";
+    };
+
+    const existingContents = new Set(newManuals.map(q => stripHtml(q.content).trim().toLowerCase()).filter(c => c !== ""));
 
     for (let i = 0; i < importedQs.length; i++) {
       const impQ = importedQs[i];
-      const normalizedContent = impQ.content.trim().toLowerCase();
+      const normalizedContent = stripHtml(impQ.content).trim().toLowerCase();
 
       if (existingContents.has(normalizedContent)) {
           duplicateCount++; continue; 
       }
 
-      let targetSlotIndex = -1;
+      let targetSlotIndex = newManuals.findIndex(slot => slot.type === impQ.type && stripHtml(slot.content).trim() === "");
 
-      if (impQ.type === 'multiple_choice') {
-          targetSlotIndex = newManuals.findIndex(slot => slot.type === 'multiple_choice' && slot.content.trim() === "");
-      } else if (impQ.type === 'essay') {
-          if (impQ.points !== undefined && impQ.points !== null && impQ.points !== 0) {
-               targetSlotIndex = newManuals.findIndex(slot => slot.type === 'essay' && slot.content.trim() === "" && Number(questionPoints[slot.tempId]) === Number(impQ.points));
-               if (targetSlotIndex === -1 && newManuals.some(slot => slot.type === 'essay' && slot.content.trim() === "")) mismatchedEssayCount++;
-          } else {
-               targetSlotIndex = newManuals.findIndex(slot => slot.type === 'essay' && slot.content.trim() === "");
-          }
+      let parsedOptions = ["", "", "", ""];
+      if (Array.isArray(impQ.options) && impQ.options.length > 0) {
+          parsedOptions = impQ.options;
       }
+      
+      let correctKey = impQ.correctAnswer || "A";
+
+      const payloadToInject = {
+        content: impQ.content || "",
+        options: impQ.type === 'multiple_choice' ? parsedOptions : [],
+        correctAnswer: correctKey,
+        difficulty: impQ.difficulty || "medium",
+        previewUrl: impQ.previewUrl || "",
+        essayAnswerText: impQ.essayAnswerText || "",
+      };
 
       if (targetSlotIndex !== -1) {
           existingContents.add(normalizedContent);
-          
-          let parsedOptions = ["", "", "", ""];
-          if (impQ.options) {
-              try { parsedOptions = typeof impQ.options === 'string' ? JSON.parse(impQ.options) : impQ.options;
-                  if (typeof parsedOptions[0] === 'string' && parsedOptions[0].startsWith('[')) parsedOptions = JSON.parse(parsedOptions[0]);
-              } catch(e) { parsedOptions = Array.isArray(impQ.options) ? impQ.options : ["", "", "", ""]; }
-          }
-          while(parsedOptions.length < 4) parsedOptions.push("");
-
-          let correctKey = "A";
-          if (["A", "B", "C", "D"].includes(impQ.correctAnswer)) { correctKey = impQ.correctAnswer; } 
-          else if (impQ.correctAnswer) {
-              const idx = parsedOptions.findIndex(opt => opt === impQ.correctAnswer);
-              if (idx === 0) correctKey = "A"; else if (idx === 1) correctKey = "B"; else if (idx === 2) correctKey = "C"; else if (idx === 3) correctKey = "D";
-          }
-
-          newManuals[targetSlotIndex] = {
-            ...newManuals[targetSlotIndex], 
-            content: impQ.content || "",
-            options: impQ.type === 'multiple_choice' ? parsedOptions : [],
-            correctAnswer: correctKey,
-            difficulty: impQ.difficulty || "medium",
-            previewUrl: impQ.previewUrl || (impQ.imageUrl ? `${serverUrl}${impQ.imageUrl}` : ""),
-            existingImageUrl: impQ.existingImageUrl || impQ.imageUrl || "",
-            _id: impQ._id || undefined 
-          };
-          filledCount++;
+          newManuals[targetSlotIndex] = { ...newManuals[targetSlotIndex], ...payloadToInject };
+      } else {
+          existingContents.add(normalizedContent);
+          const newTempId = `appended_${Date.now()}_${Math.random()}`;
+          newManuals.push({ tempId: newTempId, type: impQ.type || "multiple_choice", ...payloadToInject });
+          updatedPoints[newTempId] = impQ.points || 0; 
       }
+      filledCount++;
     }
 
     setManualQuestions(newManuals);
-    setCreationMethod("manual");
-    setBankSelected([]);
-
-    let alertMsg = `✅ Đã điền tự động ${filledCount} câu vào khung.`;
-    if (duplicateCount > 0) alertMsg += `\n⚠️ Bỏ qua ${duplicateCount} câu do đã bị TRÙNG LẶP nội dung.`;
-    if (mismatchedEssayCount > 0) alertMsg += `\n❌ Bỏ qua ${mismatchedEssayCount} câu tự luận do KHÔNG KHỚP ĐIỂM với các khung trống hiện tại.`;
+    setQuestionPoints(updatedPoints);
+    recalculatePoints(newManuals, updatedPoints); 
+    
+    let alertMsg = `✅ Đã rót thành công ${filledCount} câu vào Form trực tiếp.`;
+    if (duplicateCount > 0) alertMsg += `\n⚠️ Bỏ qua ${duplicateCount} câu do đã bị trùng lặp.`;
     alert(alertMsg);
   };
 
@@ -356,118 +327,240 @@ const CreateAssignment = () => {
     if (file) setAssignmentFile(file);
   };
 
+  // ======================================================================
+  // HÀM BÓC TÁCH THÔNG MINH (TỰ ĐỘNG PHÂN BIỆT TRẮC NGHIỆM/TỰ LUẬN)
+  // ======================================================================
+  const extractQuestionsFromText = (text, isForPreview = false) => {
+    // 1. Cắt bỏ phần Bảng đáp án ở cuối file (nếu có)
+    const textParts = text.split(/(?:\n\s*HẾT\b|\n\s*Hết\b|\n\s*Bảng đáp án\b)/i);
+    let mainPart = textParts[0]; 
+
+    // 2. Cắt văn bản thành từng khối dựa vào chữ "Câu X:" hoặc "Bài X:"
+    const questionBlocks = mainPart.split(/(?=(?:^|\n)\s*(?:Câu|Bài)\s+\d+\s*[:.])/i).filter(b => b.trim() !== "");
+    
+    return questionBlocks.map((block) => {
+      let type = "multiple_choice";
+      let content = "";
+      let options = [];
+      let correctAnswer = "A";
+      let essayAnswerText = "";
+
+      // 3. Tách phần "Lời giải/Hướng dẫn" ra khỏi câu hỏi
+      const partsByExplanation = block.split(/(?:^|\n)\s*(?:Lời giải|Hướng dẫn giải|HDG|Giải|Đáp án)\s*[:.]\s*/i);
+      let questionBody = partsByExplanation[0];
+      
+      // Nếu có phần lời giải ở dưới
+      if (partsByExplanation.length > 1) {
+          essayAnswerText = partsByExplanation[1].trim();
+      }
+
+      // 4. Tách nội dung Đề bài và các Đáp án A, B, C, D
+      const partsByOptions = questionBody.split(/(?:^|\n|\t|\s{3,})(?=\*?[A-D][.)]\s)/i);
+      
+      // Khúc đầu tiên chính là đề bài
+      content = partsByOptions[0].replace(/^\s*(?:Câu|Bài)\s+\d+\s*[:.]\s*/i, "").trim();
+
+      // 5. Quét các đáp án
+      let detectedCorrectAnswer = null;
+      partsByOptions.slice(1).forEach(optStr => {
+        let textOpt = optStr.trim();
+        let isCorrect = false;
+        
+        // Nếu có dấu * đằng trước thì đó là đáp án đúng
+        if (textOpt.startsWith('*')) {
+           isCorrect = true;
+           textOpt = textOpt.substring(1).trim();
+        }
+
+        const letterMatch = textOpt.match(/^([A-D])[.)]\s*(.*)/is);
+        if (letterMatch) {
+            const letter = letterMatch[1].toUpperCase();
+            let val = letterMatch[2].trim();
+            options.push(val);
+            if (isCorrect) detectedCorrectAnswer = letter;
+        }
+      });
+
+      // 6. LOGIC PHÂN LOẠI THÔNG MINH
+      if (options.length === 0) {
+          // KHÔNG TÌM THẤY A, B, C, D -> ĐÂY LÀ CÂU TỰ LUẬN
+          type = "essay";
+          options = []; 
+          correctAnswer = "";
+      } else {
+          // CÓ A, B, C, D -> LÀ TRẮC NGHIỆM
+          type = "multiple_choice";
+          while (options.length < 4) options.push(""); 
+          correctAnswer = detectedCorrectAnswer || "A";
+      }
+      
+      const baseData = { 
+          type: type, 
+          content: content, 
+          options: options, 
+          correctAnswer: correctAnswer,
+          essayAnswerText: essayAnswerText, 
+          difficulty: "medium" 
+      };
+
+      if (isForPreview) return { ...baseData, tempId: `ext_prev_${Date.now()}_${Math.random()}` };
+      return baseData;
+    });
+  };
+
   const handleExtractWord = async () => {
     if (!assignmentFile) return alert("Vui lòng chọn file Word trước!");
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", assignmentFile);
-      formData.append("subject", newAssignment.subject);
-      formData.append("grade", newAssignment.targetClass ? newAssignment.targetClass.replace(/\D/g, '').substring(0, 1) : "6");
-      const res = await axios.post("/assignments/extract-word", formData, getHeader(true));
-      fillEmptySlots(res.data.questions);
-    } catch (error) { alert("Lỗi bóc tách file Word."); } finally { setLoading(false); }
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const arrayBuffer = event.target.result;
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        const text = result.value;
+        
+        setRawExtractedText(text); 
+        setExtractedQuestions(extractQuestionsFromText(text, true)); 
+        setIsReviewingExtraction(true); 
+        setLoading(false);
+      };
+      reader.readAsArrayBuffer(assignmentFile);
+    } catch (error) { 
+      alert("Lỗi bóc tách file Word. Vui lòng thử lại!"); 
+      setLoading(false); 
+    }
   };
 
-  const toggleBankSelection = (questionId) => {
-    setBankSelected(prev => prev.includes(questionId) ? prev.filter(x => x !== questionId) : [...prev, questionId]);
+  const handleReuploadAndExtract = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setAssignmentFile(file);
+    setLoading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const arrayBuffer = event.target.result;
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        const text = result.value;
+        setRawExtractedText(text); 
+        setExtractedQuestions(extractQuestionsFromText(text, true)); 
+        setLoading(false);
+      };
+      reader.readAsArrayBuffer(file);
+    } catch (error) { 
+      alert("Lỗi bóc tách file Word. Vui lòng thử lại!"); 
+      setLoading(false); 
+    }
   };
 
-  const handleImportFromBankToManual = () => {
-    if (bankSelected.length === 0) return alert("Vui lòng tích chọn ít nhất 1 câu hỏi từ Kho!");
-    const selectedQs = questions.filter(q => bankSelected.includes(q._id));
-    fillEmptySlots(selectedQs);
+  const reparseTextToSlots = (text) => {
+    const parsedQs = extractQuestionsFromText(text, true);
+    setExtractedQuestions(parsedQs);
   };
 
-  const handleManualChange = (tempId, field, value) => { setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, [field]: value } : q)); };
-  const handleManualOptionChange = (tempId, optionIndex, value) => { setManualQuestions(manualQuestions.map(q => { if (q.tempId === tempId) { const newOptions = [...q.options]; newOptions[optionIndex] = value; return { ...q, options: newOptions }; } return q; })); };
-  const handleManualImageChange = (tempId, e) => { const file = e.target.files[0]; if (file) setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, imageFile: file, previewUrl: URL.createObjectURL(file) } : q)); };
-  const handleRemoveManualImage = (tempId) => { setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, imageFile: null, previewUrl: "" } : q)); };
+  const handleCommitExtraction = () => {
+    fillEmptySlots(extractedQuestions); 
+    setIsReviewingExtraction(false);
+    setAssignmentFile(null); 
+    setCreationMethod("manual"); 
+  };
+
+  const handleExtractedChange = (tempId, field, value) => {
+    setExtractedQuestions(prev => prev.map(q => q.tempId === tempId ? { ...q, [field]: value } : q));
+  };
+  const handleExtractedOptionChange = (tempId, optionIndex, value) => {
+    setExtractedQuestions(prev => prev.map(q => {
+      if (q.tempId === tempId) {
+        const newOptions = [...q.options];
+        newOptions[optionIndex] = value;
+        return { ...q, options: newOptions };
+      }
+      return q;
+    }));
+  };
   
+  const handleAddExtractedOption = (tempId) => {
+    setExtractedQuestions(prev => prev.map(q => q.tempId === tempId ? { ...q, options: [...q.options, ""] } : q));
+  };
+  const handleRemoveExtractedOption = (tempId, optIndex) => {
+    setExtractedQuestions(prev => prev.map(q => {
+      if (q.tempId === tempId && q.options.length > 2) {
+        const newOpts = q.options.filter((_, i) => i !== optIndex);
+        return { ...q, options: newOpts };
+      }
+      return q;
+    }));
+  };
+
+  const handleManualChange = (tempId, field, value) => setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, [field]: value } : q));
+  const handleManualOptionChange = (tempId, optionIndex, value) => setManualQuestions(manualQuestions.map(q => { if (q.tempId === tempId) { const newOptions = [...q.options]; newOptions[optionIndex] = value; return { ...q, options: newOptions }; } return q; }));
+  
+  const handleAddManualOption = (tempId) => {
+    setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, options: [...q.options, ""] } : q));
+  };
+  const handleRemoveManualOption = (tempId, optIndex) => {
+    setManualQuestions(manualQuestions.map(q => {
+      if (q.tempId === tempId && q.options.length > 2) {
+        const newOpts = q.options.filter((_, i) => i !== optIndex);
+        return { ...q, options: newOpts };
+      }
+      return q;
+    }));
+  };
+
+  const handleAddSlot = (type) => {
+    const tempId = `${type}_${Date.now()}`;
+    const newSlot = { tempId, type, content: "", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium" };
+    const updatedQuestions = [...manualQuestions, newSlot];
+    const updatedPoints = { ...questionPoints, [tempId]: 0 }; 
+    setManualQuestions(updatedQuestions);
+    recalculatePoints(updatedQuestions, updatedPoints);
+  };
+  const handleDeleteSlot = (tempId) => {
+    if (!window.confirm("XÓA HOÀN TOÀN khung này khỏi đề thi?")) return;
+    const updatedQuestions = manualQuestions.filter(q => q.tempId !== tempId);
+    const updatedPoints = { ...questionPoints };
+    delete updatedPoints[tempId];
+    setManualQuestions(updatedQuestions);
+    recalculatePoints(updatedQuestions, updatedPoints);
+  };
   const handleClearSlot = (tempId) => { 
     if(!window.confirm("Xóa nội dung khung này?")) return; 
     setManualQuestions(manualQuestions.map(q => { 
       if (q.tempId === tempId) { 
-        return { ...q, content: "", options: ["", "", "", ""], imageFile: null, previewUrl: "", existingImageUrl: "", _id: undefined }; 
+        return { ...q, content: "", options: ["", "", "", ""], imageFile: null, previewUrl: "", existingImageUrl: "", essayAnswerText: "", essayAnswerImageFile: null, essayAnswerPreviewUrl: "", existingEssayAnswerImageUrl: "", _id: undefined }; 
       } 
       return q; 
     })); 
   };
 
-  const handleDeleteSlot = (tempId) => {
-    if (!window.confirm("Bạn có chắc chắn muốn XÓA HOÀN TOÀN khung câu hỏi này khỏi đề thi?")) return;
-    
-    const updatedQuestions = manualQuestions.filter(q => q.tempId !== tempId);
-    const updatedPoints = { ...questionPoints };
-    delete updatedPoints[tempId];
-
-    setManualQuestions(updatedQuestions);
-    recalculatePoints(updatedQuestions, updatedPoints);
-  };
-
-  const handleAddSlot = (type) => {
-    const tempId = `${type}_${Date.now()}`;
-    const newSlot = {
-      tempId,
-      type: type,
-      content: "",
-      options: type === 'multiple_choice' ? ["", "", "", ""] : [],
-      correctAnswer: type === 'multiple_choice' ? "A" : "",
-      difficulty: "medium",
-      imageFile: null,
-      previewUrl: "",
-      existingImageUrl: ""
-    };
-
-    const updatedQuestions = [...manualQuestions, newSlot];
-    const updatedPoints = { ...questionPoints, [tempId]: 0 }; 
-
-    setManualQuestions(updatedQuestions);
-    recalculatePoints(updatedQuestions, updatedPoints);
-    
-    setTimeout(() => {
-      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-    }, 100);
-  };
-
-  const getImageUrl = (url) => {
-    if (!url) return '';
-    return url.startsWith('http') ? url : `${serverUrl}${url}`;
-  };
+  const handleManualImageChange = (tempId, e) => { const file = e.target.files[0]; if (file) setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, imageFile: file, previewUrl: URL.createObjectURL(file) } : q)); };
+  const handleRemoveManualImage = (tempId) => { setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, imageFile: null, previewUrl: "" } : q)); };
+  const handleManualEssayImageChange = (tempId, e) => { const file = e.target.files[0]; if (file) setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, essayAnswerImageFile: file, essayAnswerPreviewUrl: URL.createObjectURL(file) } : q)); };
+  const handleRemoveManualEssayImage = (tempId) => { setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, essayAnswerImageFile: null, essayAnswerPreviewUrl: "" } : q)); };
 
   const handleSubmit = async (actionType) => {
     if (!newAssignment.targetClass) return alert("Vui lòng chọn lớp để giao bài!");
     if (actionType === 'published' && !isPointsValid) return alert(`Tổng điểm hiện tại là ${roundedTotal.toFixed(2)}. Bạn bắt buộc phải chia điểm sao cho bằng đúng 10.00 mới được PHÁT HÀNH!`);
-    
     setLoading(true);
     try {
-      const isValid = manualQuestions.every(q => q.content.trim() !== "");
-      if (!isValid) { setLoading(false); return alert("Vui lòng điền nội dung đầy đủ cho tất cả các khung trống!"); }
-
-      const contentSet = new Set();
-      for (let q of manualQuestions) {
-          const normalized = q.content.trim().toLowerCase();
-          if (contentSet.has(normalized)) {
-              setLoading(false); return alert(`⚠️ Lỗi: Câu hỏi "${q.content.substring(0, 30)}..." bị trùng lặp trong đề. Vui lòng kiểm tra lại!`);
-          }
-          contentSet.add(normalized);
-      }
-
       const formData = new FormData();
-      formData.append("title", newAssignment.title); 
-      formData.append("targetClass", newAssignment.targetClass); 
-      formData.append("subject", newAssignment.subject); // 👉 Lấy chuẩn môn học
-      formData.append("duration", newAssignment.duration); 
-      formData.append("dueDate", newAssignment.dueDate); 
-      formData.append("status", actionType); 
+      formData.append("title", newAssignment.title); formData.append("targetClass", newAssignment.targetClass); 
+      formData.append("subject", newAssignment.subject); formData.append("duration", newAssignment.duration); 
+      formData.append("dueDate", newAssignment.dueDate); formData.append("status", actionType); 
       
       const questionsToSave = manualQuestions.map(q => ({
           _id: q._id, tempId: q.tempId, content: q.content, type: q.type, options: q.options, correctAnswer: q.correctAnswer, difficulty: q.difficulty, subject: newAssignment.subject,
-          points: questionPoints[q.tempId] || 0, existingImageUrl: q.existingImageUrl || "" 
+          points: questionPoints[q.tempId] || 0, essayAnswerText: q.type === 'essay' ? (q.essayAnswerText || "") : "",
+          existingImageUrl: q.existingImageUrl || "",
+          existingEssayAnswerImageUrl: q.existingEssayAnswerImageUrl || "" 
       }));
       formData.append("questionsData", JSON.stringify(questionsToSave));
-      manualQuestions.forEach(q => { if (q.imageFile) formData.append(`image_${q.tempId}`, q.imageFile); });
 
+      manualQuestions.forEach(q => { 
+          if (q.imageFile) formData.append(`image_${q.tempId}`, q.imageFile); 
+          if (q.type === 'essay' && q.essayAnswerImageFile) formData.append(`essayImage_${q.tempId}`, q.essayAnswerImageFile);
+      });
+      
       if (id) await axios.put(`/assignments/update/${id}`, formData, getHeader(true));
       else await axios.post("/assignments/create-manual", formData, getHeader(true));
 
@@ -476,14 +569,36 @@ const CreateAssignment = () => {
     } catch (err) { alert("Lỗi xử lý! Vui lòng thử lại."); } finally { setLoading(false); }
   };
 
+  const availableSets = [...new Set(questions.map(q => q.questionSet).filter(Boolean))];
+
+  const filteredBankQuestions = questions.filter(q => {
+    const matchSearch = (q.content || "").toLowerCase().includes(bankSearch.toLowerCase());
+    const matchGrade = bankGrade === "all" || q.grade === bankGrade;
+    const matchType = bankType === "all" || q.type === bankType;
+    const matchSet = bankSetName === "all" || q.questionSet === bankSetName;
+    const matchPoints = !bankPoints || Number(q.points) === Number(bankPoints);
+    return matchSearch && matchGrade && matchType && matchSet && matchPoints;
+  });
+
+  const toggleBankSelection = (qId) => {
+    setBankSelected(prev => prev.includes(qId) ? prev.filter(id => id !== qId) : [...prev, qId]);
+  };
+
+  const handleImportFromBankToManual = () => {
+    if (bankSelected.length === 0) return alert("Vui lòng tích chọn ít nhất 1 câu hỏi từ Kho!");
+    const selectedQs = questions.filter(q => bankSelected.includes(q._id));
+    fillEmptySlots(selectedQs);
+    setCreationMethod("manual");
+  };
+
   const handleOpenViewQuestion = (e, q) => { e.stopPropagation(); setViewQuestion(q); };
 
   return (
     <div className="min-h-screen bg-sky-50/40 p-4 sm:p-6 md:p-10 font-sans text-slate-800 relative">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <Button variant="ghost" onClick={() => navigate("/teacher-dashboard")} className="text-sky-600 hover:text-sky-700 hover:bg-sky-100 font-bold px-3 py-2 sm:px-0 mb-4 sm:mb-6 h-auto w-max"><ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 mr-2" /> Hủy & Quay lại</Button>
 
-        {step === 3 && creationMethod !== "bank" && (
+        {step === 3 && creationMethod === "manual" && (
           <div className="sticky top-4 z-30 mb-6 transition-all">
             <Card className={`border-none shadow-lg ${isPointsValid ? 'bg-emerald-500' : 'bg-rose-500'} text-white`}>
               <CardContent className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -508,23 +623,18 @@ const CreateAssignment = () => {
           
           <CardContent className="p-4 sm:p-8">
             <form onSubmit={(e) => e.preventDefault()} className="space-y-8">
-              
               <div className="space-y-4">
                 <h3 className="text-lg sm:text-xl font-black text-sky-900 border-b border-sky-100 pb-2">1. Thông tin chung</h3>
                 <Input placeholder="Nhập tên bài tập " className="h-12 sm:h-14 rounded-xl bg-slate-50 font-bold text-base sm:text-lg border-sky-100 focus-visible:ring-sky-500" value={newAssignment.title} onChange={(e) => setNewAssignment({...newAssignment, title: e.target.value})} required />
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="space-y-1.5"><label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Giao cho Lớp</label><Select value={newAssignment.targetClass} onValueChange={(val) => setNewAssignment({...newAssignment, targetClass: val})} required><SelectTrigger className="h-11 sm:h-12 rounded-xl bg-slate-50 font-bold border-sky-100 w-full"><SelectValue placeholder="Chọn Lớp" /></SelectTrigger><SelectContent>{!teacherProfile?.assignedClasses || teacherProfile.assignedClasses.length === 0 ? (<SelectItem value="none" disabled>Chưa có lớp</SelectItem>) : (teacherProfile.assignedClasses.map(c => <SelectItem key={c._id || c} value={c.name}>{c.name}</SelectItem>))}</SelectContent></Select></div>
-                  
-                  {/* 👉 ĐÃ SỬA: Khóa cứng hiển thị môn học, lấy từ Profile */}
                   <div className="space-y-1.5">
-                      <label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Môn học phụ trách</label>
-                      <Input 
-                        value={newAssignment.subject} 
-                        readOnly 
-                        className="h-11 sm:h-12 rounded-xl bg-slate-100 border-slate-200 font-bold text-sky-700 cursor-not-allowed shadow-none" 
-                      />
+                    <label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Giao cho Lớp</label>
+                    <Select value={newAssignment.targetClass || ""} onValueChange={(val) => setNewAssignment({...newAssignment, targetClass: val})} required>
+                      <SelectTrigger className="h-11 sm:h-12 rounded-xl bg-slate-50 font-bold border-sky-100 w-full"><SelectValue placeholder="Chọn Lớp" /></SelectTrigger>
+                      <SelectContent>{!teacherProfile?.assignedClasses || teacherProfile.assignedClasses.length === 0 ? (<SelectItem value="none" disabled>Chưa có lớp</SelectItem>) : (teacherProfile.assignedClasses.map(c => <SelectItem key={c._id || c} value={c.name}>{c.name}</SelectItem>))}</SelectContent>
+                    </Select>
                   </div>
-
+                  <div className="space-y-1.5"><label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Môn học phụ trách</label><Input value={newAssignment.subject} readOnly className="h-11 sm:h-12 rounded-xl bg-slate-100 border-slate-200 font-bold text-sky-700 cursor-not-allowed shadow-none" /></div>
                   <div className="space-y-1.5"><label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Thời gian (Phút)</label><Input type="number" placeholder="VD: 45" className="h-11 sm:h-12 rounded-xl bg-slate-50 border-sky-100 font-bold" value={newAssignment.duration} onChange={(e) => setNewAssignment({...newAssignment, duration: e.target.value})} required /></div>
                   <div className="space-y-1.5"><label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Hạn nộp</label><Input type="datetime-local" className="h-11 sm:h-12 rounded-xl bg-slate-50 border-sky-100 font-bold text-slate-600" value={newAssignment.dueDate} onChange={(e) => setNewAssignment({...newAssignment, dueDate: e.target.value})} required /></div>
                 </div>
@@ -534,10 +644,8 @@ const CreateAssignment = () => {
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-lg sm:text-xl font-black text-sky-900">2. Cấu trúc Đề thi</h3>
                   <div className="hidden sm:flex items-center gap-2 text-xs font-bold">
-                    <Badge className={step >= 1 ? "bg-sky-500 text-white" : "bg-slate-100 text-slate-400"}>Chọn mẫu</Badge>
-                    <div className={`w-6 h-1 rounded ${step >= 2 ? "bg-sky-500" : "bg-slate-100"}`}></div>
-                    <Badge className={step >= 2 ? "bg-sky-500 text-white" : "bg-slate-100 text-slate-400"}>Số lượng & Điểm</Badge>
-                    <div className={`w-6 h-1 rounded ${step >= 3 ? "bg-sky-500" : "bg-slate-100"}`}></div>
+                    <Badge className={step >= 1 ? "bg-sky-500 text-white" : "bg-slate-100 text-slate-400"}>Chọn mẫu</Badge><div className={`w-6 h-1 rounded ${step >= 2 ? "bg-sky-500" : "bg-slate-100"}`}></div>
+                    <Badge className={step >= 2 ? "bg-sky-500 text-white" : "bg-slate-100 text-slate-400"}>Số lượng & Điểm</Badge><div className={`w-6 h-1 rounded ${step >= 3 ? "bg-sky-500" : "bg-slate-100"}`}></div>
                     <Badge className={step >= 3 ? "bg-sky-500 text-white" : "bg-slate-100 text-slate-400"}>Nội dung</Badge>
                   </div>
                 </div>
@@ -558,20 +666,16 @@ const CreateAssignment = () => {
                       </CardHeader>
                       <CardContent className="p-6 space-y-6">
                           <div className="space-y-4">
-                             {templateConfig.type !== 'full_essay' && (
-                               <div className="space-y-2"><label className="font-bold text-slate-700 flex items-center gap-2"><ListChecks className="w-4 h-4 text-sky-500"/> Số lượng câu Trắc nghiệm</label><Input type="number" min="0" value={templateConfig.mcqCount} onChange={(e) => setTemplateConfig({...templateConfig, mcqCount: e.target.value})} className="h-12 rounded-xl border-slate-200 font-bold text-lg" /></div>
-                             )}
-                             {templateConfig.type !== 'full_mcq' && (
-                               <div className="space-y-2"><label className="font-bold text-slate-700 flex items-center gap-2"><FileText className="w-4 h-4 text-emerald-500"/> Số lượng câu Tự luận</label><Input type="number" min="0" value={templateConfig.essayCount} onChange={handleEssayCountChange} className="h-12 rounded-xl border-slate-200 font-bold text-lg" /></div>
-                             )}
+                             {templateConfig.type !== 'full_essay' && (<div className="space-y-2"><label className="font-bold text-slate-700 flex items-center gap-2"><ListChecks className="w-4 h-4 text-sky-500"/> Số lượng câu Trắc nghiệm</label><Input type="number" min="0" value={templateConfig.mcqCount} onChange={(e) => setTemplateConfig({...templateConfig, mcqCount: e.target.value})} className="h-12 rounded-xl border-slate-200 font-bold text-lg" /></div>)}
+                             {templateConfig.type !== 'full_mcq' && (<div className="space-y-2"><label className="font-bold text-slate-700 flex items-center gap-2"><FileText className="w-4 h-4 text-emerald-500"/> Số lượng câu Tự luận</label><Input type="number" min="0" value={templateConfig.essayCount} onChange={handleEssayCountChange} className="h-12 rounded-xl border-slate-200 font-bold text-lg" /></div>)}
                              {templateConfig.type !== 'full_mcq' && Number(templateConfig.essayCount) > 0 && (
                                <div className="space-y-3 mt-4 pt-4 border-t border-slate-100 animate-in fade-in">
                                  <label className="font-bold text-indigo-700 flex items-center gap-2"><Calculator className="w-4 h-4 text-indigo-500"/> Điểm chi tiết cho TỪNG câu Tự luận</label>
                                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                                    {templateConfig.essayPoints.map((pt, idx) => (
                                      <div key={idx} className="flex flex-col gap-1">
-                                       <span className="text-xs font-bold text-slate-500">Câu T.Luận {idx + 1}</span>
-                                       <Input type="number" step="0.25" min="0" placeholder="" value={pt} onChange={(e) => { const newPts = [...templateConfig.essayPoints]; newPts[idx] = e.target.value; setTemplateConfig({...templateConfig, essayPoints: newPts}); }} className="h-10 rounded-lg border-indigo-200 font-bold bg-indigo-50 text-indigo-900 focus-visible:ring-indigo-500" />
+                                       <span className="text-xs font-bold text-slate-500">Câu {idx + 1}</span>
+                                       <Input type="number" step="0.25" min="0" value={pt} onChange={(e) => { const newPts = [...templateConfig.essayPoints]; newPts[idx] = e.target.value; setTemplateConfig({...templateConfig, essayPoints: newPts}); }} className="h-10 rounded-lg border-indigo-200 font-bold bg-indigo-50 text-indigo-900 focus-visible:ring-indigo-500" />
                                      </div>
                                    ))}
                                  </div>
@@ -592,21 +696,148 @@ const CreateAssignment = () => {
                     </div>
 
                     <div className="flex bg-slate-100 rounded-xl w-full p-1 overflow-x-auto no-scrollbar">
-                      <button type="button" onClick={() => setCreationMethod("manual")} className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${creationMethod === 'manual' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-sky-600'}`}><PenTool className="w-4 h-4 shrink-0"/> Trực tiếp / Xem khung</button>
-                      <button type="button" onClick={() => setCreationMethod("upload")} className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${creationMethod === 'upload' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-sky-600'}`}><FileText className="w-4 h-4 shrink-0"/> Rót từ file Word</button>
+                      <button type="button" onClick={() => setCreationMethod("manual")} className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${(creationMethod === 'manual' || creationMethod === 'smart_extract') ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-sky-600'}`}><PenTool className="w-4 h-4 shrink-0"/> Xem khung Trực tiếp</button>
+                      <button type="button" onClick={() => setCreationMethod("upload")} className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${creationMethod === 'upload' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-sky-600'}`}><FileText className="w-4 h-4 shrink-0"/> Bóc tách từ Word</button>
                       <button type="button" onClick={() => setCreationMethod("bank")} className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${creationMethod === 'bank' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-sky-600'}`}><Database className="w-4 h-4 shrink-0"/> Rót từ Kho Câu hỏi</button>
                     </div>
 
                     <div className="mt-4 border border-sky-100 bg-sky-50/30 rounded-2xl p-3 sm:p-4 md:p-6">
                       
+                      {/* ======================================================================
+                          TÍNH NĂNG BÓC TÁCH FILE WORD
+                      ====================================================================== */}
+                      {creationMethod === "upload" && (
+                        <div className="space-y-4">
+                          {!isReviewingExtraction ? (
+                             <div className="bg-white p-4 sm:p-6 rounded-2xl border border-sky-100 shadow-sm text-center">
+                                <h4 className="font-bold text-sky-900 text-base sm:text-lg mb-1 sm:mb-2">Bóc tách tự động</h4>
+                                <p className="text-slate-500 text-xs sm:text-sm mb-4">Hệ thống sẽ bóc tách văn bản thô từ Word. Sau đó bạn có thể rà soát lại trước khi rót vào Form trực tiếp.</p>
+                                <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => {e.preventDefault(); const f = e.dataTransfer.files[0]; if(f) setAssignmentFile(f);}} onClick={() => assignmentFileRef.current.click()} className={`border-2 border-dashed rounded-2xl sm:rounded-3xl p-6 sm:p-10 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 sm:gap-3 max-w-lg mx-auto ${assignmentFile ? 'border-sky-500 bg-sky-50' : 'border-slate-200 hover:border-sky-400 bg-slate-50/50'}`}>
+                                  <input type="file" ref={assignmentFileRef} onChange={handleAssignmentFileChange} className="hidden" accept=".doc,.docx" />
+                                  {assignmentFile ? (<><div className="w-12 h-12 sm:w-14 sm:h-14 bg-sky-100 rounded-full flex items-center justify-center mb-1"><FileText className="h-6 w-6 sm:h-7 sm:w-7 text-sky-600" /></div><p className="font-black text-sky-900 text-base sm:text-lg line-clamp-1 break-all px-2">{assignmentFile.name}</p><p className="text-[10px] sm:text-xs text-sky-600 font-medium bg-white px-2 sm:px-3 py-1 rounded-full border border-sky-100">Click để đổi file khác</p></>) : (<><div className="w-12 h-12 sm:w-16 sm:h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-1"><UploadCloud className="h-6 w-6 sm:h-8 sm:w-8 text-sky-400" /></div><p className="text-sm sm:text-base font-black text-slate-700">Kéo thả file Word (.docx) vào đây</p></>)}
+                                </div>
+                                {assignmentFile && <Button type="button" onClick={handleExtractWord} disabled={loading} className="mt-4 sm:mt-6 w-full sm:w-auto bg-teal-500 hover:bg-teal-600 text-white font-bold h-11 sm:h-12 px-6 sm:px-8 rounded-xl shadow-md">{loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <Sparkles className="w-4 h-4 mr-2" />} Bắt đầu bóc tách văn bản</Button>}
+                             </div>
+                          ) : (
+                             <div className="flex flex-col lg:flex-row gap-6 items-start">
+                               {/* KHUNG TRÁI: RAW TEXT */}
+                               <div className="w-full lg:w-2/5 flex flex-col gap-0 sticky top-4 z-10">
+                                  <div className="flex justify-between items-center bg-slate-100 p-3 rounded-t-xl border border-slate-200 border-b-0 shadow-sm">
+                                    <span className="text-sm font-bold text-slate-700 uppercase">Văn bản thô (File gốc)</span>
+                                    <div className="flex gap-2">
+                                      <label className="h-8 px-3 inline-flex items-center justify-center rounded-md text-xs font-bold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 cursor-pointer transition-colors shadow-sm">
+                                        <FolderOpen className="w-3.5 h-3.5 mr-1.5"/> Chọn file khác
+                                        <input type="file" className="hidden" accept=".doc,.docx" onChange={handleReuploadAndExtract} />
+                                      </label>
+                                      <Button size="sm" variant="outline" className="h-8 text-sky-600 border-sky-300 hover:bg-sky-50 font-bold shadow-sm" onClick={() => {
+                                          reparseTextToSlots(rawExtractedText);
+                                      }}>
+                                        <Sparkles className="w-3.5 h-3.5 mr-1"/> Rót lại Text
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  <textarea 
+                                    value={rawExtractedText} 
+                                    onChange={(e) => setRawExtractedText(e.target.value)}
+                                    className="w-full h-[600px] p-4 rounded-b-xl border border-slate-200 font-mono text-sm leading-relaxed bg-white shadow-inner resize-none focus-visible:ring-sky-500 outline-none"
+                                    placeholder="Nội dung file Word sẽ hiển thị ở đây..."
+                                  />
+                                  <div className="bg-amber-50 p-3 mt-2 rounded-lg border border-amber-200">
+                                    <p className="text-xs text-amber-700 font-medium">
+                                      💡 <b>Mẹo sửa lỗi:</b> Chỉnh sửa văn bản ở trên (thêm chữ <b>Câu X:</b> hoặc <b>A. B. C. D.</b> nếu máy bị thiếu), sau đó ấn nút <b>Rót lại Text</b> để cập nhật danh sách bên phải.
+                                    </p>
+                                  </div>
+                               </div>
+
+                               {/* KHUNG PHẢI: LIST CÂU HỎI ĐÃ BÓC TÁCH */}
+                               <div className="w-full lg:w-3/5 space-y-4 sm:space-y-6">
+                                  <div className="bg-sky-50 p-3 rounded-xl border border-sky-100 flex justify-between items-center">
+                                    <span className="text-sm font-bold text-sky-800 uppercase">Xem trước & Chỉnh sửa ({extractedQuestions.length} câu)</span>
+                                    <Button onClick={() => setExtractedQuestions([...extractedQuestions, { tempId: `ext_new_${Date.now()}`, type: "multiple_choice", content: "", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium" }])} size="sm" variant="outline" className="h-8 bg-white"><PlusCircle className="w-4 h-4 mr-1"/> Thêm câu</Button>
+                                  </div>
+
+                                  {extractedQuestions.map((q, index) => (
+                                      <Card key={q.tempId} className="border-sky-200 shadow-sm relative overflow-visible transition-all">
+                                          <div className="absolute top-0 left-0 w-1.5 h-full bg-emerald-400"></div>
+                                          <CardHeader className="bg-slate-50 py-3 px-4 border-b border-slate-100 flex flex-row justify-between items-center">
+                                            <CardTitle className="text-base font-black text-slate-700 flex items-center gap-2">
+                                              Câu {index + 1} 
+                                              <Badge variant="outline" className="text-[10px] ml-2 bg-white text-slate-500">{q.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'}</Badge>
+                                            </CardTitle>
+                                            <Button type="button" onClick={() => setExtractedQuestions(extractedQuestions.filter(x => x.tempId !== q.tempId))} variant="ghost" size="icon" className="h-8 w-8 text-rose-400 hover:bg-rose-50"><Trash2 className="w-4 h-4"/></Button>
+                                          </CardHeader>
+                                          <CardContent className="p-4 space-y-4 bg-white">
+                                            <div className="flex flex-col">
+                                                <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁN ẢNH CÔNG THỨC..." value={q.content} onChange={(val) => handleExtractedChange(q.tempId, 'content', val)} />
+                                            </div>
+                                            
+                                            {q.type === 'essay' && (
+                                              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-3">
+                                                <h4 className="text-sm font-bold text-emerald-700 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Hướng dẫn giải</h4>
+                                                <RichTextEditor value={q.essayAnswerText} onChange={(val) => handleExtractedChange(q.tempId, 'essayAnswerText', val)} />
+                                              </div>
+                                            )}
+
+                                            {q.type === 'multiple_choice' && (
+                                              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
+                                                
+                                                {/* 👉 TÍNH NĂNG THÊM/XÓA ĐÁP ÁN ĐỘNG KHI REVIEW */}
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                  {q.options.map((opt, i) => {
+                                                    const letter = String.fromCharCode(65 + i);
+                                                    return (
+                                                    <div key={i} className="flex items-center gap-2">
+                                                      <span className="font-black text-slate-500 w-6">{letter}.</span>
+                                                      <Input className="h-10 rounded-xl bg-white border-slate-200 shadow-sm text-sm" value={opt} onChange={(e) => handleExtractedOptionChange(q.tempId, i, e.target.value)} />
+                                                      {q.options.length > 2 && (
+                                                         <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveExtractedOption(q.tempId, i)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0"><Trash2 className="w-4 h-4"/></Button>
+                                                      )}
+                                                    </div>
+                                                  )})}
+                                                </div>
+
+                                                <div className="flex justify-between items-center pt-2 gap-3 border-t border-slate-200 mt-2">
+                                                  <Button type="button" variant="ghost" size="sm" onClick={() => handleAddExtractedOption(q.tempId)} className="text-sky-600 hover:bg-sky-100"><PlusCircle className="w-4 h-4 mr-2"/> Thêm đáp án</Button>
+                                                  
+                                                  <div className="flex items-center gap-2">
+                                                    <label className="text-sm font-bold text-rose-500">ĐÁP ÁN ĐÚNG:</label>
+                                                    <Select value={q.correctAnswer || ""} onValueChange={(val) => handleExtractedChange(q.tempId, 'correctAnswer', val)}>
+                                                      <SelectTrigger className="h-10 w-28 bg-white text-rose-600 font-bold border-rose-200 rounded-xl"><span className="truncate">{q.correctAnswer ? `Câu ${q.correctAnswer}` : "Chọn"}</span></SelectTrigger>
+                                                      <SelectContent>
+                                                        {q.options.map((_, i) => {
+                                                          const l = String.fromCharCode(65 + i);
+                                                          return <SelectItem key={l} value={l}>Câu {l}</SelectItem>
+                                                        })}
+                                                      </SelectContent>
+                                                    </Select>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </CardContent>
+                                      </Card>
+                                  ))}
+
+                                  <Button type="button" onClick={handleCommitExtraction} className="w-full h-14 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-lg shadow-xl shadow-sky-200 transition-all mt-4">
+                                      XÁC NHẬN RÓT VÀO KHUNG TRỰC TIẾP <ArrowRight className="ml-2 w-5 h-5"/>
+                                  </Button>
+                               </div>
+                             </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* ======================================================================
+                          GIAO DIỆN MANUAL DIRECT VIEW
+                      ====================================================================== */}
                       {creationMethod === "manual" && (
-                        <div className="space-y-4 sm:space-y-6">
+                        <div className="w-full space-y-4 sm:space-y-6">
                           {manualQuestions.map((q, index) => {
-                            const isSlotEmpty = q.content.trim() === "";
+                            const isSlotEmpty = !q.content || q.content.replace(/<[^>]*>/g, '').trim() === "";
                             return (
-                            <Card key={q.tempId} className={`shadow-sm relative overflow-hidden transition-all ${isSlotEmpty ? 'border-sky-300 bg-white shadow-md' : 'border-sky-200'}`}>
+                            <Card key={q.tempId} className={`shadow-sm relative overflow-visible transition-all ${isSlotEmpty ? 'border-sky-300 bg-white shadow-md' : 'border-sky-200'}`}>
                               <div className={`absolute top-0 left-0 w-1.5 sm:w-2 h-full ${isSlotEmpty ? 'bg-sky-300' : 'bg-sky-500'}`}></div>
-                              <CardHeader className="bg-slate-50/50 py-3 px-4 sm:px-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-sky-50">
+                              <CardHeader className="bg-slate-50/50 py-3 px-4 sm:px-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-sky-50 rounded-t-3xl">
                                 <div className="flex flex-wrap items-center gap-3 sm:gap-4 w-full sm:w-auto">
                                   <CardTitle className="text-sm sm:text-base font-black text-sky-900 whitespace-nowrap">Câu {index + 1} <span className="text-slate-400 font-medium text-xs sm:text-sm ml-1">({q.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'})</span></CardTitle>
                                   {isSlotEmpty && <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 font-bold ml-2">Khung trống</Badge>}
@@ -621,116 +852,118 @@ const CreateAssignment = () => {
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-                                  <Button type="button" onClick={() => handleClearSlot(q.tempId)} variant="ghost" size="icon" title="Xóa nội dung, làm trống khung" className="h-8 w-8 text-slate-400 hover:bg-amber-50 hover:text-amber-500">
-                                    <Eraser className="w-4 h-4"/>
-                                  </Button>
-                                  <Button type="button" onClick={() => handleDeleteSlot(q.tempId)} variant="ghost" size="icon" title="Xóa hoàn toàn khung này" className="h-8 w-8 text-slate-400 hover:bg-rose-50 hover:text-rose-500">
-                                    <Trash2 className="w-4 h-4"/>
-                                  </Button>
+                                  <Button type="button" onClick={() => handleClearSlot(q.tempId)} variant="ghost" size="icon" title="Xóa nội dung, làm trống khung" className="h-8 w-8 text-slate-400 hover:bg-amber-50 hover:text-amber-500"><Eraser className="w-4 h-4"/></Button>
+                                  <Button type="button" onClick={() => handleDeleteSlot(q.tempId)} variant="ghost" size="icon" title="Xóa hoàn toàn khung này" className="h-8 w-8 text-slate-400 hover:bg-rose-50 hover:text-rose-500"><Trash2 className="w-4 h-4"/></Button>
                                 </div>
                               </CardHeader>
-                              <CardContent className="p-4 sm:p-5 space-y-4">
+                              
+                              <CardContent className="p-4 sm:p-5 space-y-4 relative z-10">
                                 <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
-                                  <Textarea placeholder="Gõ trực tiếp nội dung câu hỏi hoặc rót từ file Word/Kho..." className={`flex-1 rounded-xl min-h-[100px] sm:min-h-[120px] font-medium bg-white text-sm sm:text-base ${isSlotEmpty ? 'border-dashed border-2 border-slate-300' : 'border-sky-100'}`} value={q.content} onChange={(e) => handleManualChange(q.tempId, 'content', e.target.value)} />
+                                  <div className={`flex-1 transition-all ${isSlotEmpty ? 'border-dashed border-2 border-slate-300 rounded-xl p-1 bg-white' : ''}`}>
+                                    <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={q.content} onChange={(val) => handleManualChange(q.tempId, 'content', val)} />
+                                  </div>
                                   <div className="w-full md:w-36 shrink-0 h-[120px] sm:h-[120px]">
                                     {q.previewUrl ? (
                                       <div className="relative w-full h-full rounded-xl border border-sky-200 overflow-hidden shadow-sm group/img"><img src={q.previewUrl} alt="Preview" className="absolute inset-0 w-full h-full object-cover" /><div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center"><button type="button" onClick={() => handleRemoveManualImage(q.tempId)} className="bg-rose-500 text-white rounded-full p-2 hover:scale-110 transition-transform"><Trash2 className="w-4 h-4"/></button></div></div>
                                     ) : (
-                                      <label className="flex flex-col items-center justify-center w-full h-full rounded-xl border-2 border-dashed border-sky-200 hover:border-sky-400 bg-sky-50 cursor-pointer transition-all"><ImageIcon className="w-6 h-6 text-sky-400 mb-1" /><span className="text-xs font-bold text-sky-600 text-center px-1">Thêm ảnh</span><input type="file" className="hidden" accept="image/*" onChange={(e) => handleManualImageChange(q.tempId, e)} /></label>
+                                      <label className="flex flex-col items-center justify-center w-full h-full rounded-xl border-2 border-dashed border-sky-200 hover:border-sky-400 bg-sky-50 cursor-pointer transition-all"><ImageIcon className="w-6 h-6 text-sky-400 mb-1" /><span className="text-xs font-bold text-sky-600 text-center px-1">Ảnh Phụ (Đề bài)</span><input type="file" className="hidden" accept="image/*" onChange={(e) => handleManualImageChange(q.tempId, e)} /></label>
                                     )}
                                   </div>
                                 </div>
+                                {q.type === "essay" && (
+                                   <div className="mt-4 p-4 bg-emerald-50/50 rounded-xl border border-emerald-100 shadow-sm">
+                                      <h4 className="text-sm font-bold text-emerald-700 mb-3 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Đáp án / Hướng dẫn giải </h4>
+                                      <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
+                                          <div className="flex-1"><RichTextEditor placeholder="Gõ lời giải hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={q.essayAnswerText} onChange={(val) => handleManualChange(q.tempId, 'essayAnswerText', val)} /></div>
+                                          <div className="w-full md:w-36 shrink-0 h-[100px] sm:h-[100px]">
+                                            {q.essayAnswerPreviewUrl ? (
+                                              <div className="relative w-full h-full rounded-xl border border-emerald-200 overflow-hidden shadow-sm group/img2"><img src={q.essayAnswerPreviewUrl} alt="Preview Answer" className="absolute inset-0 w-full h-full object-cover" /><div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img2:opacity-100 transition-opacity flex items-center justify-center"><button type="button" onClick={() => handleRemoveManualEssayImage(q.tempId)} className="bg-rose-500 text-white rounded-full p-2 hover:scale-110 transition-transform"><Trash2 className="w-4 h-4"/></button></div></div>
+                                            ) : (
+                                              <label className="flex flex-col items-center justify-center w-full h-full rounded-xl border-2 border-dashed border-emerald-300 hover:border-emerald-500 bg-white cursor-pointer transition-all"><ImageIcon className="w-6 h-6 text-emerald-400 mb-1" /><span className="text-xs font-bold text-emerald-600 text-center px-1">Ảnh Phụ (Lời giải)</span><input type="file" className="hidden" accept="image/*" onChange={(e) => handleManualEssayImageChange(q.tempId, e)} /></label>
+                                            )}
+                                          </div>
+                                      </div>
+                                   </div>
+                                )}
+
+                                {/* 👉 TÍNH NĂNG THÊM/XÓA ĐÁP ÁN ĐỘNG KHI MANUAL */}
                                 {q.type === "multiple_choice" && (
                                   <div className="bg-sky-50/50 p-3 sm:p-4 rounded-xl border border-sky-100 space-y-3 mt-4">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{['A', 'B', 'C', 'D'].map((optLabel, optIdx) => (<div key={optIdx} className="flex items-center gap-2"><span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base">{optLabel}.</span><Input placeholder={`Đáp án ${optLabel}`} className={`h-11 rounded-xl bg-white text-sm sm:text-base ${isSlotEmpty ? 'border-dashed border-slate-300' : 'border-sky-100'}`} value={q.options[optIdx]} onChange={(e) => handleManualOptionChange(q.tempId, optIdx, e.target.value)} /></div>))}</div>
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-3 border-t border-sky-100 gap-3"><label className="text-sm font-bold text-rose-600">Đáp án ĐÚNG:</label><Select value={q.correctAnswer} onValueChange={(val) => handleManualChange(q.tempId, 'correctAnswer', val)}><SelectTrigger className="h-10 w-full sm:w-28 bg-white text-rose-600 font-bold border-rose-200 rounded-xl"><span className="truncate">{q.correctAnswer ? `Câu ${q.correctAnswer}` : "Chọn"}</span></SelectTrigger><SelectContent><SelectItem value="A">Câu A</SelectItem><SelectItem value="B">Câu B</SelectItem><SelectItem value="C">Câu C</SelectItem><SelectItem value="D">Câu D</SelectItem></SelectContent></Select></div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                      {q.options.map((optLabel, optIdx) => {
+                                        const letter = String.fromCharCode(65 + optIdx);
+                                        return (
+                                        <div key={optIdx} className="flex items-center gap-2">
+                                          <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base">{letter}.</span>
+                                          <Input className={`h-11 rounded-xl bg-white text-sm sm:text-base ${isSlotEmpty ? 'border-dashed border-slate-300' : 'border-sky-100'}`} value={q.options[optIdx]} onChange={(e) => handleManualOptionChange(q.tempId, optIdx, e.target.value)} />
+                                          {q.options.length > 2 && (
+                                             <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveManualOption(q.tempId, optIdx)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0"><Trash2 className="w-4 h-4"/></Button>
+                                          )}
+                                        </div>
+                                      )})}
+                                    </div>
+                                    <div className="flex justify-between items-center pt-3 border-t border-sky-100 mt-2">
+                                      <Button type="button" variant="ghost" size="sm" onClick={() => handleAddManualOption(q.tempId)} className="text-sky-600 hover:bg-sky-100"><PlusCircle className="w-4 h-4 mr-2"/> Thêm đáp án</Button>
+                                      <div className="flex items-center gap-2">
+                                        <label className="text-sm font-bold text-rose-600">ĐÁP ÁN ĐÚNG:</label>
+                                        <Select value={q.correctAnswer || ""} onValueChange={(val) => handleManualChange(q.tempId, 'correctAnswer', val)}>
+                                          <SelectTrigger className="h-10 w-28 bg-white text-rose-600 font-bold border-rose-200 rounded-xl"><span className="truncate">{q.correctAnswer ? `Câu ${q.correctAnswer}` : "Chọn"}</span></SelectTrigger>
+                                          <SelectContent>
+                                            {q.options.map((_, i) => {
+                                              const l = String.fromCharCode(65 + i);
+                                              return <SelectItem key={l} value={l}>Câu {l}</SelectItem>
+                                            })}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    </div>
                                   </div>
                                 )}
                               </CardContent>
                             </Card>
                           )})}
-
                           <div className="flex flex-col sm:flex-row gap-3 mt-6">
-                             <Button type="button" onClick={() => handleAddSlot('multiple_choice')} variant="outline" className="flex-1 border-dashed border-2 border-sky-300 text-sky-600 hover:bg-sky-50 hover:border-sky-400 font-bold h-12 rounded-xl transition-all">
-                                <PlusCircle className="w-5 h-5 mr-2"/> Thêm câu Trắc nghiệm
-                             </Button>
-                             <Button type="button" onClick={() => handleAddSlot('essay')} variant="outline" className="flex-1 border-dashed border-2 border-indigo-300 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-400 font-bold h-12 rounded-xl transition-all">
-                                <PlusCircle className="w-5 h-5 mr-2"/> Thêm câu Tự luận
-                             </Button>
+                             <Button type="button" onClick={() => handleAddSlot('multiple_choice')} variant="outline" className="flex-1 border-dashed border-2 border-sky-300 text-sky-600 hover:bg-sky-50 hover:border-sky-400 font-bold h-12 rounded-xl transition-all"><PlusCircle className="w-5 h-5 mr-2"/> Thêm câu Trắc nghiệm</Button>
+                             <Button type="button" onClick={() => handleAddSlot('essay')} variant="outline" className="flex-1 border-dashed border-2 border-indigo-300 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-400 font-bold h-12 rounded-xl transition-all"><PlusCircle className="w-5 h-5 mr-2"/> Thêm câu Tự luận</Button>
                           </div>
-
                         </div>
                       )}
 
-                      {creationMethod === "upload" && (
-                        <div className="bg-white p-4 sm:p-6 rounded-2xl border border-sky-100 shadow-sm text-center">
-                          <h4 className="font-bold text-sky-900 text-base sm:text-lg mb-1 sm:mb-2">Bóc tách tự động & Rót vào khung</h4>
-                          <p className="text-slate-500 text-xs sm:text-sm mb-4">Tải file Word lên, hệ thống sẽ tự động bỏ qua câu trùng lặp và rót dữ liệu vào khung trống.</p>
-                          <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => {e.preventDefault(); const f = e.dataTransfer.files[0]; if(f) setAssignmentFile(f);}} onClick={() => assignmentFileRef.current.click()} className={`border-2 border-dashed rounded-2xl sm:rounded-3xl p-6 sm:p-10 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 sm:gap-3 max-w-lg mx-auto ${assignmentFile ? 'border-sky-500 bg-sky-50' : 'border-slate-200 hover:border-sky-400 bg-slate-50/50'}`}>
-                            <input type="file" ref={assignmentFileRef} onChange={handleAssignmentFileChange} className="hidden" accept=".doc,.docx" />
-                            {assignmentFile ? (<><div className="w-12 h-12 sm:w-14 sm:h-14 bg-sky-100 rounded-full flex items-center justify-center mb-1"><FileText className="h-6 w-6 sm:h-7 sm:w-7 text-sky-600" /></div><p className="font-black text-sky-900 text-base sm:text-lg line-clamp-1 break-all px-2">{assignmentFile.name}</p><p className="text-[10px] sm:text-xs text-sky-600 font-medium bg-white px-2 sm:px-3 py-1 rounded-full border border-sky-100">Click để đổi file khác</p></>) : (<><div className="w-12 h-12 sm:w-16 sm:h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-1"><UploadCloud className="h-6 w-6 sm:h-8 sm:w-8 text-sky-400" /></div><p className="text-sm sm:text-base font-black text-slate-700">Kéo thả file Word (.docx) vào đây</p></>)}
-                          </div>
-                          {assignmentFile && <Button type="button" onClick={handleExtractWord} className="mt-4 sm:mt-6 w-full sm:w-auto bg-teal-500 hover:bg-teal-600 text-white font-bold h-11 sm:h-12 px-6 sm:px-8 rounded-xl shadow-md"><Sparkles className="w-4 h-4 mr-2" /> Bắt đầu bóc tách & Rót</Button>}
-                        </div>
-                      )}
-
+                      {/* ======================================================================
+                          GIAO DIỆN BANK VIEW (RÓT TỪ KHO)
+                      ====================================================================== */}
                       {creationMethod === "bank" && (
                         <div className="border border-sky-200 rounded-xl sm:rounded-2xl overflow-hidden bg-white shadow-sm">
                           <div className="bg-sky-50 px-3 sm:px-4 py-4 flex flex-col space-y-4 border-b border-sky-100">
-                            
                             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                               <span className="font-bold text-sky-800 flex items-center text-sm sm:text-base"><Database className="w-4 h-4 mr-2 shrink-0"/> Chọn câu hỏi từ hệ thống</span>
                               <div className="flex gap-2">
-                                <Button type="button" onClick={handleImportFromBankToManual} variant="outline" className="h-9 border-sky-300 text-sky-700 hover:bg-sky-100 font-bold px-3 shadow-sm text-xs sm:text-sm"><PenTool className="w-3.5 h-3.5 mr-1.5" /> Rót vào khung trống</Button>
+                                <Button type="button" onClick={handleImportFromBankToManual} variant="outline" className="h-9 border-sky-300 text-sky-700 hover:bg-sky-100 font-bold px-3 shadow-sm text-xs sm:text-sm"><PenTool className="w-3.5 h-3.5 mr-1.5" /> Rót vào khung trực tiếp</Button>
                                 <Badge className="bg-sky-500 font-bold px-3 py-1 text-white flex items-center h-9">Đã chọn: {bankSelected.length}</Badge>
                               </div>
                             </div>
 
                             <div className="flex flex-wrap items-center gap-3">
-                              
-                              <Select value={bankType} onValueChange={(val) => {setBankType(val); if(val !== 'essay') setBankPoints("");}}>
-                                 <SelectTrigger className="h-10 w-[140px] bg-white border-sky-200 font-bold text-sky-700">
-                                   <span className="truncate">{bankType === 'all' ? 'Tất cả loại' : bankType === 'multiple_choice' ? 'Trắc nghiệm' : 'Tự luận'}</span>
-                                 </SelectTrigger>
-                                 <SelectContent>
-                                   <SelectItem value="all">Tất cả loại</SelectItem>
-                                   <SelectItem value="multiple_choice">Trắc nghiệm</SelectItem>
-                                   <SelectItem value="essay">Tự luận</SelectItem>
-                                 </SelectContent>
+                              <Select value={bankType || ""} onValueChange={(val) => {setBankType(val); if(val !== 'essay') setBankPoints("");}}>
+                                 <SelectTrigger className="h-10 w-[140px] bg-white border-sky-200 font-bold text-sky-700"><span className="truncate">{bankType === 'all' ? 'Tất cả loại' : bankType === 'multiple_choice' ? 'Trắc nghiệm' : 'Tự luận'}</span></SelectTrigger>
+                                 <SelectContent><SelectItem value="all">Tất cả loại</SelectItem><SelectItem value="multiple_choice">Trắc nghiệm</SelectItem><SelectItem value="essay">Tự luận</SelectItem></SelectContent>
                               </Select>
-
-                              {/* 👉 ĐÃ SỬA: Hiển thị Input read-only thay vì Select chọn môn học */}
-                              <Input 
-                                value={`Môn: ${bankSubject || "Chưa rõ"}`} 
-                                readOnly 
-                                title="Giáo viên chỉ được chọn câu hỏi thuộc chuyên môn của mình"
-                                className="h-10 w-[120px] bg-slate-100 border-slate-200 font-bold text-sky-700 cursor-not-allowed" 
-                              />
-
-                              <Select value={bankGrade} onValueChange={setBankGrade}>
-                                <SelectTrigger className="h-10 w-[110px] bg-white border-sky-200 font-bold text-sky-700">
-                                  <span className="truncate">{bankGrade === 'all' ? 'Tất cả khối' : `Khối ${bankGrade}`}</span>
-                                </SelectTrigger>
+                              <Input value={`Môn: ${bankSubject || "Chưa rõ"}`} readOnly className="h-10 w-[120px] bg-slate-100 border-slate-200 font-bold text-sky-700 cursor-not-allowed" />
+                              <Select value={bankGrade || ""} onValueChange={setBankGrade}>
+                                <SelectTrigger className="h-10 w-[110px] bg-white border-sky-200 font-bold text-sky-700"><span className="truncate">{bankGrade === 'all' ? 'Tất cả khối' : `Khối ${bankGrade}`}</span></SelectTrigger>
                                 <SelectContent><SelectItem value="all">Tất cả khối</SelectItem><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent>
                               </Select>
-
-                              <Select value={bankSetName} onValueChange={setBankSetName} disabled={!isSetSelectionEnabled}>
-                                <SelectTrigger className={`h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700 ${!isSetSelectionEnabled ? 'opacity-50' : ''}`}>
-                                  <span className="truncate">{!isSetSelectionEnabled ? "Chọn Khối" : bankSetName === 'all' ? 'Tất cả bộ đề' : bankSetName}</span>
-                                </SelectTrigger>
-                                <SelectContent><SelectItem value="all">Tất cả</SelectItem>{availableSets.map((setName, idx) => (<SelectItem key={idx} value={setName}>{setName}</SelectItem>))}</SelectContent>
+                              
+                              <Select value={bankSetName || ""} onValueChange={setBankSetName} disabled={!isSetSelectionEnabled}>
+                                <SelectTrigger className={`h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700 ${!isSetSelectionEnabled ? 'opacity-50' : ''}`}><span className="truncate">{!isSetSelectionEnabled ? "Chọn Khối" : bankSetName === 'all' ? 'Tất cả bộ đề' : bankSetName}</span></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="all">Tất cả</SelectItem>
+                                  {availableSets.map((setName, idx) => (<SelectItem key={idx} value={setName}>{setName}</SelectItem>))}
+                                </SelectContent>
                               </Select>
-
-                              {bankType === 'essay' && (
-                                  <Input type="number" step="0.25" placeholder="Lọc điểm..." className="h-10 w-[110px] bg-white border-sky-200 text-sky-700 font-bold" value={bankPoints} onChange={(e) => setBankPoints(e.target.value)} />
-                              )}
-
-                              <div className="relative flex-1 min-w-[200px]">
-                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                 <Input placeholder="Tìm nội dung..." className="pl-9 h-10 bg-white border-sky-200" value={bankSearch} onChange={e => setBankSearch(e.target.value)} />
-                              </div>
+                              {bankType === 'essay' && (<Input type="number" step="0.25" placeholder="Lọc điểm..." className="h-10 w-[110px] bg-white border-sky-200 text-sky-700 font-bold" value={bankPoints} onChange={(e) => setBankPoints(e.target.value)} />)}
+                              <div className="relative flex-1 min-w-[200px]"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><Input placeholder="Tìm nội dung..." className="pl-9 h-10 bg-white border-sky-200" value={bankSearch} onChange={e => setBankSearch(e.target.value)} /></div>
                             </div>
-
                           </div>
                           
                           <div className="max-h-[400px] overflow-y-auto p-1 sm:p-2">
@@ -744,12 +977,14 @@ const CreateAssignment = () => {
                                         <TableCell className="w-10 sm:w-12 text-center align-top pt-4 sm:pt-3"><input type="checkbox" className="w-4 h-4 sm:w-5 sm:h-5 accent-sky-500 cursor-pointer" checked={isSelected} onChange={() => toggleBankSelection(q._id)} onClick={(e) => e.stopPropagation()} /></TableCell>
                                         <TableCell className="font-medium text-slate-700 text-sm sm:text-base py-3">
                                           <div className="flex flex-col gap-1.5">
-                                            <div className="flex items-start gap-2">{q.imageUrl && <ImageIcon className="h-4 w-4 sm:h-5 sm:w-5 text-sky-500 shrink-0 mt-0.5" />}<span className="line-clamp-2 leading-relaxed">{q.content}</span></div>
+                                            <div className="flex items-start gap-2">
+                                              {q.imageUrl && <ImageIcon className="h-4 w-4 sm:h-5 sm:w-5 text-sky-500 shrink-0 mt-0.5" />}
+                                              <div className="line-clamp-2 leading-relaxed q-content-view" dangerouslySetInnerHTML={{ __html: q.content }} />
+                                            </div>
                                             <div className="flex flex-wrap gap-2 mt-1">
                                               <Badge variant="outline" className="bg-sky-50 border-sky-200 text-sky-700 text-[10px] font-bold">{q.questionSet || "Ngân hàng chung"}</Badge>
                                               <Badge variant="outline" className="bg-white border-slate-200 text-slate-500 text-[10px]">Khối {q.grade}</Badge>
                                               <Badge variant="outline" className="bg-sky-50 border-sky-100 text-sky-600 text-[10px]">{q.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'}</Badge>
-                                              {q.type === 'essay' && q.points > 0 && <Badge variant="outline" className="bg-indigo-50 border-indigo-200 text-indigo-700 text-[10px] font-black">{q.points} Điểm</Badge>}
                                             </div>
                                           </div>
                                         </TableCell>
@@ -780,26 +1015,43 @@ const CreateAssignment = () => {
           </CardContent>
         </Card>
         
+        {/* MODAL VIEW QUESTION */}
         <Dialog open={!!viewQuestion} onOpenChange={(open) => { if(!open) setViewQuestion(null) }}>
-          <DialogContent className="sm:max-w-[600px] w-[95%] rounded-3xl border-none p-6 bg-white shadow-2xl">
-            <DialogHeader><DialogTitle className="text-xl font-black text-sky-950 border-b border-sky-100 pb-3">Chi tiết câu hỏi</DialogTitle></DialogHeader>
+          <DialogContent className="sm:max-w-[800px] w-[95%] rounded-[2rem] border-none p-0 bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader className="bg-slate-50 px-8 py-6 border-b border-slate-100"><DialogTitle className="text-2xl font-black text-sky-950 flex items-center gap-3"><Eye className="w-6 h-6 text-sky-500" /> Xem trước Nội dung</DialogTitle></DialogHeader>
             {viewQuestion && (
-              <div className="space-y-4 pt-2">
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100"><p className="font-bold text-slate-800 text-base leading-relaxed">{viewQuestion.content}</p>{viewQuestion.imageUrl && <img src={getImageUrl(viewQuestion.imageUrl)} className="max-h-48 mt-3 rounded-xl border border-slate-200 shadow-sm mx-auto" />}</div>
+              <div className="space-y-6 p-8">
+                <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <div className="font-bold text-slate-800 text-lg leading-relaxed q-content-view" dangerouslySetInnerHTML={{ __html: viewQuestion.content }} />
+                    {viewQuestion.imageUrl && <img src={getImageUrl(viewQuestion.imageUrl)} className="max-w-full max-h-72 mt-4 rounded-xl border border-slate-200 shadow-sm mx-auto" />}
+                </div>
+                {viewQuestion.type === "essay" && (viewQuestion.essayAnswerText || viewQuestion.essayAnswerImageUrl) && (
+                    <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-200 shadow-sm">
+                        <p className="font-bold text-emerald-700 text-sm uppercase tracking-widest mb-3 flex items-center"><CheckCircle2 className="w-5 h-5 mr-2"/> Hướng dẫn giải</p>
+                        {viewQuestion.essayAnswerText && <div className="font-medium text-emerald-900 text-base leading-relaxed whitespace-pre-wrap q-content-view bg-white p-4 rounded-xl border border-emerald-100" dangerouslySetInnerHTML={{ __html: viewQuestion.essayAnswerText }} />}
+                        {viewQuestion.essayAnswerImageUrl && <img src={getImageUrl(viewQuestion.essayAnswerImageUrl)} className="max-w-full max-h-72 mt-4 rounded-xl border border-emerald-200 shadow-sm mx-auto" />}
+                    </div>
+                )}
                 {viewQuestion.type === "multiple_choice" && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {(() => {
                       let parsedOpts = [];
                       try { parsedOpts = typeof viewQuestion.options === 'string' ? JSON.parse(viewQuestion.options) : (viewQuestion.options || []); } catch(e) {}
                       return parsedOpts.map((opt, idx) => {
                         const letter = String.fromCharCode(65 + idx);
                         const isCorrect = viewQuestion.correctAnswer === letter || viewQuestion.correctAnswer === opt;
-                        return (<div key={idx} className={`p-3 rounded-xl border-2 flex items-start gap-2 ${isCorrect ? 'bg-sky-50 border-sky-400' : 'bg-white border-slate-100'}`}><span className={`font-bold ${isCorrect ? 'text-sky-600' : 'text-slate-400'}`}>{letter}.</span><span className={`text-sm ${isCorrect ? 'font-bold text-sky-700' : 'text-slate-600 font-medium'}`}>{opt}</span>{isCorrect && <CheckCircle2 className="w-4 h-4 text-sky-500 shrink-0 ml-auto"/>}</div>)
+                        return (
+                            <div key={idx} className={`p-4 rounded-2xl border-2 flex items-center gap-3 transition-colors ${isCorrect ? 'bg-sky-50 border-sky-400 shadow-sm' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black shrink-0 ${isCorrect ? 'bg-sky-500 text-white' : 'bg-slate-100 text-slate-500'}`}>{letter}</div>
+                                <span className={`text-base q-content-view ${isCorrect ? 'font-bold text-sky-800' : 'text-slate-700 font-medium'}`} dangerouslySetInnerHTML={{ __html: opt }} />
+                                {isCorrect && <CheckCircle2 className="w-6 h-6 text-sky-500 shrink-0 ml-auto"/>}
+                            </div>
+                        )
                       });
                     })()}
                   </div>
                 )}
-                <div className="flex gap-2 justify-end pt-4 border-t border-slate-100"><Button onClick={() => setViewQuestion(null)} className="rounded-xl bg-slate-800 text-white hover:bg-slate-700 font-bold px-6">Đóng</Button></div>
+                <div className="flex gap-2 justify-end pt-4"><Button onClick={() => setViewQuestion(null)} className="h-12 rounded-xl bg-slate-800 text-white hover:bg-slate-700 font-bold px-8 transition-transform active:scale-95">Đóng xem trước</Button></div>
               </div>
             )}
           </DialogContent>

@@ -35,3 +35,39 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ========================================================
+   TÙY CHỈNH HIỂN THỊ ĐỀ BÀI CÓ CHỨA HTML, CÔNG THỨC, ẢNH
+======================================================== */
+.q-content-view {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* Giúp ảnh chèn từ RichTextEditor không bị tràn ra khỏi khung */
+.q-content-view img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px; 
+  display: block;
+  margin: 10px auto; /* Tự động căn giữa ảnh */
+  border: 1px solid #e2e8f0; /* Thêm viền mờ cho ảnh đẹp hơn */
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+/* Căn chỉnh công thức Toán học Katex cho bằng với dòng text */
+.ql-formula {
+  font-size: 1.15em;
+  margin: 0 4px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Ẩn thanh scrollbar xấu xí cho các vùng cuộn ngang */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

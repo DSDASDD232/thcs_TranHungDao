@@ -198,7 +198,8 @@ router.get("/assignment/:id/grades", verifyToken, isTeacherOrAdmin, async (req, 
 router.put("/grade/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
     try {
         const { id } = req.params;
-        const { grades } = req.body; 
+        // 👉 ĐÃ SỬA: Lấy thêm teacherComment từ request body
+        const { grades, teacherComment } = req.body; 
 
         const submission = await Submission.findById(id).populate("answers.question");
         if (!submission) return res.status(404).json({ message: "Không tìm thấy bài nộp!" });
@@ -215,6 +216,11 @@ router.put("/grade/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
 
         submission.score = Number(newTotalScore.toFixed(2));
         submission.status = "graded"; 
+        
+        // 👉 CẬP NHẬT TRƯỜNG FEEDBACK TỪ teacherComment
+        if (teacherComment !== undefined) {
+            submission.feedback = teacherComment;
+        }
 
         await submission.save();
 
@@ -256,7 +262,7 @@ router.get("/my-submissions", verifyToken, async (req, res) => {
 router.get("/class/:classId/leaderboard", verifyToken, isTeacherOrAdmin, async (req, res) => {
     try {
         const classId = req.params.classId;
-        const { timeframe, subject } = req.query; // 👉 Đã thêm subject
+        const { timeframe, subject } = req.query;
 
         const students = await User.find({ classId: classId, role: "student" }).select("fullName username");
         if (students.length === 0) return res.status(200).json({ leaderboard: [] });
@@ -279,7 +285,6 @@ router.get("/class/:classId/leaderboard", verifyToken, isTeacherOrAdmin, async (
             dateFilter = { createdAt: { $gte: firstDayOfYear } };
         }
 
-        // 👉 Xử lý lọc theo môn học (tìm các Assignment có môn tương ứng trước)
         let assignmentFilter = {};
         if (subject && subject !== "all") {
             const assignmentsOfSubject = await Assignment.find({ subject: subject }).select("_id");
@@ -289,9 +294,9 @@ router.get("/class/:classId/leaderboard", verifyToken, isTeacherOrAdmin, async (
 
         const submissions = await Submission.find({ 
             student: { $in: studentIds },
-            status: "graded", // Thi đua chỉ tính các bài đã chấm xong
+            status: "graded", 
             ...dateFilter,
-            ...assignmentFilter // 👉 Gắn bộ lọc môn học vào đây
+            ...assignmentFilter 
         }).sort({ createdAt: -1 }); 
 
         let leaderboard = students.map(student => {
@@ -310,7 +315,6 @@ router.get("/class/:classId/leaderboard", verifyToken, isTeacherOrAdmin, async (
             };
         });
 
-        // 👉 ƯU TIÊN SẮP XẾP: Số lượt nộp bài > Điểm Trung Bình
         leaderboard.sort((a, b) => {
             if (b.totalTests !== a.totalTests) {
                 return b.totalTests - a.totalTests;
@@ -341,5 +345,35 @@ router.get("/student/:studentId", verifyToken, isTeacherOrAdmin, async (req, res
         res.status(500).json({ message: "Lỗi server", error });
     }
 });
+// ======================================================================
+// 6. [GET] API XEM CHI TIẾT 1 BÀI NỘP (Dành cho Học sinh xem lại bài)
+// ======================================================================
+router.get("/detail/:id", verifyToken, async (req, res) => {
+    try {
+        const submissionId = req.params.id;
 
+        // Tìm Submission, populate Assignment và Question
+        const submission = await Submission.findById(submissionId)
+            .populate("assignment", "title subject dueDate")
+            .populate("answers.question");
+
+        if (!submission) {
+            return res.status(404).json({ message: "Không tìm thấy bài làm này!" });
+        }
+
+        // Nếu là Học sinh, chỉ được xem bài của CHÍNH MÌNH
+        if (req.user.role === "student" && submission.student.toString() !== req.user.id) {
+            return res.status(403).json({ message: "Bạn không có quyền xem bài làm của người khác!" });
+        }
+
+        // Tùy chọn (Bảo mật): Nếu bài tập CÓ TỰ LUẬN mà CHƯA CHẤM XONG (pending) 
+        // thì có thể xem xét ẩn đáp án đúng đi, chỉ hiện đáp án khi status = 'graded'.
+        // Ở đây mình cứ trả về hết, Frontend sẽ xử lý việc ẩn/hiện tùy trạng thái.
+
+        res.status(200).json(submission);
+    } catch (error) {
+        console.error("Lỗi lấy chi tiết bài nộp:", error);
+        res.status(500).json({ message: "Lỗi server", error });
+    }
+});
 export default router;

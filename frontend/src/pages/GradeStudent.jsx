@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, CheckCircle2, AlertCircle, Save, Loader2, UserCircle2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea"; 
+import { ArrowLeft, CheckCircle2, AlertCircle, Save, Loader2, UserCircle2, MessageSquareText } from "lucide-react"; 
 
 const GradeStudent = () => {
   const { id } = useParams();
@@ -16,16 +17,13 @@ const GradeStudent = () => {
   const assignmentData = location.state?.assignment;
 
   const [scores, setScores] = useState({});
+  const [feedback, setFeedback] = useState(""); 
   const [isSaving, setIsSaving] = useState(false);
   
-  // ==========================================
-  // HÀM FIX LỖI VỠ ẢNH (ĐÃ NÂNG CẤP XỬ LÝ DẤU "\" CỦA WINDOWS)
-  // ==========================================
   const serverUrl = axios.defaults.baseURL.replace('/api', '');
   const getImageUrl = (url) => {
       if (!url) return "";
       if (url.startsWith("http")) return url;
-      // Dọn dẹp dấu gạch chéo ngược của Windows thành gạch chéo xuôi
       let cleanUrl = url.replace(/\\/g, '/'); 
       return `${serverUrl}${cleanUrl.startsWith("/") ? "" : "/"}${cleanUrl}`;
   };
@@ -41,6 +39,10 @@ const GradeStudent = () => {
       initialScores[ans.question._id] = ans.pointsAwarded || 0;
     });
     setScores(initialScores);
+    
+    if (submissionData.feedback) {
+        setFeedback(submissionData.feedback);
+    }
   }, [submissionData, navigate]);
 
   const handleScoreChange = (questionId, value, maxPoints) => {
@@ -54,7 +56,10 @@ const GradeStudent = () => {
     setIsSaving(true);
     try {
       const token = localStorage.getItem("token");
-      await axios.put(`/submissions/grade/${submissionData._id}`, { grades: scores }, {
+      await axios.put(`/submissions/grade/${submissionData._id}`, { 
+          grades: scores,
+          teacherComment: feedback 
+      }, {
         headers: { Authorization: `Bearer ${token}` }
       });
       alert("✅ Chấm bài thành công!");
@@ -72,7 +77,6 @@ const GradeStudent = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-24">
-      {/* THANH ĐIỀU HƯỚNG CỐ ĐỊNH TRÊN CÙNG */}
       <div className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm px-4 py-3 sm:px-8 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="outline" onClick={() => navigate(-1)} className="rounded-xl h-12 px-4 border-slate-200 text-slate-600 hover:bg-slate-50 font-bold">
@@ -98,6 +102,25 @@ const GradeStudent = () => {
       </div>
 
       <div className="max-w-4xl mx-auto p-4 sm:p-8 space-y-8 mt-4">
+        
+        <Card className="border-none shadow-sm rounded-3xl overflow-hidden bg-white">
+           <div className="bg-sky-50 px-6 py-4 border-b border-sky-100 flex items-center gap-2">
+               <MessageSquareText className="w-5 h-5 text-sky-500" />
+               <h3 className="font-black text-sky-900 text-lg">Nhận xét bài làm (Tùy chọn)</h3>
+           </div>
+           <div className="p-6">
+               <Textarea 
+                   placeholder="Nhập lời phê, nhận xét hoặc hướng dẫn thêm cho học sinh..."
+                   className="min-h-[120px] rounded-xl bg-slate-50 border-slate-200 text-base focus-visible:ring-sky-500 p-4"
+                   value={feedback}
+                   onChange={(e) => setFeedback(e.target.value)}
+               />
+               <p className="text-xs font-medium text-slate-400 mt-3 flex items-center gap-1">
+                   <AlertCircle className="w-3.5 h-3.5" /> 
+               </p>
+           </div>
+        </Card>
+
         {submissionData.answers.map((ans, idx) => {
           const q = ans.question;
           const isEssay = q.type === 'essay';
@@ -115,24 +138,44 @@ const GradeStudent = () => {
               </div>
               
               <div className="p-6 sm:p-8 space-y-6">
-                {/* Đề bài */}
                 <div className="space-y-3">
-                  <p className="font-medium text-slate-800 text-lg whitespace-pre-wrap">{q.content}</p>
+                  {/* 👉 ĐÃ SỬA: Hiển thị Đề bài dùng dangerouslySetInnerHTML */}
+                  <div 
+                      className="font-medium text-slate-800 text-lg leading-relaxed q-content-view"
+                      dangerouslySetInnerHTML={{ __html: q.content }}
+                  />
                   {q.imageUrl && (
                     <img src={getImageUrl(q.imageUrl)} className="max-w-full sm:max-w-md max-h-64 rounded-xl border border-slate-200 shadow-sm" alt="Đề bài" />
                   )}
                 </div>
+
+                {isEssay && (q.essayAnswerText || q.essayAnswerImageUrl) && (
+                    <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 mt-4">
+                        <p className="text-xs font-black text-emerald-700 uppercase mb-3 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/> Đáp án / Hướng dẫn chấm:</p>
+                        {/* 👉 ĐÃ SỬA: Hiển thị Hướng dẫn giải dùng dangerouslySetInnerHTML */}
+                        {q.essayAnswerText && (
+                           <div 
+                               className="text-emerald-900 font-medium text-base mb-3 leading-relaxed q-content-view bg-white p-3 rounded-lg border border-emerald-100"
+                               dangerouslySetInnerHTML={{ __html: q.essayAnswerText }}
+                           />
+                        )}
+                        {q.essayAnswerImageUrl && <img src={getImageUrl(q.essayAnswerImageUrl)} className="max-w-full sm:max-w-sm max-h-48 rounded-xl border border-emerald-200 shadow-sm" alt="Ảnh đáp án" />}
+                    </div>
+                )}
                 
-                {/* Bài làm học sinh */}
                 <div className={`p-5 rounded-2xl border ${isEssay ? 'bg-amber-50/30 border-amber-100' : 'bg-slate-50 border-slate-200'}`}>
-                  <p className="text-xs font-black text-slate-400 uppercase mb-4 tracking-wider">Chi tiết bài làm:</p>
+                  <p className="text-xs font-black text-slate-400 uppercase mb-4 tracking-wider">Bài làm học sinh:</p>
                   
                   {isEssay ? (
-                    // GIAO DIỆN TỰ LUẬN
                     <div className="space-y-4">
-                      <p className="whitespace-pre-wrap text-slate-700 font-medium text-lg leading-relaxed bg-white p-4 rounded-xl border border-slate-100 min-h-[80px]">
-                        {ans.studentAnswer || <span className="text-slate-400 italic">Không gõ nội dung</span>}
-                      </p>
+                      {/* 👉 ĐÃ SỬA: Hiển thị Bài làm của học sinh dùng dangerouslySetInnerHTML (phòng trường hợp form hs cũng có Editor) */}
+                      <div className="text-slate-700 font-medium text-lg leading-relaxed bg-white p-4 rounded-xl border border-slate-100 min-h-[80px] q-content-view">
+                        {ans.studentAnswer ? (
+                           <div dangerouslySetInnerHTML={{ __html: ans.studentAnswer }} />
+                        ) : (
+                           <span className="text-slate-400 italic">Không gõ nội dung</span>
+                        )}
+                      </div>
                       {ans.studentImage && (
                         <div>
                           <p className="text-xs font-bold text-slate-400 uppercase mb-2">Ảnh đính kèm:</p>
@@ -141,14 +184,13 @@ const GradeStudent = () => {
                       )}
                     </div>
                   ) : (
-                    // GIAO DIỆN TRẮC NGHIỆM (HIỂN THỊ RÕ 4 ĐÁP ÁN)
                     <div className="space-y-3">
                       {(() => {
                           let parsedOptions = [];
                           try { parsedOptions = typeof q.options === 'string' ? JSON.parse(q.options) : (q.options || []); } catch (e) { parsedOptions = []; }
 
                           return parsedOptions.map((opt, optIdx) => {
-                              const optLetter = String.fromCharCode(65 + optIdx); // A, B, C, D
+                              const optLetter = String.fromCharCode(65 + optIdx); 
                               const isStudentChoice = ans.studentAnswer === optLetter;
                               const isCorrectAnswer = opt === q.correctAnswer || optLetter === q.correctAnswer;
 
@@ -175,7 +217,11 @@ const GradeStudent = () => {
                                           <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black shrink-0 ${isCorrectAnswer ? 'bg-emerald-500 text-white' : isStudentChoice ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
                                               {optLetter}
                                           </div>
-                                          <span className={`text-base ${textColor} leading-relaxed`}>{opt}</span>
+                                          {/* 👉 ĐÃ SỬA: Hiển thị Các đáp án trắc nghiệm dùng dangerouslySetInnerHTML */}
+                                          <div 
+                                              className={`text-base ${textColor} leading-relaxed q-content-view`}
+                                              dangerouslySetInnerHTML={{ __html: opt }}
+                                          />
                                       </div>
                                       <div className="flex items-center gap-3">
                                           {isStudentChoice && <Badge className="bg-slate-600 hover:bg-slate-700 text-white">Học sinh chọn</Badge>}
@@ -189,7 +235,6 @@ const GradeStudent = () => {
                   )}
                 </div>
 
-                {/* Khu vực Nhập Điểm */}
                 <div className="flex items-center justify-end gap-4 pt-4 border-t border-slate-100">
                   <span className="font-black text-slate-500 uppercase tracking-widest text-sm">Điểm đạt được:</span>
                   {isEssay ? (

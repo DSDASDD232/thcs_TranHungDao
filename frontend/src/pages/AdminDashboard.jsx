@@ -15,7 +15,8 @@ import {
   ShieldCheck, Users, GraduationCap, School, LogOut, TrendingUp, UserPlus, 
   CheckCircle, Loader2, Trash2, Edit, Search, Filter, UploadCloud, FileCheck, 
   FileSpreadsheet, Sparkles, PenTool, Download, Trophy, Medal, BarChart, Calendar, 
-  Menu, X, Key, Lock, Unlock, Library, Database, ChevronLeft, ChevronRight
+  Menu, X, Key, Lock, Unlock, Library, Database, ChevronLeft, ChevronRight,
+  DownloadCloud // 👉 ĐÃ THÊM ICON SAO LƯU
 } from "lucide-react";
 
 import AdminClassManagement from "./AdminClassManagement";
@@ -100,6 +101,7 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const fullName = localStorage.getItem("fullName") || "Quản trị viên";
   const accountFileRef = useRef(null);
+  const backupFileInputRef = useRef(null); // 👉 REF CHO FILE INPUT RESTORE
 
   const [activeTab, setActiveTab] = useState("overview"); 
   const [subTab, setSubTab] = useState("all"); 
@@ -131,6 +133,10 @@ const AdminDashboard = () => {
   const [previewData, setPreviewData] = useState([]); 
   const [uploadGrade, setUploadGrade] = useState("");
   const [uploadClassId, setUploadClassId] = useState("");
+
+  // 👉 CÁC STATE CHO BACKUP / RESTORE
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const carouselImages = [
@@ -199,6 +205,51 @@ const AdminDashboard = () => {
   const handleLogout = () => { localStorage.clear(); navigate("/login"); };
   const handleSubTabChange = (tab) => { setSubTab(tab); setSearchName(""); setFilterUserGrade("all"); setFilterUserClass("all"); };
   const handleMenuClick = (tab) => { setActiveTab(tab); setIsMobileMenuOpen(false); };
+
+  // 👉 HÀM SAO LƯU DỮ LIỆU
+  const handleBackupDatabase = async () => {
+    if (!window.confirm("Hệ thống sẽ đóng gói toàn bộ dữ liệu thành file JSON. Bạn có muốn tải về?")) return;
+    setIsBackingUp(true);
+    try {
+      const res = await axios.get('/admin/backup', {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      const dateStr = new Date().toLocaleDateString('vi-VN').replace(/\//g, '-');
+      link.setAttribute('download', `Database_Backup_${dateStr}.json`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      alert("✅ Sao lưu thành công!");
+    } catch (error) { alert("Lỗi khi tạo bản sao lưu!"); } finally { setIsBackingUp(false); }
+  };
+
+  // 👉 HÀM PHỤC HỒI DỮ LIỆU
+  const handleRestoreDatabase = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!window.confirm("⚠️ CẢNH BÁO ĐỎ: Toàn bộ dữ liệu hiện tại trên web sẽ bị XÓA và thay thế bằng dữ liệu từ file này. Bạn có chắc chắn?")) {
+      e.target.value = ''; return;
+    }
+    setIsRestoring(true);
+    try {
+      const formData = new FormData();
+      formData.append("backupFile", file);
+      await axios.post('/admin/restore', formData, {
+        headers: { 
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      alert("✅ Phục hồi dữ liệu thành công! Hệ thống sẽ tải lại trang.");
+      window.location.reload();
+    } catch (error) { 
+      alert(error.response?.data?.message || "Lỗi khi phục hồi dữ liệu!"); 
+    } finally { setIsRestoring(false); e.target.value = ''; }
+  };
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
@@ -432,6 +483,39 @@ const AdminDashboard = () => {
         {activeTab === "overview" && (
           <div className="space-y-6 sm:space-y-8">
             
+            {/* 👉 THÊM KHU VỰC BACKUP VÀ RESTORE TẠI TAB TỔNG QUAN */}
+            <div className="bg-white p-6 rounded-3xl border border-sky-100 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+               <div className="flex items-center gap-3">
+                  <div className="bg-emerald-50 p-3 rounded-2xl"><Database className="h-6 w-6 text-emerald-600" /></div>
+                  <div>
+                    <h3 className="font-black text-slate-800 text-lg">Dữ liệu hệ thống</h3>
+                    <p className="text-slate-500 text-sm font-medium">Sao lưu và bảo mật dữ liệu toàn trang web.</p>
+                  </div>
+               </div>
+               <div className="flex gap-3 w-full sm:w-auto">
+                  <Button 
+                    onClick={handleBackupDatabase} 
+                    disabled={isBackingUp || isRestoring}
+                    className="flex-1 sm:flex-none bg-emerald-500 hover:bg-emerald-600 text-white font-bold h-11 px-6 rounded-xl shadow-md shadow-emerald-100 transition-all active:scale-95"
+                  >
+                    {isBackingUp ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <DownloadCloud className="w-5 h-5 mr-2" />}
+                    Sao lưu JSON
+                  </Button>
+
+                  <div className="relative flex-1 sm:flex-none">
+                    <input type="file" ref={backupFileInputRef} onChange={handleRestoreDatabase} accept=".json" className="hidden" />
+                    <Button 
+                      onClick={() => backupFileInputRef.current.click()} 
+                      disabled={isBackingUp || isRestoring}
+                      className="w-full bg-rose-500 hover:bg-rose-600 text-white font-bold h-11 px-6 rounded-xl shadow-md shadow-rose-100 transition-all active:scale-95"
+                    >
+                      {isRestoring ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <UploadCloud className="w-5 h-5 mr-2" />}
+                      Phục hồi
+                    </Button>
+                  </div>
+               </div>
+            </div>
+
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               <Card className="border-none shadow-sm hover:shadow-md transition-shadow rounded-[2rem] bg-white overflow-hidden relative group cursor-default">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-blue-400 to-sky-300 rounded-bl-full z-0 opacity-20 group-hover:opacity-30 transition-opacity"></div>
@@ -494,14 +578,12 @@ const AdminDashboard = () => {
               >
                 {carouselImages.map((src, idx) => (
                   <div key={idx} className="w-full h-full shrink-0 relative flex items-center justify-center bg-slate-100 overflow-hidden">
-                     {/* Lớp nền mờ */}
                      <img 
                        src={src} 
                        className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-60 scale-110 pointer-events-none" 
                        alt="Nền mở ảo" 
                        onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=2000&auto=format&fit=crop'; }}
                      />
-                     {/* Lớp ảnh chính */}
                      <img 
                        src={src} 
                        alt={`Slide ${idx + 1}`} 
@@ -568,7 +650,7 @@ const AdminDashboard = () => {
             {isLoadingLb ? (
               <div className="text-center py-20 bg-white rounded-3xl border border-slate-100"><Loader2 className="w-12 h-12 animate-spin mx-auto text-sky-500 mb-4"/></div>
             ) : adminLeaderboard.length === 0 ? (
-              <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200"><BarChart className="w-16 h-16 text-slate-200 mx-auto mb-4" /><p className="text-slate-500 font-medium">Chưa có dữ liệu</p></div>
+              <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-sky-200"><BarChart className="w-16 h-16 text-slate-200 mx-auto mb-4" /><p className="text-slate-500 font-medium">Chưa có dữ liệu</p></div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-1 space-y-4">

@@ -328,15 +328,32 @@ const CreateAssignment = () => {
   };
 
   // ======================================================================
-  // HÀM BÓC TÁCH THÔNG MINH (TỰ ĐỘNG PHÂN BIỆT TRẮC NGHIỆM/TỰ LUẬN)
+  // HÀM BÓC TÁCH THÔNG MINH (HỖ TRỢ ĐÁP ÁN DẤU * VÀ BẢNG ĐÁP ÁN CUỐI FILE)
   // ======================================================================
   const extractQuestionsFromText = (text, isForPreview = false) => {
-    // 1. Cắt bỏ phần Bảng đáp án ở cuối file (nếu có)
+    // 1. Tách phần "Bảng đáp án" hoặc "Hết" ở cuối file
     const textParts = text.split(/(?:\n\s*HẾT\b|\n\s*Hết\b|\n\s*Bảng đáp án\b)/i);
     let mainPart = textParts[0]; 
 
-    // 2. Cắt văn bản thành từng khối dựa vào chữ "Câu X:" hoặc "Bài X:"
-    const questionBlocks = mainPart.split(/(?=(?:^|\n)\s*(?:Câu|Bài)\s+\d+\s*[:.])/i).filter(b => b.trim() !== "");
+    // 1.1 Phân tích bảng đáp án (nếu có)
+    let globalAnswers = {};
+    if (textParts.length > 1) {
+        const answerPart = textParts.slice(1).join(" ");
+        // Hỗ trợ bắt các chuỗi như "1C", "2. B", "Câu 3: A"
+        const ansRegex = /(?:Câu\s*)?(\d+)\s*[:.-]?\s*([A-D])/gi;
+        let match;
+        while ((match = ansRegex.exec(answerPart)) !== null) {
+            globalAnswers[match[1]] = match[2].toUpperCase(); 
+        }
+    }
+
+    // 2. Dùng Lookahead cắt các khối bắt đầu bằng chữ Câu hoặc Bài
+    const rawBlocks = mainPart.split(/(?=(?:^|\n)\s*(?:Câu|Bài)\s+\d+\s*[:.])/i);
+    
+    // 3. NÉM BỎ những khối không phải là câu hỏi (vd: tiêu đề chung chung)
+    const questionBlocks = rawBlocks.filter(block => {
+        return /^\s*(?:Câu|Bài)\s+\d+\s*[:.]/i.test(block);
+    });
     
     return questionBlocks.map((block) => {
       let type = "multiple_choice";
@@ -345,28 +362,30 @@ const CreateAssignment = () => {
       let correctAnswer = "A";
       let essayAnswerText = "";
 
-      // 3. Tách phần "Lời giải/Hướng dẫn" ra khỏi câu hỏi
+      // Tìm số thứ tự của câu này để tra bảng đáp án
+      const qMatch = block.match(/^\s*(?:Câu|Bài)\s+(\d+)\s*[:.]/i);
+      const qNumber = qMatch ? qMatch[1] : null;
+
+      // 4. Tách phần "Lời giải/Hướng dẫn" ra khỏi câu hỏi
       const partsByExplanation = block.split(/(?:^|\n)\s*(?:Lời giải|Hướng dẫn giải|HDG|Giải|Đáp án)\s*[:.]\s*/i);
       let questionBody = partsByExplanation[0];
       
-      // Nếu có phần lời giải ở dưới
       if (partsByExplanation.length > 1) {
           essayAnswerText = partsByExplanation[1].trim();
       }
 
-      // 4. Tách nội dung Đề bài và các Đáp án A, B, C, D
-      const partsByOptions = questionBody.split(/(?:^|\n|\t|\s{3,})(?=\*?[A-D][.)]\s)/i);
+      // 5. Tách nội dung Đề bài và các Đáp án A, B, C, D (Hỗ trợ dấu * trước đáp án)
+      const partsByOptions = questionBody.split(/(?:^|\n|\t|\s{3,})(?=\*?\s*[A-D][.)]\s)/i);
       
-      // Khúc đầu tiên chính là đề bài
       content = partsByOptions[0].replace(/^\s*(?:Câu|Bài)\s+\d+\s*[:.]\s*/i, "").trim();
 
-      // 5. Quét các đáp án
+      // 6. Quét các đáp án
       let detectedCorrectAnswer = null;
       partsByOptions.slice(1).forEach(optStr => {
         let textOpt = optStr.trim();
         let isCorrect = false;
         
-        // Nếu có dấu * đằng trước thì đó là đáp án đúng
+        // Nhận diện dấu * (VD: *A. Nguyễn Du hoặc * A. Nguyễn Du)
         if (textOpt.startsWith('*')) {
            isCorrect = true;
            textOpt = textOpt.substring(1).trim();
@@ -381,17 +400,23 @@ const CreateAssignment = () => {
         }
       });
 
-      // 6. LOGIC PHÂN LOẠI THÔNG MINH
+      // 7. Ưu tiên: Dấu * > Bảng đáp án > Mặc định A
+      if (detectedCorrectAnswer) {
+          correctAnswer = detectedCorrectAnswer;
+      } else if (qNumber && globalAnswers[qNumber]) {
+          correctAnswer = globalAnswers[qNumber];
+      } else {
+          correctAnswer = "A";
+      }
+
+      // 8. LOGIC PHÂN LOẠI
       if (options.length === 0) {
-          // KHÔNG TÌM THẤY A, B, C, D -> ĐÂY LÀ CÂU TỰ LUẬN
           type = "essay";
           options = []; 
           correctAnswer = "";
       } else {
-          // CÓ A, B, C, D -> LÀ TRẮC NGHIỆM
           type = "multiple_choice";
           while (options.length < 4) options.push(""); 
-          correctAnswer = detectedCorrectAnswer || "A";
       }
       
       const baseData = { 

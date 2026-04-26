@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from "mongoose"; // Đã thêm
 import User from "../models/User.js";
 import Class from "../models/Class.js"; 
 import Question from "../models/Question.js";
@@ -9,8 +10,12 @@ import multer from "multer";
 import xlsx from "xlsx";
 import bcrypt from "bcryptjs"; 
 import Subject from "../models/Subject.js";
+import fs from "fs"; // Đã thêm
+
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage() });
+// Cấu hình Multer lưu file tạm cho Restore và memoryStorage cho import Excel
+const upload = multer({ dest: 'uploads/temp_backups/' });
+const excelUpload = multer({ storage: multer.memoryStorage() });
 
 // ==========================================
 // 1. [GET] Lấy thống kê tổng quan toàn trường
@@ -47,8 +52,110 @@ router.get("/stats", verifyToken, isAdmin, async (req, res) => {
     }
 });
 
+// ======================================================================
+// 2. [GET] API SAO LƯU TOÀN BỘ DATABASE (BACKUP)
+// ======================================================================
+router.get("/backup", verifyToken, isAdmin, async (req, res) => {
+    try {
+        const db = mongoose.connection.db;
+        const collections = await db.listCollections().toArray();
+        let backupData = {};
+
+        for (let coll of collections) {
+            const collectionName = coll.name;
+            if (collectionName.startsWith('system.')) continue;
+            
+            const data = await db.collection(collectionName).find({}).toArray();
+            backupData[collectionName] = data;
+        }
+
+        const dateStr = new Date().toISOString().slice(0, 10);
+        const fileName = `Backup_THCS_TranHungDao_${dateStr}.json`;
+
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+        res.send(JSON.stringify(backupData, null, 2));
+    } catch (error) {
+        console.error("Lỗi sao lưu:", error);
+        res.status(500).json({ message: "Lỗi hệ thống khi tạo bản sao lưu!" });
+    }
+});
+
+// ======================================================================
+// 3. [POST] API PHỤC HỒI DỮ LIỆU TỪ FILE JSON (RESTORE)
+// ======================================================================
+router.post("/restore", verifyToken, isAdmin, upload.single('backupFile'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ message: "Vui lòng đính kèm file .json!" });
+
+        const rawData = fs.readFileSync(req.file.path, 'utf8');
+        const backupData = JSON.parse(rawData);
+
+        const db = mongoose.connection.db;
+        const collections = await db.listCollections().toArray();
+        const existingCollectionNames = collections.map(c => c.name);
+
+        for (const [collectionName, dataArray] of Object.entries(backupData)) {
+            if (existingCollectionNames.includes(collectionName)) {
+                await db.collection(collectionName).deleteMany({});
+                
+                if (Array.isArray(dataArray) && dataArray.length > 0) {
+                    
+                    // Xử lý chuẩn hóa lại cấu trúc ObjectId và Date bị biến dạng khi chuyển qua JSON
+                    const sanitizedData = dataArray.map(doc => {
+                        // Khôi phục _id chính
+                        if (doc._id && doc._id.$oid) {
+                             doc._id = new mongoose.Types.ObjectId(doc._id.$oid);
+                        } else if (doc._id && typeof doc._id === 'string') {
+                             doc._id = new mongoose.Types.ObjectId(doc._id);
+                        }
+
+                        // Khôi phục các trường tham chiếu (Khóa ngoại) để không đứt link
+                        const referenceFields = ['classId', 'teacher', 'assignment', 'student'];
+                        referenceFields.forEach(field => {
+                            if (doc[field]) {
+                                if (doc[field].$oid) doc[field] = new mongoose.Types.ObjectId(doc[field].$oid);
+                                else if (typeof doc[field] === 'string' && mongoose.Types.ObjectId.isValid(doc[field])) {
+                                    doc[field] = new mongoose.Types.ObjectId(doc[field]);
+                                }
+                            }
+                        });
+
+                        // Khôi phục mảng ID (VD: assignedClasses)
+                        if (doc.assignedClasses && Array.isArray(doc.assignedClasses)) {
+                            doc.assignedClasses = doc.assignedClasses.map(id => {
+                                if (id && id.$oid) return new mongoose.Types.ObjectId(id.$oid);
+                                if (typeof id === 'string' && mongoose.Types.ObjectId.isValid(id)) return new mongoose.Types.ObjectId(id);
+                                return id;
+                            });
+                        }
+
+                        // Khôi phục ngày tháng
+                        for (let key in doc) {
+                            if (doc[key] && typeof doc[key] === 'object' && doc[key].$date) {
+                                doc[key] = new Date(doc[key].$date);
+                            }
+                        }
+                        return doc;
+                    });
+
+                    await db.collection(collectionName).insertMany(sanitizedData, { ordered: false });
+                }
+            }
+        }
+
+        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+
+        res.status(200).json({ message: "✅ Phục hồi toàn bộ dữ liệu thành công! Khóa liên kết đã được giữ nguyên." });
+    } catch (error) {
+        console.error("Lỗi phục hồi:", error);
+        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        res.status(500).json({ message: "Lỗi cấu trúc file hoặc lỗi server khi phục hồi!" });
+    }
+});
+
 // ==========================================
-// 2. [GET] Lấy danh sách tài khoản
+// 4. [GET] Lấy danh sách tài khoản
 // ==========================================
 router.get("/users/recent", verifyToken, isAdmin, async (req, res) => {
     try {
@@ -65,8 +172,9 @@ router.get("/users/recent", verifyToken, isAdmin, async (req, res) => {
 });
 
 // ======================================================================
-// 3. [POST] TẠO TÀI KHOẢN HỌC SINH TỪ FILE EXCEL
+// 5. [POST] TẠO TÀI KHOẢN HỌC SINH TỪ FILE EXCEL
 // ======================================================================
+// Chú ý: Dùng excelUpload.single() nếu xử lý file Excel dạng form-data
 router.post("/users/import-json", verifyToken, isAdmin, async (req, res) => {
     try {
         const { classId, className, grade, students } = req.body;
@@ -127,7 +235,7 @@ router.post("/users/import-json", verifyToken, isAdmin, async (req, res) => {
 });
 
 // ==========================================
-// 4. [DELETE] XÓA TÀI KHOẢN VÀ BÀI NỘP LIÊN QUAN
+// 6. [DELETE] XÓA TÀI KHOẢN VÀ BÀI NỘP LIÊN QUAN
 // ==========================================
 router.delete("/users/:id", verifyToken, isAdmin, async (req, res) => {
     try {
@@ -152,31 +260,27 @@ router.delete("/users/:id", verifyToken, isAdmin, async (req, res) => {
 });
 
 // ==========================================
-// 5. [PUT] CẬP NHẬT TÀI KHOẢN (Thông tin, Khóa acc, Reset Mật khẩu, Tổ chuyên môn)
+// 7. [PUT] CẬP NHẬT TÀI KHOẢN
 // ==========================================
 router.put("/users/:id", verifyToken, isAdmin, async (req, res) => {
     try {
         const userId = req.params.id;
         const { fullName, role, grade, classId, assignedClasses, isLocked, password, subject } = req.body;
         
-        // BƯỚC KIỂM TRA: Tìm user hiện tại trong DB
         const existingUser = await User.findById(userId);
         if (!existingUser) return res.status(404).json({ message: "Không tìm thấy người dùng!" });
 
         let updateFields = {};
 
-        // RÀNG BUỘC: Nếu là giáo viên và đang muốn đổi môn học
         if (subject !== undefined && existingUser.role === "teacher") {
-            // Nếu đổi môn mới KHÁC môn cũ, VÀ giáo viên đang có lớp phụ trách -> Chặn lại
             if (existingUser.subject !== subject && existingUser.assignedClasses && existingUser.assignedClasses.length > 0) {
                 return res.status(400).json({ 
                     message: `Thầy/Cô đang phụ trách ${existingUser.assignedClasses.length} lớp. Vui lòng vào "Quản lý Lớp học" gỡ quyền phụ trách trước khi đổi tổ bộ môn!` 
                 });
             }
-            updateFields.subject = subject; // Nếu an toàn thì cho đổi
+            updateFields.subject = subject; 
         }
 
-        // ... (Các phần cập nhật fullName, role, grade, password, isLocked giữ nguyên như cũ)
         if (fullName) updateFields.fullName = fullName;
         if (role) updateFields.role = role;
         if (grade !== undefined) updateFields.grade = grade;
@@ -210,7 +314,7 @@ router.put("/users/:id", verifyToken, isAdmin, async (req, res) => {
 });
 
 // ======================================================================
-// 6. [GET] BẢNG XẾP HẠNG THI ĐUA CÁC LỚP (TOÀN TRƯỜNG / THEO KHỐI)
+// 8. [GET] BẢNG XẾP HẠNG THI ĐUA CÁC LỚP
 // ======================================================================
 router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
     try {
@@ -274,10 +378,8 @@ router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
     }
 });
 
-
-
 // ==========================================
-// [GET] LẤY DANH MỤC MÔN HỌC CHUNG
+// [MÔN HỌC]
 // ==========================================
 router.get("/subjects", verifyToken, async (req, res) => {
     try {
@@ -288,9 +390,6 @@ router.get("/subjects", verifyToken, async (req, res) => {
     }
 });
 
-// ==========================================
-// [POST] THÊM MÔN HỌC MỚI VÀO HỆ THỐNG
-// ==========================================
 router.post("/subjects", verifyToken, isAdmin, async (req, res) => {
     try {
         const { name } = req.body;
@@ -307,9 +406,6 @@ router.post("/subjects", verifyToken, isAdmin, async (req, res) => {
     }
 });
 
-// ==========================================
-// [DELETE] XÓA MÔN HỌC KHỎI HỆ THỐNG
-// ==========================================
 router.delete("/subjects/:id", verifyToken, isAdmin, async (req, res) => {
     try {
         await Subject.findByIdAndDelete(req.params.id);
@@ -318,6 +414,5 @@ router.delete("/subjects/:id", verifyToken, isAdmin, async (req, res) => {
         res.status(500).json({ message: "Lỗi xóa môn học" });
     }
 });
-
 
 export default router;

@@ -5,7 +5,7 @@ import * as XLSX from "xlsx";
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,7 +16,7 @@ import {
   CheckCircle, Loader2, Trash2, Edit, Search, Filter, UploadCloud, FileCheck, 
   FileSpreadsheet, Sparkles, PenTool, Download, Trophy, Medal, BarChart, Calendar, 
   Menu, X, Key, Lock, Unlock, Library, Database, ChevronLeft, ChevronRight,
-  DownloadCloud // 👉 ĐÃ THÊM ICON SAO LƯU
+  DownloadCloud, Settings // 👉 ĐÃ THÊM ICON SETTINGS
 } from "lucide-react";
 
 import AdminClassManagement from "./AdminClassManagement";
@@ -101,7 +101,7 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const fullName = localStorage.getItem("fullName") || "Quản trị viên";
   const accountFileRef = useRef(null);
-  const backupFileInputRef = useRef(null); // 👉 REF CHO FILE INPUT RESTORE
+  const backupFileInputRef = useRef(null);
 
   const [activeTab, setActiveTab] = useState("overview"); 
   const [subTab, setSubTab] = useState("all"); 
@@ -134,7 +134,6 @@ const AdminDashboard = () => {
   const [uploadGrade, setUploadGrade] = useState("");
   const [uploadClassId, setUploadClassId] = useState("");
 
-  // 👉 CÁC STATE CHO BACKUP / RESTORE
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
 
@@ -453,6 +452,9 @@ const AdminDashboard = () => {
           <Button onClick={() => handleMenuClick("questions")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'questions' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><Database className="mr-3 h-5 w-5" /> Quản lý Kho câu hỏi</Button>
           <Button onClick={() => handleMenuClick("accounts")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'accounts' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><Users className="mr-3 h-5 w-5" /> Quản lý Tài khoản</Button>
           <Button onClick={() => handleMenuClick("leaderboard")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'leaderboard' ? 'bg-amber-500 text-white shadow-md shadow-amber-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><Trophy className="mr-3 h-5 w-5" /> Thi đua toàn trường</Button>
+          
+          {/* 👉 ĐÃ THÊM TAB CÀI ĐẶT */}
+          <Button onClick={() => handleMenuClick("settings")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all mt-4 ${activeTab === 'settings' ? 'bg-slate-800 text-white shadow-md shadow-slate-300' : 'text-slate-500 hover:bg-slate-200 hover:text-slate-800'}`}><Settings className="mr-3 h-5 w-5" /> Cài đặt hệ thống</Button>
         </nav>
         <div className="p-5 border-t border-slate-50"><Button onClick={handleLogout} variant="ghost" className="w-full h-11 rounded-xl text-rose-500 hover:bg-rose-50 font-bold"><LogOut className="mr-2 h-5 w-5" /> Đăng xuất</Button></div>
       </aside>
@@ -469,7 +471,8 @@ const AdminDashboard = () => {
                activeTab === "classes" ? "Quản lý Lớp học" : 
                activeTab === "departments" ? "Quản lý Tổ chuyên môn" : 
                activeTab === "questions" ? "Kho câu hỏi hệ thống" : 
-               activeTab === "leaderboard" ? "Bảng Thi Đua Tổng" : "Quản lý Tài khoản"}
+               activeTab === "leaderboard" ? "Bảng Thi Đua Tổng" : 
+               activeTab === "accounts" ? "Quản lý Tài khoản" : "Cài đặt hệ thống"}
             </h1>
           </div>
           
@@ -482,40 +485,6 @@ const AdminDashboard = () => {
 
         {activeTab === "overview" && (
           <div className="space-y-6 sm:space-y-8">
-            
-            {/* 👉 THÊM KHU VỰC BACKUP VÀ RESTORE TẠI TAB TỔNG QUAN */}
-            <div className="bg-white p-6 rounded-3xl border border-sky-100 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-               <div className="flex items-center gap-3">
-                  <div className="bg-emerald-50 p-3 rounded-2xl"><Database className="h-6 w-6 text-emerald-600" /></div>
-                  <div>
-                    <h3 className="font-black text-slate-800 text-lg">Dữ liệu hệ thống</h3>
-                    <p className="text-slate-500 text-sm font-medium">Sao lưu và bảo mật dữ liệu toàn trang web.</p>
-                  </div>
-               </div>
-               <div className="flex gap-3 w-full sm:w-auto">
-                  <Button 
-                    onClick={handleBackupDatabase} 
-                    disabled={isBackingUp || isRestoring}
-                    className="flex-1 sm:flex-none bg-emerald-500 hover:bg-emerald-600 text-white font-bold h-11 px-6 rounded-xl shadow-md shadow-emerald-100 transition-all active:scale-95"
-                  >
-                    {isBackingUp ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <DownloadCloud className="w-5 h-5 mr-2" />}
-                    Sao lưu JSON
-                  </Button>
-
-                  <div className="relative flex-1 sm:flex-none">
-                    <input type="file" ref={backupFileInputRef} onChange={handleRestoreDatabase} accept=".json" className="hidden" />
-                    <Button 
-                      onClick={() => backupFileInputRef.current.click()} 
-                      disabled={isBackingUp || isRestoring}
-                      className="w-full bg-rose-500 hover:bg-rose-600 text-white font-bold h-11 px-6 rounded-xl shadow-md shadow-rose-100 transition-all active:scale-95"
-                    >
-                      {isRestoring ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <UploadCloud className="w-5 h-5 mr-2" />}
-                      Phục hồi
-                    </Button>
-                  </div>
-               </div>
-            </div>
-
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               <Card className="border-none shadow-sm hover:shadow-md transition-shadow rounded-[2rem] bg-white overflow-hidden relative group cursor-default">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-blue-400 to-sky-300 rounded-bl-full z-0 opacity-20 group-hover:opacity-30 transition-opacity"></div>
@@ -607,6 +576,52 @@ const AdminDashboard = () => {
                 ))}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* 👉 TAB CÀI ĐẶT HỆ THỐNG MỚI */}
+        {activeTab === "settings" && (
+          <div className="space-y-6 sm:space-y-8">
+            <Card className="border-slate-100 shadow-sm rounded-3xl bg-white overflow-hidden">
+                <CardHeader className="bg-slate-50 border-b border-slate-100">
+                    <CardTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                        <Database className="w-5 h-5 text-emerald-600" /> Quản lý Dữ liệu Hệ thống
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6">
+                    <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                       <div className="flex items-center gap-4">
+                          <div className="bg-emerald-100 p-3 rounded-2xl"><Database className="h-8 w-8 text-emerald-600" /></div>
+                          <div>
+                            <h3 className="font-black text-slate-800 text-lg">Sao lưu & Phục hồi</h3>
+                            <p className="text-slate-500 text-sm font-medium mt-1">Đóng gói toàn bộ Database thành file JSON để dự phòng, hoặc nạp lại dữ liệu từ file.</p>
+                          </div>
+                       </div>
+                       <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                          <Button 
+                            onClick={handleBackupDatabase} 
+                            disabled={isBackingUp || isRestoring}
+                            className="flex-1 sm:flex-none bg-emerald-500 hover:bg-emerald-600 text-white font-bold h-12 px-6 rounded-xl shadow-md shadow-emerald-100 transition-all active:scale-95"
+                          >
+                            {isBackingUp ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <DownloadCloud className="w-5 h-5 mr-2" />}
+                            Sao lưu JSON
+                          </Button>
+
+                          <div className="relative flex-1 sm:flex-none">
+                            <input type="file" ref={backupFileInputRef} onChange={handleRestoreDatabase} accept=".json" className="hidden" />
+                            <Button 
+                              onClick={() => backupFileInputRef.current.click()} 
+                              disabled={isBackingUp || isRestoring}
+                              className="w-full bg-rose-500 hover:bg-rose-600 text-white font-bold h-12 px-6 rounded-xl shadow-md shadow-rose-100 transition-all active:scale-95"
+                            >
+                              {isRestoring ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <UploadCloud className="w-5 h-5 mr-2" />}
+                              Phục hồi
+                            </Button>
+                          </div>
+                       </div>
+                    </div>
+                </CardContent>
+            </Card>
           </div>
         )}
 

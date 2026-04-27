@@ -125,10 +125,8 @@ router.post("/add", verifyToken, isTeacherOrAdmin, uploadCloud.any(), async (req
         if (imageFile) finalImageUrl = imageFile.path; // Lấy link Cloudinary
 
         let finalEssayAnswerImageUrl = "";
-        if (type === "essay") {
-            const essayImageFile = req.files?.find(f => f.fieldname === 'essayAnswerImage');
-            if (essayImageFile) finalEssayAnswerImageUrl = essayImageFile.path;
-        }
+        const essayImageFile = req.files?.find(f => f.fieldname === 'essayAnswerImage');
+        if (essayImageFile) finalEssayAnswerImageUrl = essayImageFile.path;
 
         const newQuestion = new Question({
             content: content.trim(),
@@ -142,7 +140,7 @@ router.post("/add", verifyToken, isTeacherOrAdmin, uploadCloud.any(), async (req
             teacher: req.user.id,
             isBank: true,
             questionSet: finalSetName,
-            essayAnswerText: type === "essay" ? (essayAnswerText || "") : "",
+            essayAnswerText: essayAnswerText || "",
             essayAnswerImageUrl: finalEssayAnswerImageUrl
         });
 
@@ -203,10 +201,8 @@ router.post("/create-set", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asy
             if (imageFile) imageUrl = imageFile.path; // Lấy link Cloudinary
 
             let essayAnswerImageUrl = "";
-            if (q.type === 'essay') {
-                const essayImageFile = req.files?.find(f => f.fieldname === `essayImage_${q.tempId}`);
-                if (essayImageFile) essayAnswerImageUrl = essayImageFile.path; // Lấy link Cloudinary
-            }
+            const essayImageFile = req.files?.find(f => f.fieldname === `essayImage_${q.tempId}`);
+            if (essayImageFile) essayAnswerImageUrl = essayImageFile.path; // Lấy link Cloudinary
 
             questionsToSave.push({
                 content: q.content.trim(),
@@ -220,7 +216,7 @@ router.post("/create-set", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asy
                 teacher: req.user.id,
                 imageUrl: imageUrl,
                 points: q.points || 0,
-                essayAnswerText: q.type === 'essay' ? (q.essayAnswerText || "") : "",
+                essayAnswerText: q.essayAnswerText || "",
                 essayAnswerImageUrl: essayAnswerImageUrl,
                 isBank: true
             });
@@ -282,6 +278,7 @@ router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asyn
             updateData.essayAnswerImageUrl = "";
         }
 
+        // 👉 ĐÃ SỬA: Gỡ bỏ lệnh reset lời giải nếu là Trắc nghiệm! 
         if (updateData.type === 'multiple_choice') {
              if (updateData.options) {
                 try {
@@ -290,15 +287,10 @@ router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asyn
                     return res.status(400).json({ message: "Định dạng options không hợp lệ" });
                 }
             }
-            updateData.essayAnswerText = "";
-            updateData.essayAnswerImageUrl = "";
         } else if (updateData.type === 'essay') {
             updateData.options = [];
             updateData.correctAnswer = "";
         }
-
-        // Lưu ý: Nếu muốn cực kỳ hoàn hảo, khi update mà có up ảnh mới, bạn cũng có thể 
-        // lấy link ảnh cũ gọi cloudinary.destroy() để xóa đi. Tuy nhiên tạm thời cứ update link mới vào DB.
 
         const updatedQuestion = await Question.findByIdAndUpdate(
             req.params.id, 

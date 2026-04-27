@@ -94,23 +94,22 @@ const CreateAssignment = () => {
             const q = item.questionId;
             if (q.type === 'multiple_choice') mcqCount++; else essayCount++;
             
-            let parsedOptions = ["", "", "", ""];
-            if (q.options && q.options.length > 0) {
-                try {
-                    parsedOptions = typeof q.options[0] === 'string' && q.options[0].startsWith('[') ? JSON.parse(q.options[0]) :
-                                  typeof q.options === 'string' ? JSON.parse(q.options) : q.options;
-                } catch(e) { parsedOptions = q.options; }
+            let parsedOptions = [];
+            if (Array.isArray(q.options) && q.options.length > 0) parsedOptions = q.options;
+            else if (typeof q.options === 'string') {
+              try { 
+                parsedOptions = JSON.parse(q.options); 
+                if (typeof parsedOptions[0] === 'string' && parsedOptions[0].startsWith('[')) parsedOptions = JSON.parse(parsedOptions[0]);
+              } catch (e) { parsedOptions = [q.options]; }
             }
-            while(parsedOptions.length < 4) parsedOptions.push(""); 
 
             let correctKey = "A";
-            if (q.type === 'multiple_choice' && parsedOptions.length > 0) {
-              if (["A", "B", "C", "D"].includes(q.correctAnswer)) correctKey = q.correctAnswer;
+            if (q.type === 'multiple_choice') {
+              const validLetters = parsedOptions.map((_, i) => String.fromCharCode(65 + i));
+              if (validLetters.includes(q.correctAnswer)) correctKey = q.correctAnswer;
               else {
-                  if (q.correctAnswer === parsedOptions[0]) correctKey = "A";
-                  else if (q.correctAnswer === parsedOptions[1]) correctKey = "B";
-                  else if (q.correctAnswer === parsedOptions[2]) correctKey = "C";
-                  else if (q.correctAnswer === parsedOptions[3]) correctKey = "D";
+                  const idx = parsedOptions.findIndex(opt => opt === q.correctAnswer);
+                  if (idx !== -1) correctKey = validLetters[idx];
               }
             }
 
@@ -223,7 +222,7 @@ const CreateAssignment = () => {
     const newPoints = {};
     for (let i = 0; i < mcqCount; i++) {
         const tempId = `mcq_${Date.now()}_${i}`;
-        generatedSlots.push({ tempId, type: "multiple_choice", content: "", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium" });
+        generatedSlots.push({ tempId, type: "multiple_choice", content: "", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium", essayAnswerText: "" });
         newPoints[tempId] = mcqPt; 
     }
     for (let i = 0; i < essayCount; i++) {
@@ -285,7 +284,7 @@ const CreateAssignment = () => {
 
       let targetSlotIndex = newManuals.findIndex(slot => slot.type === impQ.type && stripHtml(slot.content).trim() === "");
 
-      let parsedOptions = ["", "", "", ""];
+      let parsedOptions = [];
       if (Array.isArray(impQ.options) && impQ.options.length > 0) {
           parsedOptions = impQ.options;
       }
@@ -328,18 +327,15 @@ const CreateAssignment = () => {
   };
 
   // ======================================================================
-  // HÀM BÓC TÁCH THÔNG MINH (HỖ TRỢ ĐÁP ÁN DẤU * VÀ BẢNG ĐÁP ÁN CUỐI FILE)
+  // HÀM BÓC TÁCH THÔNG MINH ĐỒNG BỘ TỪ QUESTIONBANK
   // ======================================================================
   const extractQuestionsFromText = (text, isForPreview = false) => {
-    // 1. Tách phần "Bảng đáp án" hoặc "Hết" ở cuối file
     const textParts = text.split(/(?:\n\s*HẾT\b|\n\s*Hết\b|\n\s*Bảng đáp án\b)/i);
     let mainPart = textParts[0]; 
 
-    // 1.1 Phân tích bảng đáp án (nếu có)
     let globalAnswers = {};
     if (textParts.length > 1) {
         const answerPart = textParts.slice(1).join(" ");
-        // Hỗ trợ bắt các chuỗi như "1C", "2. B", "Câu 3: A"
         const ansRegex = /(?:Câu\s*)?(\d+)\s*[:.-]?\s*([A-D])/gi;
         let match;
         while ((match = ansRegex.exec(answerPart)) !== null) {
@@ -347,10 +343,8 @@ const CreateAssignment = () => {
         }
     }
 
-    // 2. Dùng Lookahead cắt các khối bắt đầu bằng chữ Câu hoặc Bài
     const rawBlocks = mainPart.split(/(?=(?:^|\n)\s*(?:Câu|Bài)\s+\d+\s*[:.])/i);
     
-    // 3. NÉM BỎ những khối không phải là câu hỏi (vd: tiêu đề chung chung)
     const questionBlocks = rawBlocks.filter(block => {
         return /^\s*(?:Câu|Bài)\s+\d+\s*[:.]/i.test(block);
     });
@@ -362,11 +356,9 @@ const CreateAssignment = () => {
       let correctAnswer = "A";
       let essayAnswerText = "";
 
-      // Tìm số thứ tự của câu này để tra bảng đáp án
       const qMatch = block.match(/^\s*(?:Câu|Bài)\s+(\d+)\s*[:.]/i);
       const qNumber = qMatch ? qMatch[1] : null;
 
-      // 4. Tách phần "Lời giải/Hướng dẫn" ra khỏi câu hỏi
       const partsByExplanation = block.split(/(?:^|\n)\s*(?:Lời giải|Hướng dẫn giải|HDG|Giải|Đáp án)\s*[:.]\s*/i);
       let questionBody = partsByExplanation[0];
       
@@ -374,18 +366,16 @@ const CreateAssignment = () => {
           essayAnswerText = partsByExplanation[1].trim();
       }
 
-      // 5. Tách nội dung Đề bài và các Đáp án A, B, C, D (Hỗ trợ dấu * trước đáp án)
       const partsByOptions = questionBody.split(/(?:^|\n|\t|\s{3,})(?=\*?\s*[A-D][.)]\s)/i);
       
       content = partsByOptions[0].replace(/^\s*(?:Câu|Bài)\s+\d+\s*[:.]\s*/i, "").trim();
+      content = content.split(/\n\s*PHẦN\s+[IVXLCDM]+\b/i)[0].trim();
 
-      // 6. Quét các đáp án
       let detectedCorrectAnswer = null;
       partsByOptions.slice(1).forEach(optStr => {
         let textOpt = optStr.trim();
         let isCorrect = false;
         
-        // Nhận diện dấu * (VD: *A. Nguyễn Du hoặc * A. Nguyễn Du)
         if (textOpt.startsWith('*')) {
            isCorrect = true;
            textOpt = textOpt.substring(1).trim();
@@ -395,28 +385,30 @@ const CreateAssignment = () => {
         if (letterMatch) {
             const letter = letterMatch[1].toUpperCase();
             let val = letterMatch[2].trim();
+            val = val.split(/\n\s*PHẦN\s+[IVXLCDM]+\b/i)[0].trim();
+
             options.push(val);
             if (isCorrect) detectedCorrectAnswer = letter;
         }
       });
 
-      // 7. Ưu tiên: Dấu * > Bảng đáp án > Mặc định A
       if (detectedCorrectAnswer) {
           correctAnswer = detectedCorrectAnswer;
+      } else if (essayAnswerText.match(/^[A-D]$/i)) { 
+          correctAnswer = essayAnswerText.toUpperCase();
+          essayAnswerText = ""; 
       } else if (qNumber && globalAnswers[qNumber]) {
           correctAnswer = globalAnswers[qNumber];
       } else {
           correctAnswer = "A";
       }
 
-      // 8. LOGIC PHÂN LOẠI
       if (options.length === 0) {
           type = "essay";
           options = []; 
           correctAnswer = "";
       } else {
           type = "multiple_choice";
-          while (options.length < 4) options.push(""); 
       }
       
       const baseData = { 
@@ -472,8 +464,7 @@ const CreateAssignment = () => {
       };
       reader.readAsArrayBuffer(file);
     } catch (error) { 
-      alert("Lỗi bóc tách file Word. Vui lòng thử lại!"); 
-      setLoading(false); 
+      alert("Lỗi bóc tách. Vui lòng thử lại!"); setLoading(false); 
     }
   };
 
@@ -534,7 +525,7 @@ const CreateAssignment = () => {
 
   const handleAddSlot = (type) => {
     const tempId = `${type}_${Date.now()}`;
-    const newSlot = { tempId, type, content: "", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium" };
+    const newSlot = { tempId, type, content: "", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium", essayAnswerText: "" };
     const updatedQuestions = [...manualQuestions, newSlot];
     const updatedPoints = { ...questionPoints, [tempId]: 0 }; 
     setManualQuestions(updatedQuestions);
@@ -575,7 +566,7 @@ const CreateAssignment = () => {
       
       const questionsToSave = manualQuestions.map(q => ({
           _id: q._id, tempId: q.tempId, content: q.content, type: q.type, options: q.options, correctAnswer: q.correctAnswer, difficulty: q.difficulty, subject: newAssignment.subject,
-          points: questionPoints[q.tempId] || 0, essayAnswerText: q.type === 'essay' ? (q.essayAnswerText || "") : "",
+          points: questionPoints[q.tempId] || 0, essayAnswerText: q.essayAnswerText || "",
           existingImageUrl: q.existingImageUrl || "",
           existingEssayAnswerImageUrl: q.existingEssayAnswerImageUrl || "" 
       }));
@@ -583,7 +574,7 @@ const CreateAssignment = () => {
 
       manualQuestions.forEach(q => { 
           if (q.imageFile) formData.append(`image_${q.tempId}`, q.imageFile); 
-          if (q.type === 'essay' && q.essayAnswerImageFile) formData.append(`essayImage_${q.tempId}`, q.essayAnswerImageFile);
+          if (q.essayAnswerImageFile) formData.append(`essayImage_${q.tempId}`, q.essayAnswerImageFile);
       });
       
       if (id) await axios.put(`/assignments/update/${id}`, formData, getHeader(true));
@@ -728,9 +719,6 @@ const CreateAssignment = () => {
 
                     <div className="mt-4 border border-sky-100 bg-sky-50/30 rounded-2xl p-3 sm:p-4 md:p-6">
                       
-                      {/* ======================================================================
-                          TÍNH NĂNG BÓC TÁCH FILE WORD
-                      ====================================================================== */}
                       {creationMethod === "upload" && (
                         <div className="space-y-4">
                           {!isReviewingExtraction ? (
@@ -745,7 +733,6 @@ const CreateAssignment = () => {
                              </div>
                           ) : (
                              <div className="flex flex-col lg:flex-row gap-6 items-start">
-                               {/* KHUNG TRÁI: RAW TEXT */}
                                <div className="w-full lg:w-2/5 flex flex-col gap-0 sticky top-4 z-10">
                                   <div className="flex justify-between items-center bg-slate-100 p-3 rounded-t-xl border border-slate-200 border-b-0 shadow-sm">
                                     <span className="text-sm font-bold text-slate-700 uppercase">Văn bản thô (File gốc)</span>
@@ -774,7 +761,6 @@ const CreateAssignment = () => {
                                   </div>
                                </div>
 
-                               {/* KHUNG PHẢI: LIST CÂU HỎI ĐÃ BÓC TÁCH */}
                                <div className="w-full lg:w-3/5 space-y-4 sm:space-y-6">
                                   <div className="bg-sky-50 p-3 rounded-xl border border-sky-100 flex justify-between items-center">
                                     <span className="text-sm font-bold text-sky-800 uppercase">Xem trước & Chỉnh sửa ({extractedQuestions.length} câu)</span>
@@ -796,17 +782,14 @@ const CreateAssignment = () => {
                                                 <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁN ẢNH CÔNG THỨC..." value={q.content} onChange={(val) => handleExtractedChange(q.tempId, 'content', val)} />
                                             </div>
                                             
-                                            {q.type === 'essay' && (
-                                              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-3">
-                                                <h4 className="text-sm font-bold text-emerald-700 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Hướng dẫn giải</h4>
-                                                <RichTextEditor value={q.essayAnswerText} onChange={(val) => handleExtractedChange(q.tempId, 'essayAnswerText', val)} />
-                                              </div>
-                                            )}
+                                            <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-3">
+                                              <h4 className="text-sm font-bold text-emerald-700 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Hướng dẫn giải</h4>
+                                              <RichTextEditor value={q.essayAnswerText} onChange={(val) => handleExtractedChange(q.tempId, 'essayAnswerText', val)} />
+                                            </div>
 
                                             {q.type === 'multiple_choice' && (
                                               <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
                                                 
-                                                {/* 👉 TÍNH NĂNG THÊM/XÓA ĐÁP ÁN ĐỘNG KHI REVIEW */}
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                   {q.options.map((opt, i) => {
                                                     const letter = String.fromCharCode(65 + i);
@@ -852,9 +835,6 @@ const CreateAssignment = () => {
                         </div>
                       )}
 
-                      {/* ======================================================================
-                          GIAO DIỆN MANUAL DIRECT VIEW
-                      ====================================================================== */}
                       {creationMethod === "manual" && (
                         <div className="w-full space-y-4 sm:space-y-6">
                           {manualQuestions.map((q, index) => {
@@ -895,23 +875,21 @@ const CreateAssignment = () => {
                                     )}
                                   </div>
                                 </div>
-                                {q.type === "essay" && (
-                                   <div className="mt-4 p-4 bg-emerald-50/50 rounded-xl border border-emerald-100 shadow-sm">
-                                      <h4 className="text-sm font-bold text-emerald-700 mb-3 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Đáp án / Hướng dẫn giải </h4>
-                                      <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
-                                          <div className="flex-1"><RichTextEditor placeholder="Gõ lời giải hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={q.essayAnswerText} onChange={(val) => handleManualChange(q.tempId, 'essayAnswerText', val)} /></div>
-                                          <div className="w-full md:w-36 shrink-0 h-[100px] sm:h-[100px]">
-                                            {q.essayAnswerPreviewUrl ? (
-                                              <div className="relative w-full h-full rounded-xl border border-emerald-200 overflow-hidden shadow-sm group/img2"><img src={q.essayAnswerPreviewUrl} alt="Preview Answer" className="absolute inset-0 w-full h-full object-cover" /><div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img2:opacity-100 transition-opacity flex items-center justify-center"><button type="button" onClick={() => handleRemoveManualEssayImage(q.tempId)} className="bg-rose-500 text-white rounded-full p-2 hover:scale-110 transition-transform"><Trash2 className="w-4 h-4"/></button></div></div>
-                                            ) : (
-                                              <label className="flex flex-col items-center justify-center w-full h-full rounded-xl border-2 border-dashed border-emerald-300 hover:border-emerald-500 bg-white cursor-pointer transition-all"><ImageIcon className="w-6 h-6 text-emerald-400 mb-1" /><span className="text-xs font-bold text-emerald-600 text-center px-1">Ảnh Phụ (Lời giải)</span><input type="file" className="hidden" accept="image/*" onChange={(e) => handleManualEssayImageChange(q.tempId, e)} /></label>
-                                            )}
-                                          </div>
-                                      </div>
+                                
+                                <div className="mt-4 p-4 bg-emerald-50/50 rounded-xl border border-emerald-100 shadow-sm">
+                                   <h4 className="text-sm font-bold text-emerald-700 mb-3 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Đáp án / Hướng dẫn giải </h4>
+                                   <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
+                                       <div className="flex-1"><RichTextEditor placeholder="Gõ lời giải hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={q.essayAnswerText} onChange={(val) => handleManualChange(q.tempId, 'essayAnswerText', val)} /></div>
+                                       <div className="w-full md:w-36 shrink-0 h-[100px] sm:h-[100px]">
+                                         {q.essayAnswerPreviewUrl ? (
+                                           <div className="relative w-full h-full rounded-xl border border-emerald-200 overflow-hidden shadow-sm group/img2"><img src={q.essayAnswerPreviewUrl} alt="Preview Answer" className="absolute inset-0 w-full h-full object-cover" /><div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img2:opacity-100 transition-opacity flex items-center justify-center"><button type="button" onClick={() => handleRemoveManualEssayImage(q.tempId)} className="bg-rose-500 text-white rounded-full p-2 hover:scale-110 transition-transform"><Trash2 className="w-4 h-4"/></button></div></div>
+                                         ) : (
+                                           <label className="flex flex-col items-center justify-center w-full h-full rounded-xl border-2 border-dashed border-emerald-300 hover:border-emerald-500 bg-white cursor-pointer transition-all"><ImageIcon className="w-6 h-6 text-emerald-400 mb-1" /><span className="text-xs font-bold text-emerald-600 text-center px-1">Ảnh Phụ (Lời giải)</span><input type="file" className="hidden" accept="image/*" onChange={(e) => handleManualEssayImageChange(q.tempId, e)} /></label>
+                                         )}
+                                       </div>
                                    </div>
-                                )}
+                                </div>
 
-                                {/* 👉 TÍNH NĂNG THÊM/XÓA ĐÁP ÁN ĐỘNG KHI MANUAL */}
                                 {q.type === "multiple_choice" && (
                                   <div className="bg-sky-50/50 p-3 sm:p-4 rounded-xl border border-sky-100 space-y-3 mt-4">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -954,9 +932,6 @@ const CreateAssignment = () => {
                         </div>
                       )}
 
-                      {/* ======================================================================
-                          GIAO DIỆN BANK VIEW (RÓT TỪ KHO)
-                      ====================================================================== */}
                       {creationMethod === "bank" && (
                         <div className="border border-sky-200 rounded-xl sm:rounded-2xl overflow-hidden bg-white shadow-sm">
                           <div className="bg-sky-50 px-3 sm:px-4 py-4 flex flex-col space-y-4 border-b border-sky-100">
@@ -1050,7 +1025,7 @@ const CreateAssignment = () => {
                     <div className="font-bold text-slate-800 text-lg leading-relaxed q-content-view" dangerouslySetInnerHTML={{ __html: viewQuestion.content }} />
                     {viewQuestion.imageUrl && <img src={getImageUrl(viewQuestion.imageUrl)} className="max-w-full max-h-72 mt-4 rounded-xl border border-slate-200 shadow-sm mx-auto" />}
                 </div>
-                {viewQuestion.type === "essay" && (viewQuestion.essayAnswerText || viewQuestion.essayAnswerImageUrl) && (
+                {(viewQuestion.essayAnswerText || viewQuestion.essayAnswerImageUrl) && (
                     <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-200 shadow-sm">
                         <p className="font-bold text-emerald-700 text-sm uppercase tracking-widest mb-3 flex items-center"><CheckCircle2 className="w-5 h-5 mr-2"/> Hướng dẫn giải</p>
                         {viewQuestion.essayAnswerText && <div className="font-medium text-emerald-900 text-base leading-relaxed whitespace-pre-wrap q-content-view bg-white p-4 rounded-xl border border-emerald-100" dangerouslySetInnerHTML={{ __html: viewQuestion.essayAnswerText }} />}

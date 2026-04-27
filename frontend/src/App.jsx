@@ -8,7 +8,7 @@ import CreateAssignment from "./pages/CreateAssignment";
 import AssignmentGrades from "./pages/AssignmentGrades";
 import QuestionBank from "./pages/QuestionBank";
 import GradeStudent from "./pages/GradeStudent"; 
-
+import StudentSubmissionDetail from "./pages/StudentSubmissionDetail"; 
 function App() {
   return (
     <Router>
@@ -34,6 +34,7 @@ function App() {
         <Route path="/teacher/question-bank" element={<QuestionBank />} />
         {/* [MỚI THÊM] TRANG CHẤM ĐIỂM CHI TIẾT CỦA 1 HỌC SINH */}
         <Route path="/teacher/grade/:id" element={<GradeStudent />} />
+        <Route path="/student/submission/:id" element={<StudentSubmissionDetail />} />
       </Routes>
     </Router>
   );

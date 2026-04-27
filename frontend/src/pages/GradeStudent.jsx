@@ -115,9 +115,6 @@ const GradeStudent = () => {
                    value={feedback}
                    onChange={(e) => setFeedback(e.target.value)}
                />
-               <p className="text-xs font-medium text-slate-400 mt-3 flex items-center gap-1">
-                   <AlertCircle className="w-3.5 h-3.5" /> 
-               </p>
            </div>
         </Card>
 
@@ -139,7 +136,7 @@ const GradeStudent = () => {
               
               <div className="p-6 sm:p-8 space-y-6">
                 <div className="space-y-3">
-                  {/* 👉 ĐÃ SỬA: Hiển thị Đề bài dùng dangerouslySetInnerHTML */}
+                  {/* 👉 ĐÃ SỬA: Hiển thị Đề bài dùng dangerouslySetInnerHTML để dịch HTML Editor */}
                   <div 
                       className="font-medium text-slate-800 text-lg leading-relaxed q-content-view"
                       dangerouslySetInnerHTML={{ __html: q.content }}
@@ -149,10 +146,10 @@ const GradeStudent = () => {
                   )}
                 </div>
 
-                {isEssay && (q.essayAnswerText || q.essayAnswerImageUrl) && (
+                {/* 👉 ĐÃ SỬA: Bỏ điều kiện isEssay, áp dụng cho cả Trắc nghiệm & Tự luận */}
+                {(q.essayAnswerText || q.essayAnswerImageUrl) && (
                     <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 mt-4">
                         <p className="text-xs font-black text-emerald-700 uppercase mb-3 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/> Đáp án / Hướng dẫn chấm:</p>
-                        {/* 👉 ĐÃ SỬA: Hiển thị Hướng dẫn giải dùng dangerouslySetInnerHTML */}
                         {q.essayAnswerText && (
                            <div 
                                className="text-emerald-900 font-medium text-base mb-3 leading-relaxed q-content-view bg-white p-3 rounded-lg border border-emerald-100"

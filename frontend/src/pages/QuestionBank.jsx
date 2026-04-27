@@ -50,7 +50,7 @@ const QuestionBank = () => {
 
   const initialQuestionState = { 
       content: "", subject: "", type: "multiple_choice", difficulty: "medium", grade: "6", 
-      optA: "", optB: "", optC: "", optD: "", correctAnswer: "A", points: "",
+      options: ["", "", "", ""], correctAnswer: "A", points: "",
       essayAnswerText: "", essayAnswerImageFile: null, essayAnswerPreviewUrl: "" 
   };
   
@@ -150,23 +150,23 @@ const QuestionBank = () => {
 
   const handleEditClick = (q) => {
     setEditingQuestionId(q._id);
-    let parsedOptions = ["", "", "", ""];
+    let parsedOptions = [];
     
     if (Array.isArray(q.options) && q.options.length > 0) parsedOptions = q.options;
     else if (typeof q.options === 'string') {
       try { 
         parsedOptions = JSON.parse(q.options); 
         if (typeof parsedOptions[0] === 'string' && parsedOptions[0].startsWith('[')) parsedOptions = JSON.parse(parsedOptions[0]);
-      } catch (e) { parsedOptions = [q.options, "", "", ""]; }
+      } catch (e) { parsedOptions = [q.options]; }
     }
-    while (parsedOptions.length < 4) parsedOptions.push("");
     
     let correctKey = "A";
     if (q.type === 'multiple_choice') {
-      if (["A", "B", "C", "D"].includes(q.correctAnswer)) correctKey = q.correctAnswer;
+      const validLetters = parsedOptions.map((_, i) => String.fromCharCode(65 + i));
+      if (validLetters.includes(q.correctAnswer)) correctKey = q.correctAnswer;
       else {
           const index = parsedOptions.findIndex(opt => opt === q.correctAnswer);
-          if (index === 0) correctKey = "A"; else if (index === 1) correctKey = "B"; else if (index === 2) correctKey = "C"; else if (index === 3) correctKey = "D";
+          if (index !== -1) correctKey = validLetters[index];
       }
     }
 
@@ -174,7 +174,7 @@ const QuestionBank = () => {
       content: q.content, 
       subject: q.subject || teacherProfile?.subject, 
       difficulty: q.difficulty, grade: q.grade || "6", type: q.type || "multiple_choice",
-      optA: parsedOptions[0] || "", optB: parsedOptions[1] || "", optC: parsedOptions[2] || "", optD: parsedOptions[3] || "", correctAnswer: correctKey,
+      options: parsedOptions, correctAnswer: correctKey,
       points: q.points || "",
       essayAnswerText: q.essayAnswerText || "", 
       essayAnswerImageFile: null,
@@ -207,16 +207,17 @@ const QuestionBank = () => {
 
     if (editQuestionData.type === "multiple_choice") {
       formData.append("correctAnswer", editQuestionData.correctAnswer);
-      formData.append("options", JSON.stringify([editQuestionData.optA, editQuestionData.optB, editQuestionData.optC, editQuestionData.optD]));
+      formData.append("options", JSON.stringify(editQuestionData.options));
     } else { 
       formData.append("correctAnswer", ""); 
       formData.append("options", "[]"); 
-      formData.append("essayAnswerText", editQuestionData.essayAnswerText);
-      if (editQuestionData.essayAnswerImageFile) {
-          formData.append("essayAnswerImage", editQuestionData.essayAnswerImageFile);
-      } else if (!editQuestionData.essayAnswerPreviewUrl) {
-          formData.append("essayAnswerImageUrl", ""); 
-      }
+    }
+
+    formData.append("essayAnswerText", editQuestionData.essayAnswerText || "");
+    if (editQuestionData.essayAnswerImageFile) {
+        formData.append("essayAnswerImage", editQuestionData.essayAnswerImageFile);
+    } else if (!editQuestionData.essayAnswerPreviewUrl) {
+        formData.append("essayAnswerImageUrl", ""); 
     }
 
     if (editSelectedFile) formData.append("image", editSelectedFile);
@@ -235,15 +236,10 @@ const QuestionBank = () => {
   const handleDraftImageChange = (tempId, e) => { const file = e.target.files[0]; if (file) setDraftQuestions(draftQuestions.map(q => q.tempId === tempId ? { ...q, imageFile: file, previewUrl: URL.createObjectURL(file) } : q)); };
   const handleDraftEssayImageChange = (tempId, e) => { const file = e.target.files[0]; if (file) setDraftQuestions(draftQuestions.map(q => q.tempId === tempId ? { ...q, essayAnswerImageFile: file, essayAnswerPreviewUrl: URL.createObjectURL(file) } : q)); };
 
-  // ======================================================================
-  // HÀM BÓC TÁCH THÔNG MINH (ĐÃ SỬA LỖI CÚ PHÁP Ở MỤC NHẬN DIỆN DẤU *)
-  // ======================================================================
   const extractQuestionsFromText = (text, isForPreview = false) => {
-    // 1. Tách phần "Bảng đáp án" hoặc "Hết" ở cuối file
     const textParts = text.split(/(?:\n\s*HẾT\b|\n\s*Hết\b|\n\s*Bảng đáp án\b)/i);
     let mainPart = textParts[0]; 
 
-    // 1.1 Phân tích bảng đáp án (nếu có)
     let globalAnswers = {};
     if (textParts.length > 1) {
         const answerPart = textParts.slice(1).join(" ");
@@ -254,10 +250,8 @@ const QuestionBank = () => {
         }
     }
 
-    // 2. Dùng Lookahead cắt các khối bắt đầu bằng chữ Câu hoặc Bài
     const rawBlocks = mainPart.split(/(?=(?:^|\n)\s*(?:Câu|Bài)\s+\d+\s*[:.])/i);
     
-    // 3. NÉM BỎ những khối không phải là câu hỏi
     const questionBlocks = rawBlocks.filter(block => {
         return /^\s*(?:Câu|Bài)\s+\d+\s*[:.]/i.test(block);
     });
@@ -272,7 +266,6 @@ const QuestionBank = () => {
       const qMatch = block.match(/^\s*(?:Câu|Bài)\s+(\d+)\s*[:.]/i);
       const qNumber = qMatch ? qMatch[1] : null;
 
-      // 4. Tách phần "Lời giải/Hướng dẫn"
       const partsByExplanation = block.split(/(?:^|\n)\s*(?:Lời giải|Hướng dẫn giải|HDG|Giải|Đáp án)\s*[:.]\s*/i);
       let questionBody = partsByExplanation[0];
       
@@ -280,18 +273,16 @@ const QuestionBank = () => {
           essayAnswerText = partsByExplanation[1].trim();
       }
 
-      // 5. Tách nội dung Đề bài và các Đáp án A, B, C, D
       const partsByOptions = questionBody.split(/(?:^|\n|\t|\s{3,})(?=\*?\s*[A-D][.)]\s)/i);
       
       content = partsByOptions[0].replace(/^\s*(?:Câu|Bài)\s+\d+\s*[:.]\s*/i, "").trim();
+      content = content.split(/\n\s*PHẦN\s+[IVXLCDM]+\b/i)[0].trim();
 
-      // 6. Quét các đáp án
       let detectedCorrectAnswer = null;
       partsByOptions.slice(1).forEach(optStr => {
         let textOpt = optStr.trim();
         let isCorrect = false;
         
-        // 👉 ĐÃ SỬA LỖI Ở ĐÂY:
         if (textOpt.startsWith('*')) {
            isCorrect = true;
            textOpt = textOpt.substring(1).trim();
@@ -301,28 +292,30 @@ const QuestionBank = () => {
         if (letterMatch) {
             const letter = letterMatch[1].toUpperCase();
             let val = letterMatch[2].trim();
+            val = val.split(/\n\s*PHẦN\s+[IVXLCDM]+\b/i)[0].trim();
+
             options.push(val);
             if (isCorrect) detectedCorrectAnswer = letter;
         }
       });
 
-      // 7. Ưu tiên: Dấu * > Bảng đáp án > Mặc định A
       if (detectedCorrectAnswer) {
           correctAnswer = detectedCorrectAnswer;
+      } else if (essayAnswerText.match(/^[A-D]$/i)) { 
+          correctAnswer = essayAnswerText.toUpperCase();
+          essayAnswerText = ""; 
       } else if (qNumber && globalAnswers[qNumber]) {
           correctAnswer = globalAnswers[qNumber];
       } else {
           correctAnswer = "A";
       }
 
-      // 8. LOGIC PHÂN LOẠI
       if (options.length === 0) {
           type = "essay";
           options = []; 
           correctAnswer = "";
       } else {
           type = "multiple_choice";
-          while (options.length < 4) options.push(""); 
       }
       
       const baseData = { 
@@ -395,14 +388,16 @@ const QuestionBank = () => {
   const handleCommitExtraction = () => {
     const formattedQs = extractedQuestions.map(q => {
         let finalOptions = Array.isArray(q.options) ? [...q.options] : [];
-        if (q.type === 'multiple_choice') {
-            while (finalOptions.length < 4) finalOptions.push("");
-        }
         let finalCorrect = q.correctAnswer || "A";
-        if (q.type === 'multiple_choice' && !["A", "B", "C", "D"].includes(finalCorrect)) {
-            const idx = finalOptions.findIndex(opt => opt === q.correctAnswer);
-            finalCorrect = idx !== -1 ? ["A", "B", "C", "D"][idx] : "A";
+        
+        if (q.type === 'multiple_choice') {
+            const validLetters = finalOptions.map((_, i) => String.fromCharCode(65 + i));
+            if (!validLetters.includes(finalCorrect)) {
+                const idx = finalOptions.findIndex(opt => opt === q.correctAnswer);
+                finalCorrect = idx !== -1 ? validLetters[idx] : "A";
+            }
         }
+
         return { 
             ...q, 
             tempId: Date.now() + Math.random(), 
@@ -433,7 +428,6 @@ const QuestionBank = () => {
   const handleExtractedOptionChange = (tempId, optionIndex, value) => setExtractedQuestions(prev => prev.map(q => { if (q.tempId === tempId) { const newOptions = [...q.options]; newOptions[optionIndex] = value; return { ...q, options: newOptions }; } return q; }));
   const handleAddExtractedOption = (tempId) => setExtractedQuestions(prev => prev.map(q => q.tempId === tempId ? { ...q, options: [...q.options, ""] } : q));
   const handleRemoveExtractedOption = (tempId, optIndex) => setExtractedQuestions(prev => prev.map(q => { if (q.tempId === tempId && q.options.length > 2) { const newOpts = q.options.filter((_, i) => i !== optIndex); return { ...q, options: newOpts }; } return q; }));
-  // ======================================================================
 
   const handleSaveDraftsToSet = async () => {
     const stripHtml = (html) => {
@@ -442,8 +436,21 @@ const QuestionBank = () => {
         return tmp.textContent || tmp.innerText || "";
     };
 
-    const isValid = draftQuestions.every(q => stripHtml(q.content).trim() !== "");
-    if (!isValid) return alert("Vui lòng điền nội dung cho tất cả câu hỏi đang soạn!");
+    const isContentValid = draftQuestions.every(q => stripHtml(q.content).trim() !== "");
+    if (!isContentValid) return alert("Vui lòng điền nội dung cho tất cả câu hỏi đang soạn!");
+
+    const isEssayPointsValid = draftQuestions.every(q => {
+        if (q.type !== 'essay') return true;
+        const pts = Number(q.points) || 0;
+        return pts > 0;
+    });
+    if (!isEssayPointsValid) return alert("Vui lòng nhập điểm số hợp lệ (> 0) cho các câu Tự luận!");
+
+    if (currentSet && currentSet.questions) {
+        const existingContents = currentSet.questions.map(q => stripHtml(q.content).trim().toLowerCase());
+        const hasDuplicate = draftQuestions.some(q => existingContents.includes(stripHtml(q.content).trim().toLowerCase()));
+        if (hasDuplicate) return alert("LỖI: Có câu hỏi trong danh sách soạn thảo đang bị TRÙNG LẶP nội dung với câu hỏi đã có sẵn trong kho này. Vui lòng kiểm tra lại!");
+    }
 
     setLoading(true);
     try {
@@ -455,14 +462,14 @@ const QuestionBank = () => {
       const questionsToSave = draftQuestions.map(q => ({
           tempId: q.tempId, content: q.content, type: q.type, options: q.options, correctAnswer: q.correctAnswer, difficulty: q.difficulty,
           points: q.type === 'essay' ? (Number(q.points) || 0) : 0,
-          essayAnswerText: q.type === 'essay' ? (q.essayAnswerText || "") : ""
+          essayAnswerText: q.essayAnswerText || ""
       }));
       
       formData.append("questionsData", JSON.stringify(questionsToSave));
       
       draftQuestions.forEach(q => { 
         if (q.imageFile) formData.append(`image_${q.tempId}`, q.imageFile); 
-        if (q.type === 'essay' && q.essayAnswerImageFile) formData.append(`essayImage_${q.tempId}`, q.essayAnswerImageFile);
+        if (q.essayAnswerImageFile) formData.append(`essayImage_${q.tempId}`, q.essayAnswerImageFile);
       });
 
       await axios.post("/questions/create-set", formData, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "Content-Type": "multipart/form-data" } });
@@ -665,12 +672,10 @@ const QuestionBank = () => {
                                             <CardContent className="p-4 space-y-4 bg-white">
                                               <RichTextEditor value={q.content} onChange={(val) => handleExtractedChange(q.tempId, 'content', val)} />
                                               
-                                              {q.type === 'essay' && (
-                                                <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-3">
-                                                  <h4 className="text-sm font-bold text-emerald-700 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Hướng dẫn giải</h4>
-                                                  <RichTextEditor value={q.essayAnswerText} onChange={(val) => handleExtractedChange(q.tempId, 'essayAnswerText', val)} />
-                                                </div>
-                                              )}
+                                              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-3">
+                                                <h4 className="text-sm font-bold text-emerald-700 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Hướng dẫn giải</h4>
+                                                <RichTextEditor value={q.essayAnswerText} onChange={(val) => handleExtractedChange(q.tempId, 'essayAnswerText', val)} />
+                                              </div>
 
                                               {q.type === 'multiple_choice' && (
                                                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
@@ -750,49 +755,53 @@ const QuestionBank = () => {
                                      </div>
                                    </div>
 
-                                   {q.type === "essay" && (
-                                     <div className="mt-4 p-4 bg-emerald-50/50 rounded-xl border border-emerald-100">
-                                        <h4 className="text-sm font-bold text-emerald-700 mb-3 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Đáp án / Hướng dẫn giải </h4>
-                                        <div className="flex flex-col md:flex-row gap-4">
-                                            <div className="flex-1">
-                                              <RichTextEditor 
-                                                placeholder="Nhập lời giải tự luận..."
-                                                value={q.essayAnswerText}
-                                                onChange={(val) => handleDraftChange(q.tempId, 'essayAnswerText', val)}
-                                              />
-                                            </div>
-                                            <div className="w-full md:w-36 shrink-0 h-[100px]">
-                                              {q.essayAnswerPreviewUrl ? (
-                                                <div className="relative w-full h-full rounded-xl border border-emerald-200 overflow-hidden shadow-sm group/img2">
-                                                  <img src={q.essayAnswerPreviewUrl} alt="Đáp án" className="absolute inset-0 w-full h-full object-cover" />
-                                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img2:opacity-100 transition-opacity flex items-center justify-center"><button type="button" onClick={() => setDraftQuestions(draftQuestions.map(m => m.tempId === q.tempId ? { ...m, essayAnswerImageFile: null, essayAnswerPreviewUrl: "" } : m))} className="bg-rose-500 text-white rounded-full p-2"><Trash2 className="w-4 h-4"/></button></div>
-                                                </div>
-                                              ) : (
-                                                <label className="flex flex-col items-center justify-center w-full h-full rounded-xl border-2 border-dashed border-emerald-200 hover:border-emerald-400 bg-white cursor-pointer transition-all"><ImageIcon className="w-6 h-6 text-emerald-400 mb-1" /><span className="text-xs font-bold text-emerald-600 text-center">Ảnh Lời giải</span><input type="file" className="hidden" accept="image/*" onChange={(e) => handleDraftEssayImageChange(q.tempId, e)} /></label>
-                                              )}
-                                            </div>
-                                        </div>
-                                     </div>
-                                   )}
+                                   {/* 👉 Luôn hiện box Hướng dẫn giải KHÔNG ĐIỀU KIỆN */}
+                                   <div className="mt-4 p-4 bg-emerald-50/50 rounded-xl border border-emerald-100">
+                                      <h4 className="text-sm font-bold text-emerald-700 mb-3 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Đáp án / Hướng dẫn giải </h4>
+                                      <div className="flex flex-col md:flex-row gap-4">
+                                          <div className="flex-1">
+                                            <RichTextEditor 
+                                              placeholder="Nhập lời giải..."
+                                              value={q.essayAnswerText}
+                                              onChange={(val) => handleDraftChange(q.tempId, 'essayAnswerText', val)}
+                                            />
+                                          </div>
+                                          <div className="w-full md:w-36 shrink-0 h-[100px]">
+                                            {q.essayAnswerPreviewUrl ? (
+                                              <div className="relative w-full h-full rounded-xl border border-emerald-200 overflow-hidden shadow-sm group/img2">
+                                                <img src={q.essayAnswerPreviewUrl} alt="Đáp án" className="absolute inset-0 w-full h-full object-cover" />
+                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img2:opacity-100 transition-opacity flex items-center justify-center"><button type="button" onClick={() => setDraftQuestions(draftQuestions.map(m => m.tempId === q.tempId ? { ...m, essayAnswerImageFile: null, essayAnswerPreviewUrl: "" } : m))} className="bg-rose-500 text-white rounded-full p-2"><Trash2 className="w-4 h-4"/></button></div>
+                                              </div>
+                                            ) : (
+                                              <label className="flex flex-col items-center justify-center w-full h-full rounded-xl border-2 border-dashed border-emerald-200 hover:border-emerald-400 bg-white cursor-pointer transition-all"><ImageIcon className="w-6 h-6 text-emerald-400 mb-1" /><span className="text-xs font-bold text-emerald-600 text-center">Ảnh Lời giải</span><input type="file" className="hidden" accept="image/*" onChange={(e) => handleDraftEssayImageChange(q.tempId, e)} /></label>
+                                            )}
+                                          </div>
+                                      </div>
+                                   </div>
 
                                    {q.type === "multiple_choice" && (
                                       <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
                                         <div className="grid grid-cols-2 gap-3">
                                           {q.options.map((optLabel, i) => (
-                                            <div key={i} className="flex items-center gap-2"><span className="font-black text-slate-500 w-6">{String.fromCharCode(65 + i)}.</span><Input className="h-10 rounded-xl bg-white border-slate-200 shadow-sm text-sm" value={optLabel} onChange={(e) => handleDraftOptionChange(q.tempId, i, e.target.value)} /></div>
+                                            <div key={i} className="flex items-center gap-2"><span className="font-bold text-slate-500 w-6">{String.fromCharCode(65 + i)}.</span><Input className="h-10 rounded-xl bg-white border-slate-200 shadow-sm text-sm" value={optLabel} onChange={(e) => handleDraftOptionChange(q.tempId, i, e.target.value)} />
+                                            {q.options.length > 2 && <Button type="button" variant="ghost" size="icon" onClick={() => setDraftQuestions(draftQuestions.map(draft => draft.tempId === q.tempId ? {...draft, options: draft.options.filter((_, idx) => idx !== i)} : draft))} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0"><Trash2 className="w-4 h-4"/></Button>}
+                                            </div>
                                           ))}
                                         </div>
-                                        <div className="flex justify-end items-center pt-2 gap-3">
-                                          <label className="text-sm font-bold text-rose-500">ĐÁP ÁN ĐÚNG:</label>
-                                          <Select value={q.correctAnswer || ""} onValueChange={(val) => handleDraftChange(q.tempId, 'correctAnswer', val)}>
-                                            <SelectTrigger className="h-10 w-28 bg-white text-rose-600 font-bold border-rose-200 rounded-xl"><span className="truncate">{q.correctAnswer ? `Câu ${q.correctAnswer}` : "Chọn"}</span></SelectTrigger>
-                                            <SelectContent>
-                                              {q.options.map((_, i) => {
-                                                const l = String.fromCharCode(65 + i);
-                                                return <SelectItem key={l} value={l}>Câu {l}</SelectItem>
-                                              })}
-                                            </SelectContent>
-                                          </Select>
+                                        <div className="flex justify-between items-center pt-2 border-t border-slate-200 mt-2">
+                                          <Button type="button" variant="ghost" size="sm" onClick={() => setDraftQuestions(draftQuestions.map(draft => draft.tempId === q.tempId ? {...draft, options: [...draft.options, ""]} : draft))} className="text-sky-600 hover:bg-sky-100"><PlusCircle className="w-4 h-4 mr-1"/> Thêm đáp án</Button>
+                                          <div className="flex items-center gap-2">
+                                            <label className="text-sm font-bold text-rose-500">ĐÁP ÁN ĐÚNG:</label>
+                                            <Select value={q.correctAnswer || ""} onValueChange={(val) => handleDraftChange(q.tempId, 'correctAnswer', val)}>
+                                              <SelectTrigger className="h-10 w-28 bg-white text-rose-600 font-bold border-rose-200 rounded-xl"><span className="truncate">{q.correctAnswer ? `Câu ${q.correctAnswer}` : "Chọn"}</span></SelectTrigger>
+                                              <SelectContent>
+                                                {q.options.map((_, i) => {
+                                                  const l = String.fromCharCode(65 + i);
+                                                  return <SelectItem key={l} value={l}>Câu {l}</SelectItem>
+                                                })}
+                                              </SelectContent>
+                                            </Select>
+                                          </div>
                                         </div>
                                       </div>
                                    )}
@@ -838,7 +847,8 @@ const QuestionBank = () => {
 
                                    {q.imageUrl && <img src={getImageUrl(q.imageUrl)} className="max-h-40 mt-2 rounded-xl border border-slate-200 shadow-sm" alt="Đề bài" />}
                                    
-                                   {q.type === 'essay' && (q.essayAnswerText || q.essayAnswerImageUrl) && (
+                                   {/* 👉 HIỂN THỊ HƯỚNG DẪN CHO TOÀN BỘ CÂU HỎI TRONG KHO NẾU CÓ */}
+                                   {(q.essayAnswerText || q.essayAnswerImageUrl) && (
                                       <div className="mt-2 p-3 bg-emerald-50 rounded-xl border border-emerald-100">
                                          <p className="text-xs font-bold text-emerald-700 mb-1 flex items-center"><CheckCircle2 className="w-3 h-3 mr-1"/> Hướng dẫn giải</p>
                                          {q.essayAnswerText && (
@@ -853,12 +863,13 @@ const QuestionBank = () => {
 
                                    {q.type === 'multiple_choice' && q.options && q.options.length > 0 && (
                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                       {['A', 'B', 'C', 'D'].map((letter, idx) => {
-                                          const isCorrect = q.correctAnswer === letter || q.correctAnswer === q.options[idx];
+                                       {q.options.map((opt, idx) => {
+                                          const letter = String.fromCharCode(65 + idx);
+                                          const isCorrect = q.correctAnswer === letter || q.correctAnswer === opt;
                                           return (
                                             <div key={idx} className="flex items-start gap-2 text-sm">
                                               <span className={`font-bold ${isCorrect ? 'text-sky-600' : 'text-slate-400'}`}>{letter}.</span>
-                                              <span className={`${isCorrect ? 'font-bold text-sky-700' : 'text-slate-600'}`}>{q.options[idx]}</span>
+                                              <span className={`${isCorrect ? 'font-bold text-sky-700' : 'text-slate-600'}`}>{opt}</span>
                                               {isCorrect && <CheckCircle2 className="w-4 h-4 text-sky-500 shrink-0"/>}
                                             </div>
                                           );
@@ -948,41 +959,66 @@ const QuestionBank = () => {
                 </div>
               </div>
 
-              {editQuestionData.type === "essay" && (
-                 <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 shadow-sm">
-                    <label className="text-sm font-bold text-emerald-700 block mb-3 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Đáp án / Hướng dẫn giải</label>
-                    <div className="flex flex-col md:flex-row gap-4">
-                      <div className="flex-1">
-                        <RichTextEditor 
-                          placeholder="Nhập lời giải..." 
-                          value={editQuestionData.essayAnswerText} 
-                          onChange={(val) => setEditQuestionData({...editQuestionData, essayAnswerText: val})} 
-                        />
-                      </div>
-                      <div className="w-full md:w-32 shrink-0 h-[120px]">
-                        {editQuestionData.essayAnswerPreviewUrl ? (
-                          <div className="relative w-full h-full rounded-xl border border-emerald-200 overflow-hidden shadow-sm group bg-white">
-                            <img src={editQuestionData.essayAnswerPreviewUrl} alt="Preview Answer" className="absolute inset-0 w-full h-full object-contain" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><button type="button" onClick={() => setEditQuestionData(prev => ({...prev, essayAnswerPreviewUrl: "", essayAnswerImageFile: null}))} className="bg-rose-500 text-white rounded-full p-2 hover:scale-110 transition-transform"><Trash2 className="w-4 h-4"/></button></div>
-                          </div>
-                        ) : (
-                          <label className="flex flex-col items-center justify-center w-full h-full rounded-xl border-2 border-dashed border-emerald-200 hover:border-emerald-400 bg-white cursor-pointer transition-all"><ImageIcon className="w-6 h-6 text-emerald-400 mb-2" /><span className="text-xs font-bold text-emerald-600 text-center px-1">Ảnh Lời giải</span><input type="file" ref={editEssayAnswerInputRef} className="hidden" accept="image/*" onChange={handleEditEssayAnswerImageChange} /></label>
-                        )}
-                      </div>
+              {/* 👉 ĐÃ SỬA: BỎ ĐIỀU KIỆN ẨN, LUÔN LUÔN HIỆN KHUNG HƯỚNG DẪN GIẢI KHI SỬA */}
+              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 shadow-sm">
+                  <label className="text-sm font-bold text-emerald-700 block mb-3 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Đáp án / Hướng dẫn giải</label>
+                  <div className="flex flex-col md:flex-row gap-4">
+                    <div className="flex-1">
+                      <RichTextEditor 
+                        placeholder="Nhập lời giải..." 
+                        value={editQuestionData.essayAnswerText} 
+                        onChange={(val) => setEditQuestionData({...editQuestionData, essayAnswerText: val})} 
+                      />
                     </div>
-                 </div>
-              )}
+                    <div className="w-full md:w-32 shrink-0 h-[120px]">
+                      {editQuestionData.essayAnswerPreviewUrl ? (
+                        <div className="relative w-full h-full rounded-xl border border-emerald-200 overflow-hidden shadow-sm group bg-white">
+                          <img src={editQuestionData.essayAnswerPreviewUrl} alt="Preview Answer" className="absolute inset-0 w-full h-full object-contain" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><button type="button" onClick={() => setEditQuestionData(prev => ({...prev, essayAnswerPreviewUrl: "", essayAnswerImageFile: null}))} className="bg-rose-500 text-white rounded-full p-2 hover:scale-110 transition-transform"><Trash2 className="w-4 h-4"/></button></div>
+                        </div>
+                      ) : (
+                        <label className="flex flex-col items-center justify-center w-full h-full rounded-xl border-2 border-dashed border-emerald-200 hover:border-emerald-400 bg-white cursor-pointer transition-all"><ImageIcon className="w-6 h-6 text-emerald-400 mb-2" /><span className="text-xs font-bold text-emerald-600 text-center px-1">Ảnh Lời giải</span><input type="file" ref={editEssayAnswerInputRef} className="hidden" accept="image/*" onChange={handleEditEssayAnswerImageChange} /></label>
+                      )}
+                    </div>
+                  </div>
+              </div>
 
               {editQuestionData.type === "multiple_choice" && (
                 <div className="bg-white p-4 sm:p-5 rounded-2xl border border-sky-100 shadow-sm space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {['A', 'B', 'C', 'D'].map((k) => (
-                      <div key={k} className="flex items-center gap-2"><span className="font-bold text-sky-800 w-5">{k}.</span><Input placeholder={`Nhập đáp án ${k}`} className="h-12 rounded-xl bg-slate-50 border-sky-100 font-medium" value={editQuestionData[`opt${k}`]} onChange={(e) => setEditQuestionData({...editQuestionData, [`opt${k}`]: e.target.value})} required /></div>
-                    ))}
+                    {editQuestionData.options.map((opt, i) => {
+                      const k = String.fromCharCode(65 + i);
+                      return (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="font-bold text-sky-800 w-5">{k}.</span>
+                        <Input placeholder={`Nhập đáp án ${k}`} className="h-12 rounded-xl bg-slate-50 border-sky-100 font-medium" value={opt} onChange={(e) => {
+                          const newOpts = [...editQuestionData.options];
+                          newOpts[i] = e.target.value;
+                          setEditQuestionData({...editQuestionData, options: newOpts});
+                        }} required />
+                        {editQuestionData.options.length > 2 && (
+                            <Button type="button" variant="ghost" size="icon" onClick={() => {
+                                const newOpts = editQuestionData.options.filter((_, idx) => idx !== i);
+                                setEditQuestionData({...editQuestionData, options: newOpts});
+                            }} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0"><Trash2 className="w-4 h-4"/></Button>
+                        )}
+                      </div>
+                    )})}
                   </div>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
-                    <label className="text-sm font-bold text-rose-600 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Chọn đáp án ĐÚNG:</label>
-                    <Select value={editQuestionData.correctAnswer || ""} onValueChange={(v) => setEditQuestionData({...editQuestionData, correctAnswer: v})}><SelectTrigger className="h-11 w-full sm:w-32 bg-rose-50 text-rose-600 font-bold border-rose-200 rounded-xl shadow-sm"><span className="truncate">{editQuestionData.correctAnswer ? `Câu ${editQuestionData.correctAnswer}` : "Chọn"}</span></SelectTrigger><SelectContent><SelectItem value="A">Câu A</SelectItem><SelectItem value="B">Câu B</SelectItem><SelectItem value="C">Câu C</SelectItem><SelectItem value="D">Câu D</SelectItem></SelectContent></Select>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setEditQuestionData({...editQuestionData, options: [...editQuestionData.options, ""]})} className="text-sky-600 hover:bg-sky-100 w-max"><PlusCircle className="w-4 h-4 mr-2"/> Thêm đáp án</Button>
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-bold text-rose-600 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Chọn đáp án ĐÚNG:</label>
+                      <Select value={editQuestionData.correctAnswer || ""} onValueChange={(v) => setEditQuestionData({...editQuestionData, correctAnswer: v})}>
+                        <SelectTrigger className="h-11 w-full sm:w-32 bg-rose-50 text-rose-600 font-bold border-rose-200 rounded-xl shadow-sm"><span className="truncate">{editQuestionData.correctAnswer ? `Câu ${editQuestionData.correctAnswer}` : "Chọn"}</span></SelectTrigger>
+                        <SelectContent>
+                          {editQuestionData.options.map((_, i) => {
+                             const l = String.fromCharCode(65 + i);
+                             return <SelectItem key={l} value={l}>Câu {l}</SelectItem>
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1001,7 +1037,8 @@ const QuestionBank = () => {
                     {viewQuestion.imageUrl && <img src={getImageUrl(viewQuestion.imageUrl)} className="max-w-full max-h-64 mt-4 rounded-xl border border-slate-200 shadow-sm mx-auto" />}
                 </div>
 
-                {viewQuestion.type === "essay" && (viewQuestion.essayAnswerText || viewQuestion.essayAnswerImageUrl) && (
+                {/* 👉 ĐÃ SỬA: Luôn hiện hướng dẫn giải (nếu có) cho cả Trắc nghiệm và Tự luận trong Modal Xem trước */}
+                {(viewQuestion.essayAnswerText || viewQuestion.essayAnswerImageUrl) && (
                     <div className="bg-emerald-50 p-6 rounded-2xl border border-emerald-100 shadow-sm">
                         <p className="font-bold text-emerald-700 text-sm uppercase tracking-widest mb-3 flex items-center"><CheckCircle2 className="w-5 h-5 mr-2"/> Hướng dẫn giải</p>
                         {viewQuestion.essayAnswerText && (

@@ -15,7 +15,7 @@ import adminRoutes from "./routes/admin.js";
 import classRoutes from "./routes/classes.js"; 
 import teacherRoutes from "./routes/teacher.js";
 import questionSetRoutes from "./routes/questionSet.js";
-import uploadRoutes from "./routes/upload.js"; // 👉 THÊM DÒNG NÀY: Import route xử lý upload ảnh
+import uploadRoutes from "./routes/upload.js"; 
 
 dotenv.config();
 
@@ -84,7 +84,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/classes", classRoutes); 
 app.use("/api/teacher", teacherRoutes);
 app.use("/api/question-sets", questionSetRoutes);
-app.use("/api/upload", uploadRoutes); // 👉 THÊM DÒNG NÀY: Khai báo đường dẫn API cho Jodit Editor
+app.use("/api/upload", uploadRoutes); 
 
 // ==========================================
 // 5. CATCH-ALL CHO REACT ROUTER (ĐẶT CUỐI CÙNG)

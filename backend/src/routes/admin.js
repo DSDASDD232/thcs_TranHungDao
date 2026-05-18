@@ -1,5 +1,5 @@
 import express from "express";
-import mongoose from "mongoose"; // Đã thêm
+import mongoose from "mongoose"; 
 import User from "../models/User.js";
 import Class from "../models/Class.js"; 
 import Question from "../models/Question.js";
@@ -10,7 +10,7 @@ import multer from "multer";
 import xlsx from "xlsx";
 import bcrypt from "bcryptjs"; 
 import Subject from "../models/Subject.js";
-import fs from "fs"; // Đã thêm
+import fs from "fs"; 
 
 const router = express.Router();
 // Cấu hình Multer lưu file tạm cho Restore và memoryStorage cho import Excel
@@ -174,7 +174,6 @@ router.get("/users/recent", verifyToken, isAdmin, async (req, res) => {
 // ======================================================================
 // 5. [POST] TẠO TÀI KHOẢN HỌC SINH TỪ FILE EXCEL
 // ======================================================================
-// Chú ý: Dùng excelUpload.single() nếu xử lý file Excel dạng form-data
 router.post("/users/import-json", verifyToken, isAdmin, async (req, res) => {
     try {
         const { classId, className, grade, students } = req.body;
@@ -260,25 +259,37 @@ router.delete("/users/:id", verifyToken, isAdmin, async (req, res) => {
 });
 
 // ==========================================
-// 7. [PUT] CẬP NHẬT TÀI KHOẢN
+// 7. [PUT] CẬP NHẬT TÀI KHOẢN (ĐÃ UPDATE HỖ TRỢ ĐA MÔN HỌC)
 // ==========================================
 router.put("/users/:id", verifyToken, isAdmin, async (req, res) => {
     try {
         const userId = req.params.id;
-        const { fullName, role, grade, classId, assignedClasses, isLocked, password, subject } = req.body;
+        const { fullName, role, grade, classId, assignedClasses, isLocked, password, subject, department, subjects } = req.body;
         
         const existingUser = await User.findById(userId);
         if (!existingUser) return res.status(404).json({ message: "Không tìm thấy người dùng!" });
 
         let updateFields = {};
 
-        if (subject !== undefined && existingUser.role === "teacher") {
-            if (existingUser.subject !== subject && existingUser.assignedClasses && existingUser.assignedClasses.length > 0) {
-                return res.status(400).json({ 
-                    message: `Thầy/Cô đang phụ trách ${existingUser.assignedClasses.length} lớp. Vui lòng vào "Quản lý Lớp học" gỡ quyền phụ trách trước khi đổi tổ bộ môn!` 
-                });
+        if (existingUser.role === "teacher") {
+            const isAssigned = existingUser.assignedClasses && existingUser.assignedClasses.length > 0;
+
+            if (department !== undefined) {
+                if (existingUser.department !== department && isAssigned) {
+                    return res.status(400).json({ 
+                        message: `Thầy/Cô đang phụ trách ${existingUser.assignedClasses.length} lớp. Vui lòng vào "Quản lý Lớp học" gỡ quyền phụ trách trước khi đổi tổ bộ môn!` 
+                    });
+                }
+                updateFields.department = department; 
             }
-            updateFields.subject = subject; 
+
+            if (subjects !== undefined) {
+                updateFields.subjects = subjects;
+            }
+
+            if (subject !== undefined) {
+                updateFields.subject = subject;
+            }
         }
 
         if (fullName) updateFields.fullName = fullName;
@@ -288,7 +299,8 @@ router.put("/users/:id", verifyToken, isAdmin, async (req, res) => {
         if (role === "student") {
             if (classId !== undefined) updateFields.classId = classId || null;
             updateFields.$unset = { assignedClasses: "" }; 
-        } else if (role === "teacher") {
+        } 
+        else if (role === "teacher") {
             if (assignedClasses) updateFields.assignedClasses = assignedClasses;
             updateFields.classId = null; 
         }
@@ -379,7 +391,7 @@ router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
 });
 
 // ==========================================
-// [MÔN HỌC]
+// [MÔN HỌC] - ĐÃ SỬA LẠI ĐỂ NHẬN DEPARTMENT
 // ==========================================
 router.get("/subjects", verifyToken, async (req, res) => {
     try {
@@ -392,16 +404,23 @@ router.get("/subjects", verifyToken, async (req, res) => {
 
 router.post("/subjects", verifyToken, isAdmin, async (req, res) => {
     try {
-        const { name } = req.body;
-        if (!name) return res.status(400).json({ message: "Vui lòng nhập tên môn học!" });
+        const { name, department } = req.body;
+        // Bắt lỗi nếu thiếu department
+        if (!name || !department) return res.status(400).json({ message: "Vui lòng nhập tên môn và chọn Tổ chuyên môn!" });
 
         const existing = await Subject.findOne({ name: name.trim() });
         if (existing) return res.status(400).json({ message: "Môn học này đã tồn tại trong hệ thống!" });
 
-        const newSubject = new Subject({ name: name.trim() });
+        // Tạo môn học mới kèm department
+        const newSubject = new Subject({ 
+            name: name.trim(),
+            department: department // Thêm dòng này
+        });
+        
         await newSubject.save();
         res.status(201).json({ message: "Thêm môn học thành công!", subject: newSubject });
     } catch (error) {
+        console.error(error);
         res.status(500).json({ message: "Lỗi thêm môn học" });
     }
 });

@@ -39,6 +39,7 @@ const CustomDateInput = ({ label, value, onChange }) => {
     }
   };
 
+  // 👉 GHI CHÚ CHỈNH MÀU: Nền (bg-slate-50) và viền (border-slate-200) của ô chọn Ngày tháng
   return (
     <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm shrink-0">
       <span className="text-xs font-bold text-slate-500 uppercase">{label}</span>
@@ -90,6 +91,8 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
   const titleRow = sheet.addRow([reportTitle.toUpperCase()]);
   sheet.mergeCells('A4:E4'); titleRow.height = 40;
   const titleCell = sheet.getCell('A4');
+  
+  // 👉 GHI CHÚ CHỈNH MÀU: Đổi mã màu Hex của chữ Tiêu đề trong file Excel xuất ra (color: { argb: 'FF0070C0' })
   titleCell.font = { name: 'Times New Roman', size: 16, bold: true, color: { argb: 'FF0070C0' } }; 
   titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
@@ -97,6 +100,7 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
   const tableHeaders = Object.keys(dataList[0]);
   const headerRow = sheet.addRow(tableHeaders); headerRow.height = 30; 
   headerRow.eachCell((cell) => {
+    // 👉 GHI CHÚ CHỈNH MÀU: Đổi màu chữ (FFFFFFFF) và màu nền header (FF0070C0) của bảng Excel
     cell.font = { name: 'Times New Roman', size: 12, bold: true, color: { argb: 'FFFFFFFF' } }; 
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0070C0' } }; 
     cell.alignment = { vertical: 'middle', horizontal: 'center' };
@@ -275,26 +279,35 @@ const StudentDashboard = () => {
     );
   };
 
+  // 👉 GHI CHÚ CHỈNH MÀU: Nền tổng của trang (bg-slate-50/50) và màu chữ chung (text-slate-800)
   return (
     <div className="min-h-screen bg-slate-50/50 font-sans text-slate-800">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+        {/* 👉 GHI CHÚ CHỈNH MÀU: Nền thanh Header trên cùng (bg-white) và viền (border-slate-200) ở thẻ <header> trên */}
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="bg-sky-500 p-2 rounded-xl"><BookOpen className="h-5 w-5 sm:h-6 sm:w-6 text-white" /></div>
+            <div className="bg-sky-500 p-2 rounded-xl">
+              {/* 👉 GHI CHÚ CHỈNH MÀU: Nền Icon Book (bg-sky-500) */}
+              <BookOpen className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+            </div>
+            {/* 👉 GHI CHÚ CHỈNH MÀU: Chữ "Học Sinh Panel" (text-sky-950) */}
             <span className="font-extrabold text-lg sm:text-xl text-sky-950 truncate max-w-[120px] sm:max-w-none">Học Sinh Panel</span>
           </div>
 
           <div className="flex items-center gap-3 sm:gap-4">
             <div className="text-right hidden sm:block">
+              {/* 👉 GHI CHÚ CHỈNH MÀU: Màu Tên học sinh (text-slate-800) và Lớp (text-sky-600) */}
               <p className="font-bold text-slate-800 leading-tight">{fullName}</p>
               <p className="text-xs font-semibold text-sky-600">
                 {profile?.classId?.name ? `Lớp ${profile.classId.name}` : profile?.className ? `Lớp ${profile.className}` : "Chưa phân lớp"}
               </p>
             </div>
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-sky-100 flex items-center justify-center text-sky-600 font-bold border-2 border-sky-200 shrink-0">
+              {/* 👉 GHI CHÚ CHỈNH MÀU: Avatar tròn (bg-sky-100, text-sky-600, border-sky-200) ở div trên */}
               {fullName.charAt(0).toUpperCase()}
             </div>
             <Button onClick={handleLogout} variant="ghost" size="icon" className="text-rose-500 hover:bg-rose-50 rounded-xl sm:w-auto sm:px-3 sm:py-2">
+              {/* 👉 GHI CHÚ CHỈNH MÀU: Nút Đăng xuất (text-rose-500 hover:bg-rose-50) ở Button trên */}
               <LogOut className="h-5 w-5 sm:mr-2" />
               <span className="hidden sm:inline font-bold">Đăng xuất</span>
             </Button>
@@ -304,6 +317,7 @@ const StudentDashboard = () => {
 
       <main className="max-w-6xl mx-auto px-4 py-6 sm:py-8 lg:py-12">
         <div className="bg-sky-500 rounded-3xl p-6 sm:p-8 lg:p-10 text-white shadow-lg shadow-sky-200 mb-6 sm:mb-8 relative overflow-hidden">
+          {/* 👉 GHI CHÚ CHỈNH MÀU: Nền của Banner chào mừng (bg-sky-500) và chữ (text-white) ở div trên */}
           <div className="relative z-10">
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-black mb-2">Chào {fullName.split(" ").pop()}! 👋</h1>
             <p className="text-sky-100 text-sm sm:text-base lg:text-lg font-medium max-w-xl leading-relaxed">
@@ -316,10 +330,12 @@ const StudentDashboard = () => {
         </div>
 
         <div className="flex gap-2 mb-6 bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 w-full sm:w-max overflow-x-auto no-scrollbar">
+          {/* 👉 GHI CHÚ CHỈNH MÀU: Nền khung chứa 2 Tabs (bg-white, border-slate-200) ở div trên */}
           <Button 
             onClick={() => setActiveTab("pending")} 
             className={`flex-1 sm:flex-none rounded-xl px-4 sm:px-6 h-11 sm:h-12 font-bold transition-all whitespace-nowrap ${activeTab === 'pending' ? 'bg-sky-100 text-sky-700 shadow-sm hover:bg-sky-200' : 'bg-transparent text-slate-500 hover:bg-slate-50 shadow-none'}`}
           >
+            {/* 👉 GHI CHÚ CHỈNH MÀU: Nút Tab ĐANG KÍCH HOẠT (bg-sky-100 text-sky-700) và KHÔNG KÍCH HOẠT (text-slate-500) */}
             <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-2" /> <span className="text-sm sm:text-base">Cần làm ({pendingAssignments.length})</span>
           </Button>
           <Button 
@@ -341,24 +357,29 @@ const StudentDashboard = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 {pendingAssignments.length === 0 ? (
                   <div className="col-span-full py-12 sm:py-16 text-center bg-white rounded-3xl border border-dashed border-sky-200 px-4">
+                    {/* 👉 GHI CHÚ CHỈNH MÀU: Khung hiển thị khi KHÔNG CÓ BÀI TẬP (bg-white border-sky-200 text-sky-400) ở div trên */}
                     <CheckCircle2 className="w-14 h-14 sm:w-16 sm:h-16 text-sky-400 mx-auto mb-4" />
                     <h3 className="text-lg sm:text-xl font-bold text-slate-700">Tuyệt vời!</h3>
                     <p className="text-slate-500 mt-1 text-sm sm:text-base">Bạn đã hoàn thành tất cả bài tập được giao.</p>
                   </div>
                 ) : (
                   pendingAssignments.map(assig => {
+                    // 👉 GHI CHÚ CHỈNH MÀU: Nền các Thẻ bài tập (bg-white) và viền (border-sky-100)
                     return (
                       <Card key={assig._id} className="rounded-3xl border-sky-100 shadow-sm hover:shadow-md transition-all bg-white flex flex-col">
                         <CardHeader className="pb-3 border-b border-slate-50 p-5 sm:p-6">
                           <div className="flex justify-between items-start mb-3 gap-2">
                             <Badge className="bg-sky-50 text-sky-600 border-0 shadow-none font-bold px-3 py-1 text-xs whitespace-nowrap">
+                              {/* 👉 GHI CHÚ CHỈNH MÀU: Huy hiệu "Đang mở" (bg-sky-50 text-sky-600) ở Badge trên */}
                               Đang mở
                             </Badge>
                             <Badge variant="outline" className="bg-slate-50 text-slate-500 font-bold border-slate-200 text-xs whitespace-nowrap shrink-0">
+                              {/* 👉 GHI CHÚ CHỈNH MÀU: Huy hiệu "Số câu hỏi" (bg-slate-50 text-slate-500) ở Badge trên */}
                               {assig.questions?.length || 0} Câu
                             </Badge>
                           </div>
                           <CardTitle className="text-lg sm:text-xl font-black text-sky-950 leading-snug line-clamp-2">
+                            {/* 👉 GHI CHÚ CHỈNH MÀU: Tiêu đề bài tập (text-sky-950) ở CardTitle trên */}
                             {assig.title}
                           </CardTitle>
                         </CardHeader>
@@ -377,6 +398,7 @@ const StudentDashboard = () => {
                             onClick={() => navigate(`/take-quiz/${assig._id}`)}
                             className="w-full h-11 sm:h-12 rounded-xl font-black text-sm sm:text-base shadow-sm bg-sky-500 hover:bg-sky-600 text-white shadow-sky-200 transition-all active:scale-95"
                           >
+                            {/* 👉 GHI CHÚ CHỈNH MÀU: Nút "Bắt đầu làm bài" (bg-sky-500 hover:bg-sky-600 text-white) ở Button trên */}
                             <PlayCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-2" /> Bắt đầu làm bài
                           </Button>
                         </CardFooter>
@@ -389,12 +411,15 @@ const StudentDashboard = () => {
 
             {activeTab === "completed" && (
               <Card className="border-none shadow-xl rounded-3xl bg-white overflow-hidden mb-10">
+                {/* 👉 GHI CHÚ CHỈNH MÀU: Thẻ chứa Bảng Lịch sử học tập (bg-white) ở Card trên */}
                 <div className="p-6 bg-sky-100 border-b border-sky-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                   {/* 👉 GHI CHÚ CHỈNH MÀU: Phần Header của Bảng Lịch sử (bg-sky-100 border-sky-200) ở div trên */}
                    <div>
                      <h3 className="text-xl sm:text-2xl font-black text-sky-900 flex items-center"><History className="w-6 h-6 mr-2 text-sky-600"/> Lịch Sử Học Tập</h3>
                      <p className="text-sky-700 font-medium text-sm mt-1">Bảng Điểm Cá Nhân</p>
                    </div>
                    <Button onClick={handleExportClick} variant="outline" className="bg-white text-sky-700 border-sky-300 hover:bg-sky-50 font-bold rounded-xl h-11 shadow-sm">
+                     {/* 👉 GHI CHÚ CHỈNH MÀU: Nút Xuất Excel Lịch sử (bg-white text-sky-700 border-sky-300 hover:bg-sky-50) ở Button trên */}
                      <Download className="w-4 h-4 mr-2"/> Xuất Excel
                    </Button>
                 </div>
@@ -408,10 +433,12 @@ const StudentDashboard = () => {
                       value={historySearch}
                       onChange={(e) => setHistorySearch(e.target.value)}
                     />
+                    {/* 👉 GHI CHÚ CHỈNH MÀU: Ô tìm kiếm (bg-slate-50 border-slate-200) ở Input trên */}
                   </div>
                   <div className="flex gap-2 sm:gap-4 overflow-x-auto pb-2 sm:pb-0">
                     <Select value={historySubject} onValueChange={setHistorySubject}>
                       <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200 font-medium shadow-sm w-[150px] shrink-0 text-sm">
+                        {/* 👉 GHI CHÚ CHỈNH MÀU: Ô chọn Môn học (bg-slate-50 border-slate-200) ở SelectTrigger trên */}
                         <div className="flex items-center">
                            <Filter className="w-4 h-4 mr-2 text-slate-400 shrink-0" />
                            <SelectValue placeholder="Tất cả môn" />
@@ -433,6 +460,7 @@ const StudentDashboard = () => {
                 <div className="p-4 sm:p-6 overflow-x-auto">
                   <Table className="min-w-[700px] border border-slate-100 rounded-2xl overflow-hidden">
                     <TableHeader className="bg-sky-50/50">
+                      {/* 👉 GHI CHÚ CHỈNH MÀU: Nền dòng Tiêu đề bảng (bg-sky-50/50) ở TableHeader trên */}
                       <TableRow className="hover:bg-transparent">
                         <TableHead className="font-bold text-sky-800 w-16 text-center rounded-tl-2xl">STT</TableHead>
                         <TableHead className="font-bold text-sky-800">Tên Bài Tập</TableHead>
@@ -453,7 +481,7 @@ const StudentDashboard = () => {
                       ) : (
                         filteredHistory.map((sub, idx) => {
                           const isPending = sub.status === 'pending';
-                          const isOverdueMock = sub.isOverdueMock; // Bài quá hạn
+                          const isOverdueMock = sub.isOverdueMock; 
                           
                           let isTimeOver = false;
                           if (sub.assignment?.dueDate) {
@@ -462,6 +490,7 @@ const StudentDashboard = () => {
                               isTimeOver = now >= due;
                           }
 
+                          // 👉 GHI CHÚ CHỈNH MÀU: Hover đổi màu khi trỏ chuột vào từng Dòng của Bảng (hover:bg-slate-50/50)
                           return (
                             <TableRow key={sub._id} className="hover:bg-slate-50/50 transition-colors border-b border-slate-100 last:border-0">
                               <TableCell className="font-medium text-slate-500 text-center">{idx + 1}</TableCell>
@@ -477,14 +506,17 @@ const StudentDashboard = () => {
                               <TableCell className="text-center">
                                  {isOverdueMock ? (
                                     <Badge className="font-bold text-sm px-3 py-1 shadow-none border-0 bg-rose-100 text-rose-700">
+                                      {/* 👉 GHI CHÚ CHỈNH MÀU: Nhãn điểm "Quá hạn" (bg-rose-100 text-rose-700) ở Badge trên */}
                                       Quá hạn
                                     </Badge>
                                  ) : isPending ? (
                                     <Badge className="font-bold text-sm px-3 py-1 shadow-none border-0 bg-amber-100 text-amber-700">
+                                      {/* 👉 GHI CHÚ CHỈNH MÀU: Nhãn điểm "Chờ chấm" (bg-amber-100 text-amber-700) ở Badge trên */}
                                       Chờ chấm
                                     </Badge>
                                  ) : (
                                     <Badge className={`font-black text-sm px-3 py-1 shadow-none border-0 ${sub.score >= 8 ? 'bg-emerald-100 text-emerald-700' : sub.score >= 5 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
+                                      {/* 👉 GHI CHÚ CHỈNH MÀU: Nhãn Điểm. Điểm >= 8 (bg-emerald-100 text-emerald-700), Điểm >= 5 (bg-amber-100 text-amber-700), Dưới 5 (bg-rose-100 text-rose-700) ở Badge trên */}
                                       {sub.score}
                                     </Badge>
                                  )}
@@ -492,6 +524,7 @@ const StudentDashboard = () => {
                               <TableCell className="text-right pr-4">
                                   {isOverdueMock ? (
                                       <Button disabled variant="outline" size="sm" className="font-bold rounded-lg shadow-sm border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed">
+                                          {/* 👉 GHI CHÚ CHỈNH MÀU: Nút "Bỏ lỡ" (text-slate-400 bg-slate-50) ở Button trên */}
                                           <FileX className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Bỏ lỡ</span>
                                       </Button>
                                   ) : isPending ? (
@@ -501,6 +534,7 @@ const StudentDashboard = () => {
                                         onClick={() => alert("Bài làm có phần tự luận đang chờ giáo viên chấm. Bạn chỉ có thể xem chi tiết đáp án khi đã có điểm chính thức nhé!")} 
                                         className="font-bold rounded-lg shadow-sm border-amber-200 text-amber-600 bg-amber-50 hover:bg-amber-100"
                                       >
+                                          {/* 👉 GHI CHÚ CHỈNH MÀU: Nút xem "Chờ chấm" (border-amber-200 text-amber-600 bg-amber-50) ở Button trên */}
                                           <Clock className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Chờ chấm</span>
                                       </Button>
                                   ) : !isTimeOver ? (
@@ -510,16 +544,17 @@ const StudentDashboard = () => {
                                         onClick={() => alert(`Bài tập này chưa hết thời gian làm bài của lớp.\n(Hạn nộp: ${formatDateVN(sub.assignment?.dueDate)}).\n\nĐể đảm bảo tính công bằng, bạn chỉ có thể xem đáp án chi tiết sau khi thời gian làm bài kết thúc.`)} 
                                         className="font-bold rounded-lg shadow-sm border-slate-200 text-slate-400 bg-slate-50 hover:bg-slate-100"
                                       >
+                                          {/* 👉 GHI CHÚ CHỈNH MÀU: Nút xem "Chưa mở" đáp án (text-slate-400 bg-slate-50) ở Button trên */}
                                           <Lock className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Chưa mở</span>
                                       </Button>
                                   ) : (
-                                      // 👉 SỬ DỤNG NAVIGATE ĐỂ CHUYỂN SANG TRANG XEM CHI TIẾT
                                       <Button 
                                         variant="outline" 
                                         size="sm" 
                                         onClick={() => navigate(`/student/submission/${sub._id}`)} 
                                         className="border-sky-200 text-sky-700 hover:bg-sky-100 font-bold rounded-lg shadow-sm"
                                       >
+                                          {/* 👉 GHI CHÚ CHỈNH MÀU: Nút "Xem bài" chi tiết (border-sky-200 text-sky-700 hover:bg-sky-100) ở Button trên */}
                                           <Eye className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Xem bài</span>
                                       </Button>
                                   )}

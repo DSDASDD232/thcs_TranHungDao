@@ -16,7 +16,7 @@ import {
   CheckCircle, Loader2, Trash2, Edit, Search, Filter, UploadCloud, FileCheck, 
   FileSpreadsheet, Sparkles, PenTool, Download, Trophy, Medal, BarChart, Calendar, 
   Menu, X, Key, Lock, Unlock, Library, Database, ChevronLeft, ChevronRight,
-  DownloadCloud, Settings // 👉 ĐÃ THÊM ICON SETTINGS
+  DownloadCloud, Settings
 } from "lucide-react";
 
 import AdminClassManagement from "./AdminClassManagement";
@@ -32,7 +32,7 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, adminName) => 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Báo Cáo', { views: [{ showGridLines: false }] });
 
-  sheet.columns = [ { width: 10 }, { width: 30 }, { width: 30 }, { width: 25 }, { width: 40 } ];
+  sheet.columns = [ { width: 10 }, { width: 30 }, { width: 30 }, { width: 35 }, { width: 40 } ];
 
   sheet.addRow(["UBND HUYỆN THỦY NGUYÊN", "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"]);
   sheet.addRow(["TRƯỜNG THCS TRẦN HƯNG ĐẠO", "", "", "Độc lập - Tự do - Hạnh phúc"]);
@@ -49,6 +49,7 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, adminName) => 
   const titleRow = sheet.addRow([reportTitle.toUpperCase()]);
   sheet.mergeCells('A4:E4'); titleRow.height = 40;
   const titleCell = sheet.getCell('A4');
+  
   titleCell.font = { name: 'Times New Roman', size: 16, bold: true, color: { argb: 'FF0070C0' } }; 
   titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
@@ -95,6 +96,13 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, adminName) => 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   saveAs(blob, `${fileName}.xlsx`);
+};
+
+// Hàm hỗ trợ lấy mảng môn học để tương thích ngược dữ liệu cũ
+const getSubjects = (user) => {
+  if (Array.isArray(user.subjects) && user.subjects.length > 0) return user.subjects;
+  if (user.subject) return [user.subject]; 
+  return [];
 };
 
 const AdminDashboard = () => {
@@ -205,7 +213,6 @@ const AdminDashboard = () => {
   const handleSubTabChange = (tab) => { setSubTab(tab); setSearchName(""); setFilterUserGrade("all"); setFilterUserClass("all"); };
   const handleMenuClick = (tab) => { setActiveTab(tab); setIsMobileMenuOpen(false); };
 
-  // 👉 HÀM SAO LƯU DỮ LIỆU
   const handleBackupDatabase = async () => {
     if (!window.confirm("Hệ thống sẽ đóng gói toàn bộ dữ liệu thành file JSON. Bạn có muốn tải về?")) return;
     setIsBackingUp(true);
@@ -226,7 +233,6 @@ const AdminDashboard = () => {
     } catch (error) { alert("Lỗi khi tạo bản sao lưu!"); } finally { setIsBackingUp(false); }
   };
 
-  // 👉 HÀM PHỤC HỒI DỮ LIỆU
   const handleRestoreDatabase = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -396,7 +402,7 @@ const AdminDashboard = () => {
   };
 
   const renderTeacherAssignments = (user) => {
-    if (!user.assignedClasses || user.assignedClasses.length === 0) return <span className="text-slate-400 italic text-xs mt-1">Chưa phân công lớp</span>;
+    if (!user.assignedClasses || user.assignedClasses.length === 0) return <span className="text-slate-400 italic text-xs mt-1 block">Chưa phân công lớp</span>;
     
     const classNames = user.assignedClasses.map(c => {
        const classId = typeof c === 'object' ? c._id : c;
@@ -407,10 +413,10 @@ const AdminDashboard = () => {
     return classNames.length > 0 ? (
        <div className="flex flex-wrap gap-1 mt-1">
           {classNames.map((name, idx) => (
-             <Badge key={idx} variant="outline" className="bg-sky-50 text-sky-700 border-sky-200 text-xs">{name}</Badge>
+             <Badge key={idx} variant="outline" className="bg-sky-50 text-sky-700 border-sky-200 text-[10px]">{name}</Badge>
           ))}
        </div>
-    ) : <span className="text-slate-400 italic text-xs mt-1">Chưa phân công</span>;
+    ) : <span className="text-slate-400 italic text-[10px] mt-1 block">Chưa phân công</span>;
   };
 
   const currentGrade = isUserDialogOpen ? newUser.grade : (isEditUserDialogOpen ? editUser?.grade : "");
@@ -430,7 +436,6 @@ const AdminDashboard = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans text-slate-800 relative">
-      
       {isMobileMenuOpen && (
         <div className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden" onClick={() => setIsMobileMenuOpen(false)}/>
       )}
@@ -453,7 +458,6 @@ const AdminDashboard = () => {
           <Button onClick={() => handleMenuClick("accounts")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'accounts' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><Users className="mr-3 h-5 w-5" /> Quản lý Tài khoản</Button>
           <Button onClick={() => handleMenuClick("leaderboard")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'leaderboard' ? 'bg-amber-500 text-white shadow-md shadow-amber-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><Trophy className="mr-3 h-5 w-5" /> Thi đua toàn trường</Button>
           
-          {/* 👉 ĐÃ THÊM TAB CÀI ĐẶT */}
           <Button onClick={() => handleMenuClick("settings")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all mt-4 ${activeTab === 'settings' ? 'bg-slate-800 text-white shadow-md shadow-slate-300' : 'text-slate-500 hover:bg-slate-200 hover:text-slate-800'}`}><Settings className="mr-3 h-5 w-5" /> Cài đặt hệ thống</Button>
         </nav>
         <div className="p-5 border-t border-slate-50"><Button onClick={handleLogout} variant="ghost" className="w-full h-11 rounded-xl text-rose-500 hover:bg-rose-50 font-bold"><LogOut className="mr-2 h-5 w-5" /> Đăng xuất</Button></div>
@@ -539,7 +543,6 @@ const AdminDashboard = () => {
               </Card>
             </div>
 
-            {/* HIỆU ỨNG ẢNH MỜ TRÀN VIỀN - GIỮ NGUYÊN TỈ LỆ ẢNH CHÍNH */}
             <div className="relative w-full h-[350px] sm:h-[450px] lg:h-[550px] rounded-3xl overflow-hidden shadow-sm border border-sky-100 bg-white group">
               <div 
                 className="w-full h-full flex transition-transform duration-700 ease-[cubic-bezier(0.25,1,0.5,1)]" 
@@ -579,7 +582,6 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* 👉 TAB CÀI ĐẶT HỆ THỐNG MỚI */}
         {activeTab === "settings" && (
           <div className="space-y-6 sm:space-y-8">
             <Card className="border-slate-100 shadow-sm rounded-3xl bg-white overflow-hidden">
@@ -718,6 +720,10 @@ const AdminDashboard = () => {
                 {subTab === "teacher" && (
                   <Button onClick={() => {
                     const data = filteredUsers.map((u, i) => {
+                      // Xử lý xuất Excel nhiều môn học
+                      const subs = getSubjects(u);
+                      const subjectStr = subs.length > 0 ? subs.map(s => `Tổ ${s}`).join(", ") : "Chưa phân tổ";
+
                       let assignedStr = "Chưa phân công";
                       if (u.assignedClasses && u.assignedClasses.length > 0) {
                         assignedStr = u.assignedClasses.map(c => {
@@ -730,7 +736,7 @@ const AdminDashboard = () => {
                         "STT": i + 1, 
                         "Tài Khoản": u.username, 
                         "Họ và Tên": u.fullName, 
-                        "Tổ chuyên môn": u.subject ? `Tổ ${u.subject}` : "Chưa phân tổ",
+                        "Tổ chuyên môn": subjectStr,
                         "Lớp phụ trách": assignedStr
                       };
                     });
@@ -786,9 +792,20 @@ const AdminDashboard = () => {
                             user.grade ? `Khối ${user.grade} - ${renderClassName(user)}` : "Chưa phân lớp"
                          ) : (
                             <div className="flex flex-col gap-1 items-start">
-                               <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px]">
-                                  {user.subject ? `Tổ ${user.subject}` : "Chưa phân tổ"}
-                               </Badge>
+                               {/* Render mảng môn học */}
+                               <div className="flex flex-wrap gap-1">
+                                 {getSubjects(user).length > 0 ? (
+                                    getSubjects(user).map((sub, idx) => (
+                                      <Badge key={idx} variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px]">
+                                         Tổ {sub}
+                                      </Badge>
+                                    ))
+                                 ) : (
+                                    <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px]">
+                                       Chưa phân tổ
+                                    </Badge>
+                                 )}
+                               </div>
                                {renderTeacherAssignments(user)}
                             </div>
                          )}
@@ -814,7 +831,6 @@ const AdminDashboard = () => {
 
       </main>
 
-      {/* DIALOG TẠO USER */}
       <Dialog open={isUserDialogOpen} onOpenChange={(val) => { setIsUserDialogOpen(val); if(!val) {setAccountFile(null); setPreviewData([]); setUploadClassId(""); setUploadGrade("");} }}>
         <DialogContent className="sm:max-w-[700px] w-[95%] max-h-[90vh] overflow-y-auto rounded-3xl border-none p-4 sm:p-6">
           <DialogHeader><DialogTitle className="text-xl sm:text-2xl font-black text-sky-950">Thêm người dùng mới</DialogTitle></DialogHeader>
@@ -899,7 +915,6 @@ const AdminDashboard = () => {
         </DialogContent>
       </Dialog>
 
-      {/* DIALOG SỬA USER */}
       <Dialog open={isEditUserDialogOpen} onOpenChange={setIsEditUserDialogOpen}>
         <DialogContent className="sm:max-w-[500px] w-[95%] rounded-2xl border-none">
           <DialogHeader><DialogTitle className="text-2xl font-bold flex items-center gap-2 text-sky-900"><Edit className="h-5 w-5"/> Sửa tài khoản</DialogTitle></DialogHeader>

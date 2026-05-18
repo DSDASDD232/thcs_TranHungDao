@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import axios from "../lib/axios"; 
 import mammoth from "mammoth"; 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
@@ -13,7 +13,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { 
   ArrowLeft, UploadCloud, CheckCircle, CheckCircle2, AlertTriangle, Eraser,
   Sparkles, FileText, Loader2, Image as ImageIcon, ListChecks, Layers,
-  PenTool, Database, Calculator, Save, Search, Filter, Eye, Trash2, PlusCircle, ArrowRight, FolderOpen
+  PenTool, Database, Calculator, Save, Search, Eye, Trash2, PlusCircle, ArrowRight, FolderOpen, Lock,
+  Calendar 
 } from "lucide-react";
 
 import RichTextEditor from "@/components/ui/RichTextEditor";
@@ -40,16 +41,75 @@ const CreateAssignment = () => {
     type: null, mcqCount: 0, essayCount: 0, essayPoints: [], totalPoints: 10
   });
 
-  const getDefaultDueDate = () => {
+  // Lấy Ngày Giờ Hiện tại (Mở đề)
+  const getCurrentDate = () => {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    return now.toISOString().slice(0, 10);
+  };
+  const getCurrentTime = () => {
+    const now = new Date();
+    return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+  };
+
+  // Lấy Ngày Giờ Hạn nộp (+24 tiếng)
+  const getDefaultDate = () => {
     const now = new Date();
     now.setHours(now.getHours() + 24); 
-    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-    return now.toISOString().slice(0, 16);
+    return now.toISOString().slice(0, 10); 
+  };
+  const getDefaultTime = () => {
+    const now = new Date();
+    now.setHours(now.getHours() + 24); 
+    return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`; 
+  };
+
+  const formatDisplayDate = (ymdString) => {
+    if (!ymdString) return "";
+    const [year, month, day] = ymdString.split("-");
+    return `${day}/${month}/${year}`;
   };
 
   const [newAssignment, setNewAssignment] = useState({ 
-    title: "", targetClass: "", subject: "", duration: "45", dueDate: getDefaultDueDate()
+    title: "", targetClass: "", subject: "", duration: "45", 
+    startDate_date: getCurrentDate(), 
+    startDate_time: getCurrentTime(), 
+    dueDate_date: getDefaultDate(), 
+    dueDate_time: getDefaultTime(),
+    password: "" 
   });
+
+  const [hasPassword, setHasPassword] = useState(false);
+
+  useEffect(() => {
+    if (!newAssignment.startDate_date || !newAssignment.startDate_time || !newAssignment.dueDate_date || !newAssignment.dueDate_time) return;
+
+    const startDateTime = new Date(`${newAssignment.startDate_date}T${newAssignment.startDate_time}:00`);
+    const currentDueDateTime = new Date(`${newAssignment.dueDate_date}T${newAssignment.dueDate_time}:00`);
+    
+    const durationMs = (parseInt(newAssignment.duration) || 0) * 60 * 1000;
+    const minDueDateTime = new Date(startDateTime.getTime() + durationMs);
+
+    if (currentDueDateTime.getTime() < minDueDateTime.getTime()) {
+      const yyyy = minDueDateTime.getFullYear();
+      const mm = String(minDueDateTime.getMonth() + 1).padStart(2, '0');
+      const dd = String(minDueDateTime.getDate()).padStart(2, '0');
+      const hh = String(minDueDateTime.getHours()).padStart(2, '0');
+      const mins = String(minDueDateTime.getMinutes()).padStart(2, '0');
+
+      setNewAssignment(prev => ({
+        ...prev,
+        dueDate_date: `${yyyy}-${mm}-${dd}`,
+        dueDate_time: `${hh}:${mins}`
+      }));
+    }
+  }, [
+    newAssignment.startDate_date, 
+    newAssignment.startDate_time, 
+    newAssignment.dueDate_date, 
+    newAssignment.dueDate_time, 
+    newAssignment.duration
+  ]);
 
   const [manualQuestions, setManualQuestions] = useState([]);
   const [assignmentFile, setAssignmentFile] = useState(null);
@@ -81,10 +141,31 @@ const CreateAssignment = () => {
         const res = await axios.get(`/assignments/${id}`, getHeader());
         const data = res.data;
 
+        const dateObj = new Date(data.dueDate);
+        const yyyy = dateObj.getFullYear();
+        const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const dd = String(dateObj.getDate()).padStart(2, '0');
+        const hh = String(dateObj.getHours()).padStart(2, '0');
+        const mins = String(dateObj.getMinutes()).padStart(2, '0');
+
+        const startObj = data.startDate ? new Date(data.startDate) : new Date();
+        const s_yyyy = startObj.getFullYear();
+        const s_mm = String(startObj.getMonth() + 1).padStart(2, '0');
+        const s_dd = String(startObj.getDate()).padStart(2, '0');
+        const s_hh = String(startObj.getHours()).padStart(2, '0');
+        const s_mins = String(startObj.getMinutes()).padStart(2, '0');
+
         setNewAssignment({
           title: data.title, targetClass: data.targetClass, subject: data.subject,
-          duration: data.duration.toString(), dueDate: new Date(data.dueDate).toISOString().slice(0, 16),
+          duration: data.duration.toString(), 
+          startDate_date: `${s_yyyy}-${s_mm}-${s_dd}`,
+          startDate_time: `${s_hh}:${s_mins}`,
+          dueDate_date: `${yyyy}-${mm}-${dd}`,
+          dueDate_time: `${hh}:${mins}`,
+          password: data.password || "" 
         });
+
+        if (data.password) setHasPassword(true);
 
         if (data.questions && data.questions.length > 0) {
           const loadedPoints = {};
@@ -143,7 +224,7 @@ const CreateAssignment = () => {
       }
     };
     fetchAssignmentData();
-  }, [id, navigate]);
+  }, [id, navigate, serverUrl]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -158,15 +239,22 @@ const CreateAssignment = () => {
         setTeacherProfile(teacherInfo);
         
         if (!id) {
-            const subject = teacherInfo.subject || "Chưa phân tổ";
-            setNewAssignment(prev => ({ ...prev, subject }));
-            setBankSubject(subject); 
+            const defaultSub = Array.isArray(teacherInfo.subjects) && teacherInfo.subjects.length > 0 
+                ? teacherInfo.subjects[0] 
+                : teacherInfo.subject || "Chưa phân tổ";
+                
+            setNewAssignment(prev => ({ ...prev, subject: defaultSub }));
+            setBankSubject(defaultSub); 
         }
         setQuestions(questionsRes.data?.questions || []);
       } catch (error) {}
     };
     fetchData();
   }, [navigate, id]);
+
+  const teacherSubjects = Array.isArray(teacherProfile?.subjects) && teacherProfile.subjects.length > 0 
+    ? teacherProfile.subjects 
+    : teacherProfile?.subject ? [teacherProfile.subject] : [];
 
   const handleSelectTemplate = (type) => {
     setTemplateConfig({ ...templateConfig, type, mcqCount: 0, essayCount: 0, essayPoints: [] });
@@ -326,9 +414,6 @@ const CreateAssignment = () => {
     if (file) setAssignmentFile(file);
   };
 
-  // ======================================================================
-  // HÀM BÓC TÁCH THÔNG MINH ĐỒNG BỘ TỪ QUESTIONBANK
-  // ======================================================================
   const extractQuestionsFromText = (text, isForPreview = false) => {
     const textParts = text.split(/(?:\n\s*HẾT\b|\n\s*Hết\b|\n\s*Bảng đáp án\b)/i);
     let mainPart = textParts[0]; 
@@ -557,12 +642,38 @@ const CreateAssignment = () => {
   const handleSubmit = async (actionType) => {
     if (!newAssignment.targetClass) return alert("Vui lòng chọn lớp để giao bài!");
     if (actionType === 'published' && !isPointsValid) return alert(`Tổng điểm hiện tại là ${roundedTotal.toFixed(2)}. Bạn bắt buộc phải chia điểm sao cho bằng đúng 10.00 mới được PHÁT HÀNH!`);
+    
+    if (hasPassword && (!newAssignment.password || newAssignment.password.trim() === "")) {
+       return alert("Bạn đã chọn Yêu cầu Mật khẩu nhưng chưa nhập mật khẩu! Vui lòng nhập mật khẩu hoặc tắt tính năng này.");
+    }
+
+    const finalStartDate = new Date(`${newAssignment.startDate_date}T${newAssignment.startDate_time}:00`);
+    const finalDueDate = new Date(`${newAssignment.dueDate_date}T${newAssignment.dueDate_time}:00`);
+    const durationMs = (parseInt(newAssignment.duration) || 0) * 60 * 1000;
+
+    if (finalDueDate.getTime() < finalStartDate.getTime() + durationMs) {
+        return alert(`Lỗi thời gian: Hạn nộp bài phải nằm sau Thời gian mở đề ít nhất ${newAssignment.duration} phút!`);
+    }
+
+    const finalStartDateISO = finalStartDate.toISOString();
+    const finalDueDateISO = finalDueDate.toISOString();
+
     setLoading(true);
     try {
       const formData = new FormData();
-      formData.append("title", newAssignment.title); formData.append("targetClass", newAssignment.targetClass); 
-      formData.append("subject", newAssignment.subject); formData.append("duration", newAssignment.duration); 
-      formData.append("dueDate", newAssignment.dueDate); formData.append("status", actionType); 
+      formData.append("title", newAssignment.title); 
+      formData.append("targetClass", newAssignment.targetClass); 
+      formData.append("subject", newAssignment.subject); 
+      formData.append("duration", newAssignment.duration); 
+      formData.append("startDate", finalStartDateISO);
+      formData.append("dueDate", finalDueDateISO);
+      formData.append("status", actionType); 
+
+      if (hasPassword && newAssignment.password.trim() !== "") {
+          formData.append("password", newAssignment.password.trim());
+      } else {
+          formData.append("password", ""); 
+      }
       
       const questionsToSave = manualQuestions.map(q => ({
           _id: q._id, tempId: q.tempId, content: q.content, type: q.type, options: q.options, correctAnswer: q.correctAnswer, difficulty: q.difficulty, subject: newAssignment.subject,
@@ -585,15 +696,18 @@ const CreateAssignment = () => {
     } catch (err) { alert("Lỗi xử lý! Vui lòng thử lại."); } finally { setLoading(false); }
   };
 
-  const availableSets = [...new Set(questions.map(q => q.questionSet).filter(Boolean))];
+  // Cập nhật lại logic tìm availableSets từ list questions theo môn học được chọn (nếu filter)
+  const availableSets = [...new Set(questions.filter(q => bankSubject === "all" || q.subject === bankSubject).map(q => q.questionSet).filter(Boolean))];
 
+  // 👉 ĐÃ SỬA BỘ LỌC TỪ KHO VÀO MANUAL: Bổ sung matchSubject
   const filteredBankQuestions = questions.filter(q => {
     const matchSearch = (q.content || "").toLowerCase().includes(bankSearch.toLowerCase());
     const matchGrade = bankGrade === "all" || q.grade === bankGrade;
+    const matchSubject = !bankSubject || bankSubject === "all" || q.subject === bankSubject;
     const matchType = bankType === "all" || q.type === bankType;
     const matchSet = bankSetName === "all" || q.questionSet === bankSetName;
     const matchPoints = !bankPoints || Number(q.points) === Number(bankPoints);
-    return matchSearch && matchGrade && matchType && matchSet && matchPoints;
+    return matchSearch && matchGrade && matchSubject && matchType && matchSet && matchPoints;
   });
 
   const toggleBankSelection = (qId) => {
@@ -641,8 +755,9 @@ const CreateAssignment = () => {
             <form onSubmit={(e) => e.preventDefault()} className="space-y-8">
               <div className="space-y-4">
                 <h3 className="text-lg sm:text-xl font-black text-sky-900 border-b border-sky-100 pb-2">1. Thông tin chung</h3>
-                <Input placeholder="Nhập tên bài tập " className="h-12 sm:h-14 rounded-xl bg-slate-50 font-bold text-base sm:text-lg border-sky-100 focus-visible:ring-sky-500" value={newAssignment.title} onChange={(e) => setNewAssignment({...newAssignment, title: e.target.value})} required />
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Input placeholder="Nhập tên bài tập..." className="h-12 sm:h-14 rounded-xl bg-slate-50 font-bold text-base sm:text-lg border-sky-100 focus-visible:ring-sky-500" value={newAssignment.title} onChange={(e) => setNewAssignment({...newAssignment, title: e.target.value})} required />
+                
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Giao cho Lớp</label>
                     <Select value={newAssignment.targetClass || ""} onValueChange={(val) => setNewAssignment({...newAssignment, targetClass: val})} required>
@@ -650,10 +765,117 @@ const CreateAssignment = () => {
                       <SelectContent>{!teacherProfile?.assignedClasses || teacherProfile.assignedClasses.length === 0 ? (<SelectItem value="none" disabled>Chưa có lớp</SelectItem>) : (teacherProfile.assignedClasses.map(c => <SelectItem key={c._id || c} value={c.name}>{c.name}</SelectItem>))}</SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1.5"><label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Môn học phụ trách</label><Input value={newAssignment.subject} readOnly className="h-11 sm:h-12 rounded-xl bg-slate-100 border-slate-200 font-bold text-sky-700 cursor-not-allowed shadow-none" /></div>
-                  <div className="space-y-1.5"><label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Thời gian (Phút)</label><Input type="number" placeholder="VD: 45" className="h-11 sm:h-12 rounded-xl bg-slate-50 border-sky-100 font-bold" value={newAssignment.duration} onChange={(e) => setNewAssignment({...newAssignment, duration: e.target.value})} required /></div>
-                  <div className="space-y-1.5"><label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Hạn nộp</label><Input type="datetime-local" className="h-11 sm:h-12 rounded-xl bg-slate-50 border-sky-100 font-bold text-slate-600" value={newAssignment.dueDate} onChange={(e) => setNewAssignment({...newAssignment, dueDate: e.target.value})} required /></div>
+
+                  <div className="space-y-1.5">
+                      <label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Môn học</label>
+                      <Select value={newAssignment.subject} onValueChange={(val) => setNewAssignment({...newAssignment, subject: val})}>
+                        <SelectTrigger className="h-11 sm:h-12 rounded-xl bg-slate-50 font-bold border-sky-100 text-sky-700 w-full">
+                          <SelectValue placeholder="Chọn môn" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {teacherSubjects.map(sub => (
+                            <SelectItem key={sub} value={sub}>{sub}</SelectItem>
+                          ))}
+                          {teacherSubjects.length === 0 && <SelectItem value="none" disabled>Chưa phân môn</SelectItem>}
+                        </SelectContent>
+                      </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                      <label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Thời gian làm bài (Phút)</label>
+                      <Input type="number" placeholder="VD: 45" className="h-11 sm:h-12 rounded-xl bg-slate-50 border-sky-100 font-bold text-sky-700" value={newAssignment.duration} onChange={(e) => setNewAssignment({...newAssignment, duration: e.target.value})} required />
+                  </div>
                 </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-4 rounded-xl border border-slate-200 mt-2">
+                   
+                   <div className="space-y-2">
+                      <label className="text-xs sm:text-sm font-bold text-slate-600 block">Ngày Mở đề (Bắt đầu)</label>
+                      <div className="flex gap-2 relative">
+                          <div className="relative flex-1">
+                             <Input 
+                                type="text"
+                                readOnly
+                                value={formatDisplayDate(newAssignment.startDate_date)}
+                                className="w-full h-11 sm:h-12 rounded-xl bg-white border-slate-200 font-bold text-slate-700 shadow-sm cursor-pointer pr-10"
+                             />
+                             <input 
+                                type="date" 
+                                min={getCurrentDate()}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+                                value={newAssignment.startDate_date} 
+                                onChange={(e) => {
+                                    const newStartDate = e.target.value;
+                                    if(!newStartDate) return;
+                                    setNewAssignment(prev => {
+                                        const newDueDate = (newStartDate > prev.dueDate_date) ? newStartDate : prev.dueDate_date;
+                                        return { ...prev, startDate_date: newStartDate, dueDate_date: newDueDate };
+                                    });
+                                }} 
+                                required 
+                             />
+                             <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                          </div>
+                          
+                          <Input type="time" className="w-[120px] h-11 sm:h-12 rounded-xl bg-white border-slate-200 font-bold text-slate-700 shadow-sm relative z-10" value={newAssignment.startDate_time} onChange={(e) => setNewAssignment({...newAssignment, startDate_time: e.target.value})} required />
+                      </div>
+                   </div>
+                   
+                   <div className="space-y-2">
+                      <label className="text-xs sm:text-sm font-bold text-slate-600 block">Ngày Đóng đề (Hạn nộp)</label>
+                      <div className="flex gap-2">
+                          <div className="relative flex-1">
+                             <Input 
+                                type="text"
+                                readOnly
+                                value={formatDisplayDate(newAssignment.dueDate_date)}
+                                className="w-full h-11 sm:h-12 rounded-xl bg-white border-slate-200 font-bold text-slate-700 shadow-sm cursor-pointer pr-10"
+                             />
+                             <input 
+                                type="date" 
+                                min={newAssignment.startDate_date || getCurrentDate()}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+                                value={newAssignment.dueDate_date} 
+                                onChange={(e) => {
+                                   if(!e.target.value) return;
+                                   setNewAssignment({...newAssignment, dueDate_date: e.target.value})
+                                }} 
+                                required 
+                             />
+                             <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                          </div>
+
+                          <Input type="time" className="w-[120px] h-11 sm:h-12 rounded-xl bg-white border-slate-200 font-bold text-slate-700 shadow-sm relative z-10" value={newAssignment.dueDate_time} onChange={(e) => setNewAssignment({...newAssignment, dueDate_time: e.target.value})} required />
+                      </div>
+                   </div>
+                </div>
+
+                <div className="bg-sky-50/50 p-4 rounded-xl border border-sky-100 mt-2 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                   <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                          <Lock className="w-5 h-5 text-sky-600" />
+                          <label className="font-bold text-sky-900 cursor-pointer flex items-center select-none" onClick={() => setHasPassword(!hasPassword)}>
+                             <input type="checkbox" className="mr-2 w-4 h-4 accent-sky-500 cursor-pointer" checked={hasPassword} onChange={() => setHasPassword(!hasPassword)} />
+                             Yêu cầu Mật khẩu làm bài (Tùy chọn)
+                          </label>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1 pl-7">Nếu tích chọn, học sinh phải nhập đúng mật khẩu mới xem được đề.</p>
+                   </div>
+                   
+                   {hasPassword && (
+                      <div className="w-full sm:w-[280px] shrink-0 animate-in fade-in slide-in-from-right-4 duration-300">
+                          <Input 
+                             type="text" 
+                             placeholder="Nhập mật khẩu cho bài thi..." 
+                             className="h-11 rounded-xl border-sky-300 focus-visible:ring-sky-500 font-bold text-sky-700 bg-white"
+                             value={newAssignment.password}
+                             onChange={(e) => setNewAssignment({...newAssignment, password: e.target.value})}
+                             autoFocus
+                          />
+                      </div>
+                   )}
+                </div>
+
               </div>
 
               <div className="border-t border-sky-100 pt-6">
@@ -764,7 +986,7 @@ const CreateAssignment = () => {
                                <div className="w-full lg:w-3/5 space-y-4 sm:space-y-6">
                                   <div className="bg-sky-50 p-3 rounded-xl border border-sky-100 flex justify-between items-center">
                                     <span className="text-sm font-bold text-sky-800 uppercase">Xem trước & Chỉnh sửa ({extractedQuestions.length} câu)</span>
-                                    <Button onClick={() => setExtractedQuestions([...extractedQuestions, { tempId: `ext_new_${Date.now()}`, type: "multiple_choice", content: "", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium" }])} size="sm" variant="outline" className="h-8 bg-white"><PlusCircle className="w-4 h-4 mr-1"/> Thêm câu</Button>
+                                    <Button onClick={() => setExtractedQuestions([...extractedQuestions, { tempId: `ext_new_${Date.now()}`, type: "multiple_choice", content: "", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium" }])} size="sm" variant="outline" className="h-8 bg-white rounded-lg"><PlusCircle className="w-4 h-4 mr-1"/> Thêm câu</Button>
                                   </div>
 
                                   {extractedQuestions.map((q, index) => (
@@ -773,9 +995,9 @@ const CreateAssignment = () => {
                                           <CardHeader className="bg-slate-50 py-3 px-4 border-b border-slate-100 flex flex-row justify-between items-center">
                                             <CardTitle className="text-base font-black text-slate-700 flex items-center gap-2">
                                               Câu {index + 1} 
-                                              <Badge variant="outline" className="text-[10px] ml-2 bg-white text-slate-500">{q.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'}</Badge>
+                                              <Badge variant="outline" className="text-[10px] ml-2 bg-white text-slate-500 rounded-md">{q.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'}</Badge>
                                             </CardTitle>
-                                            <Button type="button" onClick={() => setExtractedQuestions(extractedQuestions.filter(x => x.tempId !== q.tempId))} variant="ghost" size="icon" className="h-8 w-8 text-rose-400 hover:bg-rose-50"><Trash2 className="w-4 h-4"/></Button>
+                                            <Button type="button" onClick={() => setExtractedQuestions(extractedQuestions.filter(x => x.tempId !== q.tempId))} variant="ghost" size="icon" className="h-8 w-8 text-rose-400 hover:bg-rose-50 rounded-lg"><Trash2 className="w-4 h-4"/></Button>
                                           </CardHeader>
                                           <CardContent className="p-4 space-y-4 bg-white">
                                             <div className="flex flex-col">
@@ -798,19 +1020,19 @@ const CreateAssignment = () => {
                                                       <span className="font-black text-slate-500 w-6">{letter}.</span>
                                                       <Input className="h-10 rounded-xl bg-white border-slate-200 shadow-sm text-sm" value={opt} onChange={(e) => handleExtractedOptionChange(q.tempId, i, e.target.value)} />
                                                       {q.options.length > 2 && (
-                                                         <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveExtractedOption(q.tempId, i)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0"><Trash2 className="w-4 h-4"/></Button>
+                                                         <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveExtractedOption(q.tempId, i)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 rounded-lg"><Trash2 className="w-4 h-4"/></Button>
                                                       )}
                                                     </div>
                                                   )})}
                                                 </div>
 
                                                 <div className="flex justify-between items-center pt-2 gap-3 border-t border-slate-200 mt-2">
-                                                  <Button type="button" variant="ghost" size="sm" onClick={() => handleAddExtractedOption(q.tempId)} className="text-sky-600 hover:bg-sky-100"><PlusCircle className="w-4 h-4 mr-2"/> Thêm đáp án</Button>
+                                                  <Button type="button" variant="ghost" size="sm" onClick={() => handleAddExtractedOption(q.tempId)} className="text-sky-600 hover:bg-sky-100 rounded-lg"><PlusCircle className="w-4 h-4 mr-1"/> Thêm đáp án</Button>
                                                   
                                                   <div className="flex items-center gap-2">
-                                                    <label className="text-sm font-bold text-rose-500">ĐÁP ÁN ĐÚNG:</label>
+                                                    <label className="text-xs font-bold text-rose-500">ĐÁP ÁN ĐÚNG:</label>
                                                     <Select value={q.correctAnswer || ""} onValueChange={(val) => handleExtractedChange(q.tempId, 'correctAnswer', val)}>
-                                                      <SelectTrigger className="h-10 w-28 bg-white text-rose-600 font-bold border-rose-200 rounded-xl"><span className="truncate">{q.correctAnswer ? `Câu ${q.correctAnswer}` : "Chọn"}</span></SelectTrigger>
+                                                      <SelectTrigger className="h-9 w-24 bg-white text-rose-600 font-bold border-rose-200 rounded-lg"><span className="truncate">{q.correctAnswer ? `Câu ${q.correctAnswer}` : "Chọn"}</span></SelectTrigger>
                                                       <SelectContent>
                                                         {q.options.map((_, i) => {
                                                           const l = String.fromCharCode(65 + i);
@@ -948,7 +1170,22 @@ const CreateAssignment = () => {
                                  <SelectTrigger className="h-10 w-[140px] bg-white border-sky-200 font-bold text-sky-700"><span className="truncate">{bankType === 'all' ? 'Tất cả loại' : bankType === 'multiple_choice' ? 'Trắc nghiệm' : 'Tự luận'}</span></SelectTrigger>
                                  <SelectContent><SelectItem value="all">Tất cả loại</SelectItem><SelectItem value="multiple_choice">Trắc nghiệm</SelectItem><SelectItem value="essay">Tự luận</SelectItem></SelectContent>
                               </Select>
-                              <Input value={`Môn: ${bankSubject || "Chưa rõ"}`} readOnly className="h-10 w-[120px] bg-slate-100 border-slate-200 font-bold text-sky-700 cursor-not-allowed" />
+                              
+                              {/* ĐÃ SỬA: Thay thế <Input readOnly> thành <Select> để chọn môn học trong mục Rót từ Kho câu hỏi */}
+                              <Select value={bankSubject || "all"} onValueChange={(val) => setBankSubject(val === "all" ? "" : val)}>
+                                <SelectTrigger className="h-10 w-auto min-w-[140px] max-w-[200px] bg-white border-sky-200 font-bold text-sky-700">
+                                  <span className="truncate">
+                                    {bankSubject ? `Môn: ${bankSubject}` : "Tất cả môn của tôi"}
+                                  </span>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="all">Tất cả môn của tôi</SelectItem>
+                                  {teacherSubjects.map((sub, idx) => (
+                                    <SelectItem key={idx} value={sub}>Môn: {sub}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+
                               <Select value={bankGrade || ""} onValueChange={setBankGrade}>
                                 <SelectTrigger className="h-10 w-[110px] bg-white border-sky-200 font-bold text-sky-700"><span className="truncate">{bankGrade === 'all' ? 'Tất cả khối' : `Khối ${bankGrade}`}</span></SelectTrigger>
                                 <SelectContent><SelectItem value="all">Tất cả khối</SelectItem><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent>

@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
-  Loader2, Trash2, Edit, PlusCircle, Search, Eye, UserCheck, Users, Download, UserMinus, ShieldCheck, ArrowRightLeft, School
+  Loader2, Trash2, Edit, PlusCircle, Search, Eye, UserCheck, Users, Download, UserMinus, ShieldCheck, ArrowRightLeft
 } from "lucide-react";
 
 // ==========================================
@@ -204,6 +204,19 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
   const suggestedYears = Array.from({ length: 5 }, (_, i) => `${currentYear + i}-${currentYear + i + 1}`);
 
   // ==========================
+  // HÀM HỖ TRỢ HIỂN THỊ TỔ VÀ MÔN
+  // ==========================
+  const getTeacherInfoString = (t) => {
+    const deptStr = t.department === "KHTN" ? "Tổ KHTN" : t.department === "KHXH" ? "Tổ KHXH" : "Chưa phân tổ";
+    let subs = [];
+    if (Array.isArray(t.subjects) && t.subjects.length > 0) subs = t.subjects;
+    else if (t.subject) subs = [t.subject]; // Hỗ trợ dữ liệu cũ
+    
+    const subStr = subs.length > 0 ? subs.join(", ") : "Chưa đăng ký môn";
+    return `${deptStr} • ${subStr}`;
+  };
+
+  // ==========================
   // THAO TÁC LỚP HỌC
   // ==========================
   const handleCreateClass = async (e) => {
@@ -250,7 +263,6 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
     }
   };
 
-  // 👉 HÀM XUẤT EXCEL DANH SÁCH LỚP HỌC (TỔNG HỢP)
   const handleExportAllClasses = async () => {
     if (filteredClassesDisplay.length === 0) return alert("Không có dữ liệu lớp học để xuất!");
 
@@ -412,11 +424,9 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
             </Select>
           </div>
           <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
-             {/* 👉 NÚT XUẤT EXCEL DANH SÁCH LỚP Ở ĐÂY */}
              <Button onClick={handleExportAllClasses} className="bg-teal-500 hover:bg-teal-600 text-white h-11 px-4 sm:px-6 rounded-xl shadow-md font-bold whitespace-nowrap">
                <Download className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> <span className="hidden sm:inline">Xuất Excel</span>
              </Button>
-
              <Button onClick={() => { setNewClass({ name: "", grade: "6", academicYear: suggestedYears[0] }); setIsClassDialogOpen(true); }} className="bg-sky-500 whitespace-nowrap hover:bg-sky-600 text-white h-11 px-4 sm:px-6 rounded-xl shadow-md flex items-center font-bold">
                <PlusCircle className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Tạo lớp mới
              </Button>
@@ -608,8 +618,8 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
       <Dialog open={isAssignTeacherDialogOpen} onOpenChange={setIsAssignTeacherDialogOpen}>
         <DialogContent className="sm:max-w-[700px] w-[95%] max-h-[90vh] overflow-y-auto rounded-3xl border-none p-4 sm:p-6 bg-slate-50">
           <DialogHeader className="border-b border-slate-200 pb-4">
-            <DialogTitle className="text-xl sm:text-2xl font-black text-sky-950 flex items-center gap-2">
-              <ShieldCheck className="w-6 h-6 text-amber-500"/> Phân công Lớp {selectedClassForAssign?.name}
+            <DialogTitle className="text-xl sm:text-2xl font-black text-sky-900 flex items-center gap-2">
+              <ShieldCheck className="w-6 h-6 text-sky-500"/> Phân công Lớp {selectedClassForAssign?.name}
             </DialogTitle>
             <p className="text-slate-500 text-sm mt-1">Chỉ định giáo viên được phép quản lý và giao bài tập cho lớp này.</p>
           </DialogHeader>
@@ -625,7 +635,7 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
                            <div key={t._id} className="flex items-center justify-between bg-sky-50/50 border border-sky-100 p-3 rounded-xl">
                               <div>
                                  <p className="font-bold text-sky-900">{t.fullName}</p>
-                                 <p className="text-xs text-slate-500">{t.username} • {t.subject ? `Tổ ${t.subject}` : "Chưa phân tổ"}</p>
+                                 <p className="text-xs text-slate-500 font-medium mt-0.5">{t.username} • {getTeacherInfoString(t)}</p>
                               </div>
                               <Button onClick={() => handleRemoveTeacherFromClass(t._id)} variant="ghost" size="sm" className="text-rose-500 hover:bg-rose-100 font-bold px-3">Gỡ bỏ</Button>
                            </div>
@@ -649,7 +659,7 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
                            <div key={t._id} className="flex items-center justify-between border border-slate-100 p-3 rounded-xl hover:border-slate-300 transition-colors">
                               <div>
                                  <p className="font-bold text-slate-700">{t.fullName}</p>
-                                 <p className="text-xs text-slate-400">{t.username} • {t.subject ? `Tổ ${t.subject}` : "Chưa phân tổ"}</p>
+                                 <p className="text-xs text-slate-400 font-medium mt-0.5">{t.username} • {getTeacherInfoString(t)}</p>
                               </div>
                               <Button onClick={() => handleAddTeacherToClass(t._id)} variant="outline" size="sm" className="text-sky-600 border-sky-200 hover:bg-sky-50 font-bold px-3">Thêm vào</Button>
                            </div>
@@ -658,7 +668,7 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
                 </div>
              </div>
 
-             <Button onClick={handleSaveTeacherAssignment} disabled={loading} className="w-full h-14 rounded-xl bg-amber-500 hover:bg-amber-600 font-black text-lg text-white shadow-md">
+             <Button onClick={handleSaveTeacherAssignment} disabled={loading} className="w-full h-14 rounded-xl bg-sky-500 hover:bg-sky-600 font-black text-lg text-white shadow-md">
                  {loading ? <Loader2 className="animate-spin mr-2" /> : "Lưu Thay Đổi Phân Công"}
              </Button>
           </div>

@@ -9,9 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   School, Loader2, Users, CheckSquare, BarChart, Download, Settings, Search,
   Trophy, Calendar, Sparkles, Medal, Eye, Trash2, Filter, Pencil, Image as ImageIcon,
-  PenTool, FileText, FileQuestion, CalendarClock // Đảm bảo CalendarClock có ở đây
+  PenTool, FileText, FileQuestion, CalendarClock
 } from "lucide-react";
 
+// 👉 GHI CHÚ CHỈNH MÀU: Màu huy chương Top 1 (Vàng amber), Top 2 (Bạc slate), Top 3 (Đồng orange)
 const getRankMedal = (index) => {
   if (index === 0) return <Medal className="w-8 h-8 text-amber-400 drop-shadow-md" fill="currentColor" />;
   if (index === 1) return <Medal className="w-8 h-8 text-slate-300 drop-shadow-md" fill="currentColor" />;
@@ -116,28 +117,49 @@ export const LeaderboardTab = ({
   leaderboardTimeFilter, setLeaderboardTimeFilter, leaderboardSubjectFilter, setLeaderboardSubjectFilter,
   selectedLeaderboardClass, setSelectedLeaderboardClass, teacherProfile, allClasses, isLoadingLeaderboard, leaderboardData,
   handleExportLeaderboardExcel, handleViewStudentDetails
-}) => (
+}) => {
+
+  const teacherSubjects = Array.isArray(teacherProfile?.subjects) && teacherProfile.subjects.length > 0 
+    ? teacherProfile.subjects 
+    : teacherProfile?.subject ? [teacherProfile.subject] : [];
+
+  return (
   <div className="space-y-6">
     <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-sky-100">
-      <div><h2 className="text-xl sm:text-2xl font-bold text-sky-950 flex items-center gap-2"><Trophy className="w-6 h-6 text-amber-500" /> Bảng Xếp Hạng Lớp</h2></div>
+      <div>
+        <h2 className="text-xl sm:text-2xl font-bold text-sky-950 flex items-center gap-2">
+          <Trophy className="w-6 h-6 text-amber-500" /> Bảng Xếp Hạng Lớp
+        </h2>
+      </div>
       <div className="flex flex-wrap gap-2 w-full xl:w-auto overflow-x-auto pb-2 sm:pb-0">
         
-        <Input 
-            value={`Môn: ${teacherProfile?.subject || "Đang tải..."}`} 
-            readOnly 
-            title="Bảng thi đua tự động lọc theo môn chuyên môn của bạn"
-            className="h-10 sm:h-12 w-[140px] bg-slate-100 border-slate-200 font-bold text-sky-700 cursor-not-allowed text-sm rounded-xl" 
-        />
+        <Select value={leaderboardSubjectFilter} onValueChange={setLeaderboardSubjectFilter}>
+          <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[160px] border-none font-bold text-sky-800 shadow-sm">
+            <span className="truncate">
+              {leaderboardSubjectFilter === 'all' ? 'Tất cả môn của tôi' : `Môn: ${leaderboardSubjectFilter}`}
+            </span>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tất cả môn của tôi</SelectItem>
+            {teacherSubjects.map(sub => (
+              <SelectItem key={sub} value={sub} className="font-bold">Môn: {sub}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         <Select value={leaderboardTimeFilter} onValueChange={setLeaderboardTimeFilter}>
           <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[120px] border-none font-bold text-sky-800 shadow-sm"><Calendar className="w-4 h-4 mr-2" /><span className="truncate">{leaderboardTimeFilter === 'week' ? 'Tuần này' : leaderboardTimeFilter === 'month' ? 'Tháng này' : leaderboardTimeFilter === 'year' ? 'Năm nay' : 'Tất cả'}</span></SelectTrigger>
           <SelectContent><SelectItem value="all">Tất cả</SelectItem><SelectItem value="week">Tuần này</SelectItem><SelectItem value="month">Tháng này</SelectItem><SelectItem value="year">Năm nay</SelectItem></SelectContent>
         </Select>
+        
         <Select value={selectedLeaderboardClass} onValueChange={setSelectedLeaderboardClass}>
           <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 border-none font-bold text-sky-800 shadow-sm min-w-[140px]"><span className="truncate">{selectedLeaderboardClass ? (() => { const matched = allClasses.find(c => String(c._id) === String(selectedLeaderboardClass)); return matched ? `Lớp ${matched.name}` : "Đang tải..."; })() : "-- Chọn lớp --"}</span></SelectTrigger>
           <SelectContent>{!teacherProfile?.assignedClasses || teacherProfile.assignedClasses.length === 0 ? (<SelectItem value="none" disabled>Bạn chưa quản lý lớp</SelectItem>) : (teacherProfile.assignedClasses.map(c => { const classId = String(c._id || c); const matchedClass = allClasses.find(cls => String(cls._id) === classId); return <SelectItem key={classId} value={classId} className="font-bold">Lớp {matchedClass ? matchedClass.name : "Đang tải..."}</SelectItem> }))}</SelectContent>
         </Select>
-        <Button onClick={handleExportLeaderboardExcel} className="h-10 sm:h-12 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl shadow-sm"><Download className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Xuất Excel</span></Button>
+        
+        <Button onClick={handleExportLeaderboardExcel} className="h-10 sm:h-12 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl shadow-sm">
+          <Download className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Xuất Excel</span>
+        </Button>
       </div>
     </div>
 
@@ -150,18 +172,25 @@ export const LeaderboardTab = ({
     ) : (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-4">
-          <h3 className="font-black text-sky-900 text-lg uppercase flex items-center gap-2"><Sparkles className="w-5 h-5 text-amber-500"/> Bảng Vàng</h3>
+          <h3 className="font-black text-sky-900 text-lg uppercase flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-amber-500"/> Bảng Vàng
+          </h3>
           {leaderboardData.slice(0, 3).map((student, idx) => (
             <Card key={student._id} onClick={() => handleViewStudentDetails(student)} className={`border-none shadow-md rounded-2xl cursor-pointer transition-transform hover:scale-[1.02] ${idx === 0 ? 'bg-gradient-to-br from-amber-100 to-amber-50' : idx === 1 ? 'bg-gradient-to-br from-slate-200 to-slate-100' : 'bg-gradient-to-br from-orange-200 to-orange-100'}`}>
               <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3"><div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm">{getRankMedal(idx)}</div><div><p className="font-black text-slate-800 text-lg line-clamp-1">{student.fullName}</p><p className="text-xs font-bold text-slate-500">{student.totalTests} bài</p></div></div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm">{getRankMedal(idx)}</div>
+                    <div><p className="font-black text-slate-800 text-lg line-clamp-1">{student.fullName}</p><p className="text-xs font-bold text-slate-500">{student.totalTests} bài</p></div>
+                  </div>
                   <div className="text-right shrink-0 ml-2"><p className="font-black text-2xl">{student.averageScore}</p><p className="text-[10px] font-black uppercase opacity-60">Điểm TB</p></div>
               </CardContent>
             </Card>
           ))}
         </div>
         <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-sky-100 overflow-hidden">
-          <div className="bg-sky-50/50 p-4 border-b border-sky-100"><h3 className="font-black text-sky-900">Danh sách toàn lớp</h3></div>
+          <div className="bg-sky-50/50 p-4 border-b border-sky-100">
+            <h3 className="font-black text-sky-900">Danh sách toàn lớp</h3>
+          </div>
           <div className="max-h-[500px] overflow-x-auto p-2">
             <Table className="min-w-[400px]">
               <TableHeader><TableRow><TableHead className="w-16 text-center">Hạng</TableHead><TableHead>Họ và Tên</TableHead><TableHead className="text-center">Đã làm</TableHead><TableHead className="text-right pr-6">Điểm TB</TableHead></TableRow></TableHeader>
@@ -170,7 +199,9 @@ export const LeaderboardTab = ({
                   <TableRow key={student._id} onClick={() => handleViewStudentDetails(student)} className="cursor-pointer hover:bg-sky-50/50 transition-colors group">
                     <TableCell className="text-center font-bold text-slate-400 group-hover:text-sky-600">{idx + 1}</TableCell>
                     <TableCell className="font-bold text-slate-700 group-hover:text-sky-700">{student.fullName}</TableCell>
-                    <TableCell className="text-center font-medium"><Badge className="bg-sky-100 text-sky-700 border-0 shadow-none hover:bg-sky-200">{student.totalTests}</Badge></TableCell>
+                    <TableCell className="text-center font-medium">
+                      <Badge className="bg-sky-100 text-sky-700 border-0 shadow-none hover:bg-sky-200">{student.totalTests}</Badge>
+                    </TableCell>
                     <TableCell className="text-right pr-6 font-black text-sky-600">{student.averageScore}</TableCell>
                   </TableRow>
                 ))}
@@ -181,7 +212,7 @@ export const LeaderboardTab = ({
       </div>
     )}
   </div>
-);
+)};
 
 // ==========================================
 // 3. TAB BÀI TẬP ĐÃ GIAO
@@ -212,28 +243,23 @@ export const AssignmentsTab = ({ isLoadingData, assignments, handleDeleteAssignm
                   <TableCell className="pl-4 sm:pl-8">
                     <div className="flex flex-col gap-1 items-start">
                       <span className="font-bold text-sky-700">{assig.title}</span>
-                      {assig.status === 'draft' ? (<Badge className="bg-amber-100 text-amber-700 shadow-none border-0 text-[10px] px-2 uppercase py-0 leading-tight h-5">Bản nháp</Badge>) : (<Badge className="bg-emerald-100 text-emerald-700 shadow-none border-0 text-[10px] px-2 uppercase py-0 leading-tight h-5">Đã giao</Badge>)}
+                      {assig.status === 'draft' ? (
+                        <Badge className="bg-amber-100 text-amber-700 shadow-none border-0 text-[10px] px-2 uppercase py-0 leading-tight h-5">Bản nháp</Badge>
+                      ) : (
+                        <Badge className="bg-emerald-100 text-emerald-700 shadow-none border-0 text-[10px] px-2 uppercase py-0 leading-tight h-5">Đã giao</Badge>
+                      )}
                     </div>
                   </TableCell>
-                  <TableCell className="text-center"><Badge className="bg-sky-100 text-sky-700 font-bold px-3 shadow-none hover:bg-sky-200">{assig.targetClass}</Badge></TableCell>
+                  <TableCell className="text-center">
+                    <Badge className="bg-sky-100 text-sky-700 font-bold px-3 shadow-none hover:bg-sky-200">{assig.targetClass}</Badge>
+                  </TableCell>
                   <TableCell className="font-semibold text-center text-slate-600">{assig.questions?.length || 0}</TableCell>
                   <TableCell className="text-slate-500 text-sm font-medium">
-                    {new Date(assig.dueDate).toLocaleString("vi-VN", {
-                        day: "2-digit",
-                        month: "2-digit",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit"
-                    })}
+                    {new Date(assig.dueDate).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                   </TableCell>
                   <TableCell className="text-right pr-4 sm:pr-8">
                     <div className="flex justify-end gap-1 sm:gap-2">
-                      <Button 
-                        onClick={() => openDeadlineModal(assig)} 
-                        variant="ghost" 
-                        className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-amber-500 hover:bg-amber-50 hover:text-amber-600 rounded-xl" 
-                        title="Gia hạn nộp bài"
-                      >
+                      <Button onClick={() => openDeadlineModal(assig)} variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-amber-500 hover:bg-amber-50 hover:text-amber-600 rounded-xl" title="Gia hạn nộp bài">
                         <CalendarClock className="h-4 w-4" />
                       </Button>
 
@@ -260,13 +286,9 @@ export const AssignmentsTab = ({ isLoadingData, assignments, handleDeleteAssignm
 // 4. TAB KHO CÂU HỎI
 // ==========================================
 export const QuestionsTab = ({ 
-  searchQuery, setSearchQuery, 
-  filterGrade, setFilterGrade, 
-  filterSubject, setFilterSubject, 
-  filterType, setFilterType, 
-  filterPoints, setFilterPoints, 
-  filteredQuestions, isLoadingData, serverUrl, handleEditClick, handleDeleteQuestion,
-  teacherProfile
+  searchQuery, setSearchQuery, filterGrade, setFilterGrade, filterSubject, setFilterSubject, 
+  filterType, setFilterType, filterPoints, setFilterPoints, filteredQuestions, isLoadingData, 
+  serverUrl, handleEditClick, handleDeleteQuestion, teacherProfile
 }) => {
   const getImageUrl = (url) => {
       if (!url) return "";
@@ -275,6 +297,10 @@ export const QuestionsTab = ({
       if (!cleanUrl.startsWith("/")) cleanUrl = "/" + cleanUrl;
       return `${serverUrl}${cleanUrl}`;
   };
+
+  const teacherSubjects = Array.isArray(teacherProfile?.subjects) && teacherProfile.subjects.length > 0 
+    ? teacherProfile.subjects 
+    : teacherProfile?.subject ? [teacherProfile.subject] : [];
 
   return (
     <div className="space-y-6">
@@ -293,35 +319,37 @@ export const QuestionsTab = ({
             <div className="flex items-center gap-2 mr-2">
                <Filter className="w-5 h-5 text-sky-500" />
             </div>
-
+            
             <Select value={filterGrade} onValueChange={setFilterGrade}>
               <SelectTrigger className="h-11 w-[120px] bg-slate-50 border-sky-100 font-bold text-sky-700">
                 <span className="truncate">{filterGrade === 'all' ? 'Tất cả khối' : `Khối ${filterGrade}`}</span>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Tất cả khối</SelectItem>
-                <SelectItem value="6">Khối 6</SelectItem>
-                <SelectItem value="7">Khối 7</SelectItem>
-                <SelectItem value="8">Khối 8</SelectItem>
-                <SelectItem value="9">Khối 9</SelectItem>
+                <SelectItem value="all">Tất cả khối</SelectItem><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem>
               </SelectContent>
             </Select>
 
-            <Input 
-                value={`Môn: ${teacherProfile?.subject || "Đang tải..."}`} 
-                readOnly 
-                title="Chỉ hiển thị câu hỏi thuộc chuyên môn của bạn"
-                className="h-11 w-[140px] bg-slate-100 border-slate-200 font-bold text-sky-700 cursor-not-allowed rounded-xl" 
-            />
+            {/* 👉 ĐÃ SỬA: Đổi từ Input thành Select chọn Môn học */}
+            <Select value={filterSubject || "all"} onValueChange={(val) => setFilterSubject(val === "all" ? "" : val)}>
+              <SelectTrigger className="h-11 w-auto min-w-[160px] max-w-[250px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl px-3">
+                <span className="truncate">
+                  {filterSubject ? `Môn: ${filterSubject}` : "Tất cả môn của tôi"}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tất cả môn của tôi</SelectItem>
+                {teacherSubjects.map(sub => (
+                  <SelectItem key={sub} value={sub} className="font-bold">Môn: {sub}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
             <Select value={filterType} onValueChange={(val) => { setFilterType(val); if(val !== 'essay') setFilterPoints(""); }}>
               <SelectTrigger className="h-11 w-[140px] bg-slate-50 border-sky-100 font-bold text-sky-700">
                 <span className="truncate">{filterType === 'all' ? 'Tất cả loại' : filterType === 'multiple_choice' ? 'Trắc nghiệm' : 'Tự luận'}</span>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Tất cả loại</SelectItem>
-                <SelectItem value="multiple_choice">Trắc nghiệm</SelectItem>
-                <SelectItem value="essay">Tự luận</SelectItem>
+                <SelectItem value="all">Tất cả loại</SelectItem><SelectItem value="multiple_choice">Trắc nghiệm</SelectItem><SelectItem value="essay">Tự luận</SelectItem>
               </SelectContent>
             </Select>
 
@@ -367,9 +395,15 @@ export const QuestionsTab = ({
                          </div>
                       </div>
                    </div>
-                   <div className="col-span-2 text-center"><Badge className="bg-sky-100 text-sky-700 border-none shadow-none font-bold">Khối {q.grade}</Badge></div>
+                   <div className="col-span-2 text-center">
+                     <Badge className="bg-sky-100 text-sky-700 border-none shadow-none font-bold">Khối {q.grade}</Badge>
+                   </div>
                    <div className="col-span-2 text-center"><span className="text-sm font-medium text-slate-600">{q.subject}</span></div>
-                   <div className="col-span-2 text-center hidden sm:block"><span className={`text-xs font-bold px-2 py-1 rounded-md ${q.difficulty === 'easy' ? 'bg-emerald-100 text-emerald-700' : q.difficulty === 'hard' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>{q.difficulty === 'easy' ? 'Dễ' : q.difficulty === 'hard' ? 'Khó' : 'TB'}</span></div>
+                   <div className="col-span-2 text-center hidden sm:block">
+                      <span className={`text-xs font-bold px-2 py-1 rounded-md ${q.difficulty === 'easy' ? 'bg-emerald-100 text-emerald-700' : q.difficulty === 'hard' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {q.difficulty === 'easy' ? 'Dễ' : q.difficulty === 'hard' ? 'Khó' : 'TB'}
+                      </span>
+                   </div>
                    <div className="col-span-2 sm:col-span-1 flex justify-center gap-2">
                       <button onClick={() => handleEditClick(q)} className="text-sky-500 hover:text-sky-700 p-1"><Pencil className="w-4 h-4" /></button>
                       <button onClick={() => handleDeleteQuestion(q._id)} className="text-rose-400 hover:text-rose-600 p-1"><Trash2 className="w-4 h-4" /></button>

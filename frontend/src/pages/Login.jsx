@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "../lib/axios"; // ĐÃ SỬA: Import axiosInstance thay vì axios mặc định
+import axios from "../lib/axios"; 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,21 +18,16 @@ const Login = () => {
     setError("");
 
     try {
-      // ĐÃ SỬA: Đường dẫn gọi API cực kỳ ngắn gọn, phần gốc đã được xử lý ở lib/axios.js
       const response = await axios.post("/auth/login", formData);
       
-      // BÍ QUYẾT SỬA LỖI Ở ĐÂY: 
-      // Dùng '?.' để lấy dữ liệu an toàn dù Backend trả về nằm thẳng ở ngoài hay bọc trong object 'user'
       const token = response.data.token;
       const role = response.data.role || response.data.user?.role;
       const fullName = response.data.fullName || response.data.user?.fullName || "Người dùng";
 
-      // Lưu Token và thông tin vào localStorage
       localStorage.setItem("token", token);
       localStorage.setItem("role", role);
       localStorage.setItem("fullName", fullName);
 
-      // Chuyển hướng chính xác dựa trên quyền (Role)
       if (role === "admin") {
         navigate("/admin-dashboard");
       } else if (role === "teacher") {
@@ -50,17 +45,27 @@ const Login = () => {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-blue-50 p-4 font-sans">
+      {/* 👉 GHI CHÚ CHỈNH MÀU: Nền tổng của trang Đăng nhập (bg-blue-50) ở thẻ div trên */}
       
       <Card className="w-full max-w-lg shadow-2xl rounded-xl border border-blue-100 bg-white/95 backdrop-blur-sm overflow-hidden">
+        {/* 👉 GHI CHÚ CHỈNH MÀU: Nền khung Card đăng nhập (bg-white/95), Viền (border-blue-100) ở thẻ Card trên */}
         
         <CardHeader className="space-y-2 text-center bg-blue-100/50 pb-8 pt-10 border-b border-blue-100">
+          {/* 👉 GHI CHÚ CHỈNH MÀU: Nền phần Header chứa Tiêu đề (bg-blue-100/50), Viền dưới (border-blue-100) ở CardHeader trên */}
+          
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 border-4 border-white shadow-inner">
+            {/* 👉 GHI CHÚ CHỈNH MÀU: Nền (bg-blue-100) và Viền (border-white) của vòng tròn bọc Icon ở thẻ div trên */}
             <GraduationCap className="h-9 w-9 text-blue-600" />
+            {/* 👉 GHI CHÚ CHỈNH MÀU: Màu Icon mũ tốt nghiệp (text-blue-600) ở thẻ GraduationCap trên */}
           </div>
+          
           <CardTitle className="text-3xl font-extrabold text-blue-900 tracking-tight pt-3">
+            {/* 👉 GHI CHÚ CHỈNH MÀU: Chữ Tiêu đề "Hệ Thống Quản Lý Học Tập" (text-blue-900) ở thẻ CardTitle trên */}
             Hệ Thống Quản Lý Học Tập
           </CardTitle>
+          
           <CardDescription className="text-base text-blue-700 font-medium px-6">
+            {/* 👉 GHI CHÚ CHỈNH MÀU: Chữ Mô tả phụ (text-blue-700) ở thẻ CardDescription trên */}
             Trường THCS Trần Hưng Đạo - Chào mừng bạn quay trở lại
           </CardDescription>
         </CardHeader>
@@ -69,16 +74,19 @@ const Login = () => {
           <CardContent className="grid gap-6">
             {error && (
               <div className="text-sm font-semibold text-destructive bg-destructive/10 p-3 rounded-lg text-center border border-destructive/20">
+                {/* 👉 GHI CHÚ CHỈNH MÀU: Khung báo lỗi (text-destructive, bg-destructive/10, border-destructive/20) ở thẻ div trên */}
                 {error}
               </div>
             )}
             
             <div className="space-y-2">
               <label className="text-sm font-medium text-blue-900 pl-1" htmlFor="username">
+                {/* 👉 GHI CHÚ CHỈNH MÀU: Chữ nhãn "Tên đăng nhập" (text-blue-900) ở thẻ label trên */}
                 Tên đăng nhập
               </label>
               <div className="relative">
                 <User className="absolute left-3.5 top-3.5 h-5 w-5 text-blue-400" />
+                {/* 👉 GHI CHÚ CHỈNH MÀU: Icon User trong ô nhập (text-blue-400) ở thẻ User trên */}
                 <Input
                   id="username"
                   type="text"
@@ -88,15 +96,18 @@ const Login = () => {
                   onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                   required
                 />
+                {/* 👉 GHI CHÚ CHỈNH MÀU: Viền ô nhập Tên đăng nhập (border-blue-200), Viền lúc Click (focus:border-blue-400), Viền sáng mờ (focus:ring-blue-100) ở thẻ Input trên */}
               </div>
             </div>
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-blue-900 pl-1" htmlFor="password">
+                {/* 👉 GHI CHÚ CHỈNH MÀU: Chữ nhãn "Mật khẩu" (text-blue-900) ở thẻ label trên */}
                 Mật khẩu
               </label>
               <div className="relative">
                 <Lock className="absolute left-3.5 top-3.5 h-5 w-5 text-blue-400" />
+                {/* 👉 GHI CHÚ CHỈNH MÀU: Icon Ổ khóa trong ô nhập (text-blue-400) ở thẻ Lock trên */}
                 <Input
                   id="password"
                   type="password"
@@ -106,6 +117,7 @@ const Login = () => {
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   required
                 />
+                {/* 👉 GHI CHÚ CHỈNH MÀU: Viền ô nhập Mật khẩu (border-blue-200), Viền lúc Click (focus:border-blue-400), Viền sáng mờ (focus:ring-blue-100) ở thẻ Input trên */}
               </div>
             </div>
           </CardContent>
@@ -116,6 +128,7 @@ const Login = () => {
               type="submit" 
               disabled={loading}
             >
+              {/* 👉 GHI CHÚ CHỈNH MÀU: Nền nút Đăng nhập (bg-blue-600), Nền khi trỏ chuột (hover:bg-blue-700), Viền sáng mờ lúc click (focus:ring-blue-300) ở thẻ Button trên */}
               {loading ? (
                 <>
                   <Loader2 className="mr-3 h-5 w-5 animate-spin" />

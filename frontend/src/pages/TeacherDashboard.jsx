@@ -18,7 +18,7 @@ import {
   BookOpen, FileQuestion, LogOut, CheckSquare, School,
   Loader2, PlusCircle, Trash2, Pencil, Image as ImageIcon, X,
   UserCircle, Users, CheckCircle2, ArrowUpDown, Menu, Trophy, History, Database, Search, Filter,
-  CalendarClock // 👉 THÊM ICON ĐỒNG HỒ TẠI ĐÂY
+  CalendarClock, Calendar
 } from "lucide-react";
 
 // Import các Tab
@@ -49,6 +49,7 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, teacherName) =
   sheet.addRow([]); 
   const titleRow = sheet.addRow([reportTitle.toUpperCase()]);
   sheet.mergeCells('A4:E4'); titleRow.height = 40;
+  
   const titleCell = sheet.getCell('A4');
   titleCell.font = { name: 'Times New Roman', size: 16, bold: true, color: { argb: 'FF0070C0' } }; 
   titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
@@ -96,6 +97,20 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, teacherName) =
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   saveAs(blob, `${fileName}.xlsx`);
+};
+
+const getPrimarySubject = (profile) => {
+  if (!profile) return "";
+  if (Array.isArray(profile.subjects) && profile.subjects.length > 0) return profile.subjects[0];
+  if (profile.subject) return profile.subject;
+  return "";
+};
+
+// Hàm định dạng ngày tháng hiển thị DD/MM/YYYY
+const formatDisplayDate = (ymdString) => {
+  if (!ymdString) return "";
+  const [year, month, day] = ymdString.split("-");
+  return `${day}/${month}/${year}`;
 };
 
 const TeacherDashboard = () => {
@@ -148,10 +163,10 @@ const TeacherDashboard = () => {
   const [editingQuestionId, setEditingQuestionId] = useState(null);
   const [editQuestionData, setEditQuestionData] = useState(initialQuestionState);
 
-  // 👉 THÊM STATE ĐỔI HẠN NỘP
   const [isDeadlineModalOpen, setIsDeadlineModalOpen] = useState(false);
   const [selectedAssignmentForDeadline, setSelectedAssignmentForDeadline] = useState(null);
-  const [newDeadline, setNewDeadline] = useState("");
+  const [newDeadlineDate, setNewDeadlineDate] = useState("");
+  const [newDeadlineTime, setNewDeadlineTime] = useState("");
   const [isUpdatingDeadline, setIsUpdatingDeadline] = useState(false);
 
   const getHeader = (isMultipart = false) => {
@@ -188,9 +203,9 @@ const TeacherDashboard = () => {
       setQuestions(questionsRes.data?.questions || []);
       setAssignments(assignmentsRes.data?.assignments || []);
 
-      const tSubject = tProfile.subject || "Chưa phân tổ";
-      setFilterSubject(tSubject);
-      setLeaderboardSubjectFilter(tSubject);
+      const primarySubject = getPrimarySubject(tProfile);
+      setFilterSubject(primarySubject); 
+      setLeaderboardSubjectFilter("all"); 
 
     } catch (error) { console.error("Lỗi tải dữ liệu:", error); } finally { setIsLoadingData(false); }
   };
@@ -295,7 +310,7 @@ const TeacherDashboard = () => {
 
     setEditQuestionData({
       content: q.content, 
-      subject: q.subject || teacherProfile?.subject, 
+      subject: q.subject || getPrimarySubject(teacherProfile) || "Chung", 
       difficulty: q.difficulty, grade: q.grade || "6", type: q.type || "multiple_choice",
       optA: parsedOptions[0] || "", optB: parsedOptions[1] || "", optC: parsedOptions[2] || "", optD: parsedOptions[3] || "", correctAnswer: correctKey
     });
@@ -306,7 +321,7 @@ const TeacherDashboard = () => {
     e.preventDefault();
     const formData = new FormData();
     formData.append("content", editQuestionData.content); 
-    formData.append("subject", teacherProfile?.subject || "Chung"); 
+    formData.append("subject", editQuestionData.subject); 
     formData.append("difficulty", editQuestionData.difficulty); formData.append("grade", editQuestionData.grade); formData.append("type", editQuestionData.type);
     
     if (editQuestionData.type === "multiple_choice") {
@@ -385,24 +400,33 @@ const TeacherDashboard = () => {
     exportFormalExcel(dataToExport, `BẢNG THI ĐUA LỚP ${className}`, `Bang_Thi_Dua_${className}`, teacherProfile?.fullName || fullName || "Giáo viên phụ trách");
   };
 
-  // 👉 CÁC HÀM MỞ POPUP ĐỔI GIỜ
   const openDeadlineModal = (assignment) => {
     setSelectedAssignmentForDeadline(assignment);
-    const formattedDate = new Date(assignment.dueDate).toISOString().slice(0, 16);
-    setNewDeadline(formattedDate);
+    const d = new Date(assignment.dueDate);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mins = String(d.getMinutes()).padStart(2, '0');
+    
+    setNewDeadlineDate(`${yyyy}-${mm}-${dd}`);
+    setNewDeadlineTime(`${hh}:${mins}`);
     setIsDeadlineModalOpen(true);
   };
 
   const handleUpdateDeadline = async () => {
+    if(!window.confirm("Bạn có chắc chắn muốn thay đổi Hạn nộp của bài tập này không?")) return;
+
     setIsUpdatingDeadline(true);
     try {
+        const finalDate = new Date(`${newDeadlineDate}T${newDeadlineTime}:00`).toISOString();
         await axios.patch(`/assignments/update-deadline/${selectedAssignmentForDeadline._id}`, 
-            { newDueDate: newDeadline }, 
+            { newDueDate: finalDate }, 
             getHeader()
         );
-        alert("Cập nhật hạn nộp thành công!");
+        alert("✅ Gia hạn bài tập thành công!");
         setIsDeadlineModalOpen(false);
-        fetchData(); // Tải lại danh sách
+        fetchData();
     } catch (error) {
         alert("Lỗi khi cập nhật hạn nộp!");
     } finally {
@@ -410,10 +434,21 @@ const TeacherDashboard = () => {
     }
   };
 
+  const handleEditAssignmentClick = (id) => {
+    if(!window.confirm("Bạn có muốn mở bản nháp này để tiếp tục chỉnh sửa không?")) return;
+    navigate(`/teacher/edit-assignment/${id}`);
+  };
+
   const filteredClasses = (teacherProfile?.assignedClasses || []).filter(c => {
     const classObj = allClasses.find(ac => ac._id === c._id || ac._id === c) || c;
     return (classObj.name || "").toLowerCase().includes(searchClassQuery.toLowerCase());
   });
+
+  const getTeacherDeptInfo = () => {
+    if(!teacherProfile) return "...";
+    const deptStr = teacherProfile.department === "KHTN" ? "Tổ KHTN" : teacherProfile.department === "KHXH" ? "Tổ KHXH" : "Chưa phân tổ";
+    return deptStr;
+  };
 
   return (
     <div className="min-h-screen bg-sky-50/40 flex font-sans text-slate-800 relative">
@@ -423,7 +458,9 @@ const TeacherDashboard = () => {
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-sky-100 flex flex-col h-screen shadow-xl transform transition-transform duration-300 lg:translate-x-0 lg:static lg:shadow-[4px_0_24px_rgba(14,165,233,0.05)] ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6 flex items-center justify-between gap-3 border-b border-sky-50">
           <div className="flex items-center gap-3">
-            <div className="bg-sky-100 p-2 rounded-xl"><BookOpen className="h-6 w-6 text-sky-600" /></div>
+            <div className="bg-sky-100 p-2 rounded-xl">
+              <BookOpen className="h-6 w-6 text-sky-600" />
+            </div>
             <span className="font-extrabold text-xl text-sky-950 tracking-tight">Khu vực<br/>Giáo viên</span>
           </div>
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setIsMobileMenuOpen(false)}><X className="w-5 h-5 text-slate-500" /></Button>
@@ -434,7 +471,11 @@ const TeacherDashboard = () => {
           <Button onClick={() => handleMenuClick("assignments")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'assignments' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'hover:bg-sky-50 hover:text-sky-600 text-slate-500'}`}><CheckSquare className="mr-3 h-5 w-5" /> Bài tập đã giao</Button>
           <Button onClick={() => handleMenuClick("questions")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'questions' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'hover:bg-sky-50 hover:text-sky-600 text-slate-500'}`}><Database className="mr-3 h-5 w-5" /> Kho câu hỏi</Button>
         </nav>
-        <div className="p-5 border-t border-sky-50"><Button onClick={handleLogout} variant="ghost" className="w-full text-rose-500 hover:bg-rose-50 hover:text-rose-600 font-bold h-11 rounded-xl"><LogOut className="mr-2 h-4 w-4" /> Đăng xuất</Button></div>
+        <div className="p-5 border-t border-sky-50">
+          <Button onClick={handleLogout} variant="ghost" className="w-full text-rose-500 hover:bg-rose-50 hover:text-rose-600 font-bold h-11 rounded-xl">
+            <LogOut className="mr-2 h-4 w-4" /> Đăng xuất
+          </Button>
+        </div>
       </aside>
 
       <main className="flex-1 p-4 sm:p-8 lg:p-10 w-full overflow-y-auto overflow-x-hidden max-w-[100vw]">
@@ -448,7 +489,9 @@ const TeacherDashboard = () => {
               <h1 className="text-2xl sm:text-3xl font-extrabold text-sky-950 tracking-tight">Trường THCS Trần Hưng Đạo</h1>
               <p className="text-slate-500 mt-1 sm:mt-2 font-medium flex items-center gap-2">
                  Chào thầy/cô {fullName} 👋
-                 <Badge variant="outline" className="bg-sky-50 text-sky-700 font-bold border-sky-200 shadow-none text-xs ml-1">Tổ {teacherProfile?.subject || "..."}</Badge>
+                 <Badge variant="outline" className="bg-sky-50 text-sky-700 font-bold border-sky-200 shadow-none text-xs ml-1">
+                   {getTeacherDeptInfo()}
+                 </Badge>
               </p>
             </div>
           </div>
@@ -469,22 +512,46 @@ const TeacherDashboard = () => {
 
         <Dialog open={isEditDialogOpen} onOpenChange={(val) => { setIsEditDialogOpen(val); if(!val) {setPreviewUrl(""); setSelectedFile(null);}}}>
           <DialogContent className="sm:max-w-[700px] w-[95%] max-h-[90vh] overflow-y-auto rounded-3xl border-none shadow-2xl p-4 sm:p-8">
-            <DialogHeader><DialogTitle className="text-xl sm:text-2xl font-black text-sky-950 flex items-center gap-2 border-b border-sky-100 pb-3"><Pencil className="h-5 sm:h-6 w-5 sm:w-6 text-sky-500"/> Chỉnh sửa câu hỏi</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle className="text-xl sm:text-2xl font-black text-sky-950 flex items-center gap-2 border-b border-sky-100 pb-3">
+                <Pencil className="h-5 sm:h-6 w-5 sm:w-6 text-sky-500"/> Chỉnh sửa câu hỏi
+              </DialogTitle>
+            </DialogHeader>
             <form onSubmit={handleUpdateQuestion} className="space-y-5 pt-2">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Select value={editQuestionData.type} onValueChange={(v) => setEditQuestionData({...editQuestionData, type: v})}><SelectTrigger className="h-12 rounded-xl bg-slate-50 border-sky-100 font-bold"><span className="truncate">{editQuestionData.type === "multiple_choice" ? "Trắc nghiệm" : "Tự luận"}</span></SelectTrigger><SelectContent><SelectItem value="multiple_choice">Trắc nghiệm</SelectItem><SelectItem value="essay">Tự luận</SelectItem></SelectContent></Select>
-                <Select value={editQuestionData.grade} onValueChange={(v) => setEditQuestionData({...editQuestionData, grade: v})}><SelectTrigger className="h-12 rounded-xl bg-slate-50 border-sky-100 font-bold"><span className="truncate">{editQuestionData.grade ? `Khối ${editQuestionData.grade}` : "Chọn khối"}</span></SelectTrigger><SelectContent><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent></Select>
+                <Select value={editQuestionData.type} onValueChange={(v) => setEditQuestionData({...editQuestionData, type: v})}>
+                  <SelectTrigger className="h-12 rounded-xl bg-slate-50 border-sky-100 font-bold">
+                    <span className="truncate">{editQuestionData.type === "multiple_choice" ? "Trắc nghiệm" : "Tự luận"}</span>
+                  </SelectTrigger>
+                  <SelectContent><SelectItem value="multiple_choice">Trắc nghiệm</SelectItem><SelectItem value="essay">Tự luận</SelectItem></SelectContent>
+                </Select>
                 
-                <Input 
-                   value={`Môn: ${teacherProfile?.subject || "Chưa phân tổ"}`} 
-                   readOnly 
-                   className="h-12 rounded-xl bg-slate-100 border-slate-200 font-bold text-sky-700 cursor-not-allowed" 
-                />
+                <Select value={editQuestionData.grade} onValueChange={(v) => setEditQuestionData({...editQuestionData, grade: v})}>
+                  <SelectTrigger className="h-12 rounded-xl bg-slate-50 border-sky-100 font-bold">
+                    <span className="truncate">{editQuestionData.grade ? `Khối ${editQuestionData.grade}` : "Chọn khối"}</span>
+                  </SelectTrigger>
+                  <SelectContent><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent>
+                </Select>
+                
+                <div className="relative">
+                  <Input 
+                     value={`Môn: ${editQuestionData.subject || "Chưa phân tổ"}`} 
+                     readOnly 
+                     className="h-12 rounded-xl bg-slate-100 border-slate-200 font-bold text-sky-700 cursor-not-allowed" 
+                  />
+                </div>
 
-                <Select value={editQuestionData.difficulty} onValueChange={(v) => setEditQuestionData({...editQuestionData, difficulty: v})}><SelectTrigger className="h-12 rounded-xl bg-slate-50 border-sky-100 font-bold"><span className="truncate">{editQuestionData.difficulty === 'easy' ? 'Dễ' : editQuestionData.difficulty === 'hard' ? 'Khó' : 'Trung bình'}</span></SelectTrigger><SelectContent><SelectItem value="easy">Dễ</SelectItem><SelectItem value="medium">Trung bình</SelectItem><SelectItem value="hard">Khó</SelectItem></SelectContent></Select>
+                <Select value={editQuestionData.difficulty} onValueChange={(v) => setEditQuestionData({...editQuestionData, difficulty: v})}>
+                  <SelectTrigger className="h-12 rounded-xl bg-slate-50 border-sky-100 font-bold">
+                    <span className="truncate">{editQuestionData.difficulty === 'easy' ? 'Dễ' : editQuestionData.difficulty === 'hard' ? 'Khó' : 'Trung bình'}</span>
+                  </SelectTrigger>
+                  <SelectContent><SelectItem value="easy">Dễ</SelectItem><SelectItem value="medium">Trung bình</SelectItem><SelectItem value="hard">Khó</SelectItem></SelectContent>
+                </Select>
               </div>
               <div className="flex flex-col md:flex-row gap-4">
-                <Textarea placeholder="Nhập nội dung câu hỏi..." className="flex-1 rounded-xl min-h-[140px] border-sky-100 font-medium bg-slate-50 text-base" value={editQuestionData.content} onChange={(e) => setEditQuestionData({...editQuestionData, content: e.target.value})} required />
+                <div className="flex-1 relative">
+                  <Textarea placeholder="Nhập nội dung câu hỏi..." className="w-full h-full rounded-xl min-h-[140px] border-sky-100 font-medium bg-slate-50 text-base" value={editQuestionData.content} onChange={(e) => setEditQuestionData({...editQuestionData, content: e.target.value})} required />
+                </div>
                 <div className="w-full md:w-40 shrink-0 h-[140px]">
                   {previewUrl ? (
                     <div className="relative w-full h-full rounded-xl border border-sky-200 overflow-hidden shadow-sm group">
@@ -492,7 +559,11 @@ const TeacherDashboard = () => {
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><button type="button" onClick={handleRemoveImage} className="bg-rose-500 text-white rounded-full p-2 hover:scale-110 transition-transform"><Trash2 className="w-4 h-4"/></button></div>
                     </div>
                   ) : (
-                    <label className="flex flex-col items-center justify-center w-full h-full rounded-xl border-2 border-dashed border-sky-200 hover:border-sky-400 bg-sky-50 cursor-pointer transition-all"><ImageIcon className="w-8 h-8 text-sky-400 mb-2" /><span className="text-sm font-bold text-sky-600 text-center px-1">Thay ảnh mới</span><input type="file" ref={editFileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} /></label>
+                    <label className="flex flex-col items-center justify-center w-full h-full rounded-xl border-2 border-dashed border-sky-200 hover:border-sky-400 bg-sky-50 cursor-pointer transition-all">
+                      <ImageIcon className="w-8 h-8 text-sky-400 mb-2" />
+                      <span className="text-sm font-bold text-sky-600 text-center px-1">Thay ảnh mới</span>
+                      <input type="file" ref={editFileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
+                    </label>
                   )}
                 </div>
               </div>
@@ -500,16 +571,26 @@ const TeacherDashboard = () => {
                 <div className="bg-sky-50/50 p-4 sm:p-5 rounded-2xl border border-sky-100 space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {['A', 'B', 'C', 'D'].map((k) => (
-                      <div key={k} className="flex items-center gap-2"><span className="font-bold text-sky-800 w-5">{k}.</span><Input placeholder={`Nhập đáp án ${k}`} className="h-12 rounded-xl bg-white border-sky-100 font-medium" value={editQuestionData[`opt${k}`]} onChange={(e) => setEditQuestionData({...editQuestionData, [`opt${k}`]: e.target.value})} required /></div>
+                      <div key={k} className="flex items-center gap-2">
+                        <span className="font-bold text-sky-800 w-5">{k}.</span>
+                        <Input placeholder={`Nhập đáp án ${k}`} className="h-12 rounded-xl bg-white border-sky-100 font-medium" value={editQuestionData[`opt${k}`]} onChange={(e) => setEditQuestionData({...editQuestionData, [`opt${k}`]: e.target.value})} required />
+                      </div>
                     ))}
                   </div>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-sky-100">
                     <label className="text-sm font-bold text-rose-600 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Chọn đáp án ĐÚNG:</label>
-                    <Select value={editQuestionData.correctAnswer} onValueChange={(v) => setEditQuestionData({...editQuestionData, correctAnswer: v})}><SelectTrigger className="h-11 w-full sm:w-32 bg-white text-rose-600 font-bold border-rose-200 rounded-xl shadow-sm"><span className="truncate">{editQuestionData.correctAnswer ? `Câu ${editQuestionData.correctAnswer}` : "Chọn"}</span></SelectTrigger><SelectContent><SelectItem value="A">Câu A</SelectItem><SelectItem value="B">Câu B</SelectItem><SelectItem value="C">Câu C</SelectItem><SelectItem value="D">Câu D</SelectItem></SelectContent></Select>
+                    <Select value={editQuestionData.correctAnswer} onValueChange={(v) => setEditQuestionData({...editQuestionData, correctAnswer: v})}>
+                      <SelectTrigger className="h-11 w-full sm:w-32 bg-white text-rose-600 font-bold border-rose-200 rounded-xl shadow-sm">
+                        <span className="truncate">{editQuestionData.correctAnswer ? `Câu ${editQuestionData.correctAnswer}` : "Chọn"}</span>
+                      </SelectTrigger>
+                      <SelectContent><SelectItem value="A">Câu A</SelectItem><SelectItem value="B">Câu B</SelectItem><SelectItem value="C">Câu C</SelectItem><SelectItem value="D">Câu D</SelectItem></SelectContent>
+                    </Select>
                   </div>
                 </div>
               )}
-              <Button type="submit" disabled={loading} className="w-full h-12 sm:h-14 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-lg shadow-xl mt-2">Cập nhật thay đổi</Button>
+              <Button type="submit" disabled={loading} className="w-full h-12 sm:h-14 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-lg shadow-xl mt-2">
+                Cập nhật thay đổi
+              </Button>
             </form>
           </DialogContent>
         </Dialog>
@@ -566,7 +647,9 @@ const TeacherDashboard = () => {
                         <TableRow key={student._id} className="hover:bg-sky-50/50">
                           <TableCell className="font-medium text-slate-400 text-center">{idx + 1}</TableCell>
                           <TableCell className="font-bold text-sky-900">{student.fullName}</TableCell>
-                          <TableCell className="text-center"><Badge className="bg-teal-50 text-teal-700 shadow-none border-0">{student.totalTests || 0} bài</Badge></TableCell>
+                          <TableCell className="text-center">
+                            <Badge className="bg-teal-50 text-teal-700 shadow-none border-0">{student.totalTests || 0} bài</Badge>
+                          </TableCell>
                           <TableCell className="text-right pr-4 font-black text-sky-600">{student.averageScore || "-"}</TableCell>
                           <TableCell className="text-center">
                              <Button onClick={() => handleViewStudentDetails(student)} variant="outline" size="sm" className="h-8 text-sky-600 border-sky-200 hover:bg-sky-50 font-bold">Chi tiết</Button>
@@ -615,9 +698,9 @@ const TeacherDashboard = () => {
           </DialogContent>
         </Dialog>
 
-        {/* 👉 MODAL ĐỔI HẠN NỘP VỪA THÊM */}
+        {/* MODAL GIA HẠN BÀI TẬP (MỚI CUSTOM FORMAT NGÀY) */}
         <Dialog open={isDeadlineModalOpen} onOpenChange={setIsDeadlineModalOpen}>
-            <DialogContent className="sm:max-w-[400px] rounded-3xl border-none p-6 bg-white shadow-2xl">
+            <DialogContent className="sm:max-w-[450px] rounded-3xl border-none p-6 bg-white shadow-2xl">
                 <DialogHeader>
                     <DialogTitle className="text-xl font-black text-sky-950 flex items-center gap-2">
                         <CalendarClock className="w-6 h-6 text-amber-500" /> Gia hạn bài tập
@@ -629,12 +712,31 @@ const TeacherDashboard = () => {
                     </p>
                     <div className="space-y-2">
                         <label className="font-bold text-slate-700">Chọn hạn nộp mới</label>
-                        <input 
-                            type="datetime-local" 
-                            className="flex h-12 w-full rounded-xl border border-sky-200 bg-slate-50 px-3 py-2 font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                            value={newDeadline} 
-                            onChange={(e) => setNewDeadline(e.target.value)} 
-                        />
+                        <div className="flex gap-2 relative">
+                            <div className="relative flex-1">
+                               <Input 
+                                  type="text"
+                                  readOnly
+                                  value={formatDisplayDate(newDeadlineDate)}
+                                  className="w-full h-11 sm:h-12 rounded-xl bg-slate-50 border-sky-200 font-bold text-slate-700 shadow-sm cursor-pointer pr-10"
+                               />
+                               <input 
+                                  type="date" 
+                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+                                  value={newDeadlineDate} 
+                                  onChange={(e) => setNewDeadlineDate(e.target.value)} 
+                                  required 
+                               />
+                               <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                            </div>
+                            <Input 
+                                type="time" 
+                                className="w-[120px] h-11 sm:h-12 rounded-xl bg-slate-50 border-sky-200 font-bold text-slate-700 shadow-sm relative z-10" 
+                                value={newDeadlineTime} 
+                                onChange={(e) => setNewDeadlineTime(e.target.value)} 
+                                required 
+                            />
+                        </div>
                     </div>
                     <div className="flex justify-end gap-3 pt-4">
                         <Button variant="ghost" onClick={() => setIsDeadlineModalOpen(false)} className="rounded-xl font-bold text-slate-500 hover:text-slate-800">
@@ -673,8 +775,7 @@ const TeacherDashboard = () => {
             isLoadingData={isLoadingData} 
             assignments={assignments} 
             handleDeleteAssignment={handleDeleteAssignment} 
-            handleEditAssignment={(id) => navigate(`/teacher/edit-assignment/${id}`)}
-            // 👉 THÊM HÀM NÀY VÀO TRONG PROPS CỦA AssignmentsTab
+            handleEditAssignment={handleEditAssignmentClick}
             openDeadlineModal={openDeadlineModal}
           />
         )}

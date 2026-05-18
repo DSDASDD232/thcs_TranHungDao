@@ -52,11 +52,30 @@ const userSchema = new mongoose.Schema(
             default: "",
         },
         
-        // Dành cho Giáo viên (Lưu môn giảng dạy, ví dụ: "Toán", "Ngữ Văn")
+        // Dành cho Giáo viên (Cũ: Lưu môn giảng dạy đơn lẻ)
         subject: {
             type: String,
             default: "",
         },
+
+        // =========================================================================
+        // 👉 THÊM MỚI: PHÂN BỔ TỔ CHUYÊN MÔN LỚN VÀ ĐA MÔN HỌC CHO GIÁO VIÊN
+        // =========================================================================
+        
+        // Lưu Tổ lớn: Chỉ nhận giá trị "KHTN", "KHXH" hoặc trống ""
+        department: {
+            type: String,
+            enum: ["KHTN", "KHXH", ""],
+            default: "",
+        },
+
+        // Lưu danh sách nhiều môn học giảng dạy dưới dạng mảng các chuỗi text
+        // Ví dụ: ["Toán", "Tin học", "Công nghệ"]
+        subjects: {
+            type: [String],
+            default: [],
+        },
+        // =========================================================================
         
         // Dành cho giáo viên (Danh sách các lớp được phân công giảng dạy)
         assignedClasses: [{
@@ -64,7 +83,7 @@ const userSchema = new mongoose.Schema(
             ref: "Class"
         }],
 
-        // 👉 THÊM MỚI: Trạng thái khóa tài khoản (Cấm đăng nhập)
+        // Trạng thái khóa tài khoản (Cấm đăng nhập)
         isLocked: {
             type: Boolean,
             default: false, // Mặc định tài khoản mới tạo sẽ không bị khóa

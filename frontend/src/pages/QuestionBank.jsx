@@ -99,8 +99,13 @@ const QuestionBank = () => {
       try {
         const profRes = await axios.get("/teacher/me", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
         setTeacherProfile(profRes.data);
-        setNewSetInfo(prev => ({ ...prev, subject: profRes.data.subject || "Chưa phân tổ" }));
-        setFolderSubject(profRes.data.subject || "Chưa phân tổ");
+        
+        const defaultSub = Array.isArray(profRes.data.subjects) && profRes.data.subjects.length > 0 
+           ? profRes.data.subjects[0] 
+           : profRes.data.subject || "Chưa phân tổ";
+
+        setNewSetInfo(prev => ({ ...prev, subject: defaultSub }));
+        setFolderSubject("all"); 
         
         await fetchBankData();
       } catch (error) {
@@ -109,6 +114,17 @@ const QuestionBank = () => {
     };
     initData();
   }, []);
+
+  const teacherSubjects = Array.isArray(teacherProfile?.subjects) && teacherProfile.subjects.length > 0 
+    ? teacherProfile.subjects 
+    : teacherProfile?.subject ? [teacherProfile.subject] : [];
+
+  const getTeacherDeptInfo = () => {
+    if(!teacherProfile) return "Đang tải...";
+    const deptStr = teacherProfile.department === "KHTN" ? "Tổ KHTN" : teacherProfile.department === "KHXH" ? "Tổ KHXH" : "Chưa phân tổ";
+    const subStr = teacherSubjects.length > 0 ? teacherSubjects.join(", ") : "Chưa đăng ký môn";
+    return `${deptStr} • ${subStr}`;
+  };
 
   const handleCreateNewSet = async () => {
     const trimmedName = newSetInfo.setName.trim();
@@ -121,18 +137,42 @@ const QuestionBank = () => {
     try {
       await axios.post("/question-sets/create", {
           setName: trimmedName, 
-          subject: teacherProfile?.subject || "Chung",
+          subject: newSetInfo.subject || "Chung",
           grade: newSetInfo.grade
       }, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
       
       alert("✅ Tạo Kho câu hỏi mới thành công!");
       setIsCreateSetModalOpen(false);
-      setNewSetInfo({ setName: "", subject: teacherProfile?.subject || "", grade: "6" }); 
+      setNewSetInfo({ setName: "", subject: teacherSubjects[0] || "Chung", grade: "6" }); 
       await fetchBankData();
-      const newEmptySet = { setName: trimmedName, subject: teacherProfile?.subject || "Chung", grade: newSetInfo.grade, questions: [] };
+      const newEmptySet = { setName: trimmedName, subject: newSetInfo.subject || "Chung", grade: newSetInfo.grade, questions: [] };
       handleOpenSet(newEmptySet);
 
     } catch (err) { alert("Lỗi khi tạo Kho câu hỏi!"); } finally { setLoading(false); }
+  };
+
+  // HÀM XÓA THƯ MỤC CÓ CẢNH BÁO
+  const handleDeleteSet = async (e, set) => {
+    if (e) e.stopPropagation(); 
+    
+    const confirmMsg = `🚨 CẢNH BÁO XÓA THƯ MỤC:\n\nBạn sắp xóa toàn bộ thư mục "${set.setName}".\nTẤT CẢ câu hỏi bên trong sẽ bị xóa vĩnh viễn và không thể khôi phục.\n\nBạn có CHẮC CHẮN muốn tiếp tục xóa?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setLoading(true);
+    try {
+      await axios.delete(`/question-sets/delete-by-name/${encodeURIComponent(set.setName)}`, { 
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } 
+      });
+      
+      alert(`✅ Đã xóa thư mục "${set.setName}" thành công!`);
+      if (viewMode === "detail") setViewMode("list");
+      await fetchBankData();
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.message || "Lỗi khi xóa thư mục!");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleOpenSet = (set) => {
@@ -172,7 +212,7 @@ const QuestionBank = () => {
 
     setEditQuestionData({
       content: q.content, 
-      subject: q.subject || teacherProfile?.subject, 
+      subject: q.subject || teacherSubjects[0] || "Chung", 
       difficulty: q.difficulty, grade: q.grade || "6", type: q.type || "multiple_choice",
       options: parsedOptions, correctAnswer: correctKey,
       points: q.points || "",
@@ -201,7 +241,7 @@ const QuestionBank = () => {
     e.preventDefault();
     const formData = new FormData();
     formData.append("content", editQuestionData.content); 
-    formData.append("subject", teacherProfile?.subject || "Chung"); 
+    formData.append("subject", editQuestionData.subject); 
     formData.append("difficulty", editQuestionData.difficulty); formData.append("grade", editQuestionData.grade); formData.append("type", editQuestionData.type);
     formData.append("points", editQuestionData.type === 'essay' ? (editQuestionData.points || 0) : 0);
 
@@ -288,6 +328,7 @@ const QuestionBank = () => {
            textOpt = textOpt.substring(1).trim();
         }
 
+        // 👉 ĐÃ SỬA: Regex hỗ trợ đầy đủ A. hoặc A) cho phần tách Option
         const letterMatch = textOpt.match(/^([A-D])[.)]\s*(.*)/is);
         if (letterMatch) {
             const letter = letterMatch[1].toUpperCase();
@@ -456,7 +497,7 @@ const QuestionBank = () => {
     try {
       const formData = new FormData();
       formData.append("setName", currentSet.setName); 
-      formData.append("subject", teacherProfile?.subject || "Chung"); 
+      formData.append("subject", currentSet.subject); 
       formData.append("grade", currentSet.grade);
       
       const questionsToSave = draftQuestions.map(q => ({
@@ -502,7 +543,7 @@ const QuestionBank = () => {
             </div>
             <div>
               <h1 className="text-2xl sm:text-3xl font-black text-sky-950">Kho Câu Hỏi</h1>
-              <p className="text-slate-500 font-medium text-sm sm:text-base">Quản lý học liệu <strong className="text-sky-600">Tổ {teacherProfile?.subject || "Đang tải..."}</strong></p>
+              <p className="text-slate-500 font-medium text-sm sm:text-base">Quản lý học liệu <strong className="text-sky-600">{getTeacherDeptInfo()}</strong></p>
             </div>
           </div>
           {viewMode === "list" ? (
@@ -529,15 +570,20 @@ const QuestionBank = () => {
                <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-slate-100">
                   <div className="flex items-center gap-2 mr-2"><Filter className="w-5 h-5 text-sky-500" /><span className="text-sm font-bold text-slate-600">Bộ lọc:</span></div>
                   
-                  <Input 
-                    value={`Môn: ${folderSubject}`} 
-                    readOnly 
-                    title=""
-                    className="h-10 w-[140px] bg-slate-100 border-slate-200 font-bold text-sky-700 cursor-not-allowed text-sm" 
-                  />
+                  <Select value={folderSubject} onValueChange={setFolderSubject}>
+                    <SelectTrigger className="h-10 w-auto min-w-[140px] max-w-[200px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl">
+                      <span className="truncate">{folderSubject === 'all' ? 'Tất cả môn của tôi' : `Môn: ${folderSubject}`}</span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tất cả môn của tôi</SelectItem>
+                      {teacherSubjects.map(sub => (
+                        <SelectItem key={sub} value={sub} className="font-bold">Môn: {sub}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
                   <Select value={folderGrade} onValueChange={setFolderGrade}>
-                    <SelectTrigger className="h-10 w-[140px] bg-slate-50 border-sky-100 font-bold text-sky-700"><span className="truncate">{folderGrade === 'all' ? 'Tất cả khối' : `Khối ${folderGrade}`}</span></SelectTrigger>
+                    <SelectTrigger className="h-10 w-[140px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl"><span className="truncate">{folderGrade === 'all' ? 'Tất cả khối' : `Khối ${folderGrade}`}</span></SelectTrigger>
                     <SelectContent><SelectItem value="all">Tất cả khối</SelectItem><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent>
                   </Select>
 
@@ -559,16 +605,26 @@ const QuestionBank = () => {
             ) : (
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                  {filteredSets.map((set, idx) => (
-                    <Card key={idx} onClick={() => handleOpenSet(set)} className="border-sky-100 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-sky-300 transition-all cursor-pointer group bg-white rounded-3xl overflow-hidden">
+                    <Card key={idx} onClick={() => handleOpenSet(set)} className="relative border-sky-100 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-sky-300 transition-all cursor-pointer group bg-white rounded-3xl overflow-hidden">
+                       
+                       <Button 
+                         onClick={(e) => handleDeleteSet(e, set)} 
+                         variant="ghost" 
+                         className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity bg-rose-50 hover:bg-rose-500 text-rose-500 hover:text-white rounded-xl p-2 h-9 w-9 shadow-sm"
+                         title="Xóa toàn bộ thư mục này"
+                       >
+                         <Trash2 className="w-4 h-4" />
+                       </Button>
+
                        <CardContent className="p-6">
                          <div className="flex justify-between items-start mb-4">
                            <div className="w-14 h-14 bg-sky-50 text-sky-600 rounded-2xl flex items-center justify-center group-hover:bg-sky-100 transition-colors"><FolderOpen className="w-7 h-7" /></div>
-                           <Badge className="bg-sky-100 text-sky-700 border-0 shadow-none font-bold">{set.questions.length} Câu</Badge>
+                           <Badge className="bg-sky-100 text-sky-700 border-0 shadow-none font-bold rounded-xl">{set.questions.length} Câu</Badge>
                          </div>
-                         <h3 className="text-xl font-black text-sky-950 mb-3 line-clamp-2 group-hover:text-sky-600 transition-colors">{set.setName}</h3>
+                         <h3 className="text-xl font-black text-sky-950 mb-3 line-clamp-2 group-hover:text-sky-600 transition-colors pr-8">{set.setName}</h3>
                          <div className="flex gap-2 border-t border-slate-50 pt-3">
-                           <Badge variant="outline" className="border-slate-200 text-slate-500 font-medium">Khối {set.grade}</Badge>
-                           <Badge variant="outline" className="border-slate-200 text-sky-600 font-bold bg-sky-50">{set.subject}</Badge>
+                           <Badge variant="outline" className="border-slate-200 text-slate-500 font-medium rounded-lg">Khối {set.grade}</Badge>
+                           <Badge variant="outline" className="border-slate-200 text-sky-600 font-bold bg-sky-50 rounded-lg">{set.subject}</Badge>
                          </div>
                        </CardContent>
                     </Card>
@@ -581,11 +637,13 @@ const QuestionBank = () => {
         {viewMode === "detail" && currentSet && (
           <div className="space-y-6">
             <Card className="border-none shadow-xl rounded-3xl bg-white overflow-hidden">
-              <CardHeader className="bg-sky-500 text-white p-6 sm:p-8 border-b border-sky-600 flex flex-row justify-between items-center">
+              <CardHeader className="bg-sky-500 text-white p-6 sm:p-8 border-b border-sky-600 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                   <CardTitle className="text-2xl sm:text-3xl font-black flex items-center gap-3"><BookOpen className="w-7 h-7 sm:w-8 sm:h-8"/> Kho: {currentSet.setName}</CardTitle>
                   <p className="text-sky-50 font-medium mt-2 text-sm sm:text-base">Môn: {currentSet.subject} • Khối: {currentSet.grade} • Tổng: {currentSet.questions.length} câu</p>
                 </div>
+                
+                
               </CardHeader>
               
               <CardContent className="p-4 sm:p-8 bg-slate-50/50 min-h-[400px]">
@@ -600,16 +658,16 @@ const QuestionBank = () => {
                     <div className="flex flex-wrap items-center gap-3 mb-6 bg-white p-4 rounded-2xl border border-sky-100 shadow-sm">
                        <div className="flex items-center gap-2 mr-2"><Filter className="w-5 h-5 text-sky-500" /><span className="text-sm font-bold text-slate-600">Bộ lọc:</span></div>
                        <Select value={filterType} onValueChange={(val) => { setFilterType(val); if(val !== 'essay') setFilterPoints(""); }}>
-                         <SelectTrigger className="h-10 w-[180px] bg-slate-50 border-sky-100 font-bold text-sky-700"><span className="truncate">{filterType === 'all' ? 'Tất cả loại' : filterType === 'multiple_choice' ? 'Trắc nghiệm' : 'Tự luận'}</span></SelectTrigger>
+                         <SelectTrigger className="h-10 w-[180px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl"><span className="truncate">{filterType === 'all' ? 'Tất cả loại' : filterType === 'multiple_choice' ? 'Trắc nghiệm' : 'Tự luận'}</span></SelectTrigger>
                          <SelectContent><SelectItem value="all">Tất cả loại</SelectItem><SelectItem value="multiple_choice">Trắc nghiệm</SelectItem><SelectItem value="essay">Tự luận</SelectItem></SelectContent>
                        </Select>
-                       {filterType === 'essay' && (<Input type="number" step="0.25" placeholder="Lọc theo điểm..." value={filterPoints} onChange={(e) => setFilterPoints(e.target.value)} className="h-10 w-[140px] bg-slate-50 border-sky-100 font-bold text-sky-700" />)}
+                       {filterType === 'essay' && (<Input type="number" step="0.25" placeholder="Lọc theo điểm..." value={filterPoints} onChange={(e) => setFilterPoints(e.target.value)} className="h-10 w-[140px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl" />)}
                     </div>
                  )}
 
                  {isAddingNew && (
                     <div className="bg-white border border-sky-200 rounded-3xl p-6 shadow-sm mb-8 relative">
-                       <Button onClick={() => setIsAddingNew(false)} variant="ghost" className="absolute top-4 right-4 text-slate-400 hover:text-rose-500">Hủy bỏ</Button>
+                       <Button onClick={() => setIsAddingNew(false)} variant="ghost" className="absolute top-4 right-4 text-slate-400 hover:text-rose-500 rounded-xl">Hủy bỏ</Button>
                        <h3 className="text-xl font-black text-sky-800 mb-4 flex items-center"><Layers className="w-5 h-5 mr-2"/> Bổ sung câu hỏi mới</h3>
                        
                        <div className="flex bg-slate-100 rounded-xl w-full p-1 mb-6">
@@ -631,7 +689,6 @@ const QuestionBank = () => {
                                </div>
                             ) : (
                                <div className="flex flex-col lg:flex-row gap-6 items-start">
-                                 {/* Khung trái: Raw Text */}
                                  <div className="w-full lg:w-2/5 flex flex-col gap-0 sticky top-4 z-10">
                                     <div className="flex justify-between items-center bg-slate-100 p-3 rounded-t-xl border border-slate-200 border-b-0 shadow-sm">
                                       <span className="text-sm font-bold text-slate-700 uppercase">Văn bản thô (File gốc)</span>
@@ -652,22 +709,21 @@ const QuestionBank = () => {
                                     />
                                  </div>
 
-                                 {/* Khung phải: Danh sách đã bóc */}
                                  <div className="w-full lg:w-3/5 space-y-4">
                                     <div className="bg-sky-50 p-3 rounded-xl border border-sky-100 flex justify-between items-center">
                                       <span className="text-sm font-bold text-sky-800 uppercase">Xem trước ({extractedQuestions.length} câu)</span>
-                                      <Button onClick={() => setExtractedQuestions([...extractedQuestions, { tempId: `ext_new_${Date.now()}`, type: "multiple_choice", content: "", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium" }])} size="sm" variant="outline" className="h-8 bg-white"><PlusCircle className="w-4 h-4 mr-1"/> Thêm câu</Button>
+                                      <Button onClick={() => setExtractedQuestions([...extractedQuestions, { tempId: `ext_new_${Date.now()}`, type: "multiple_choice", content: "", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium" }])} size="sm" variant="outline" className="h-8 bg-white rounded-lg"><PlusCircle className="w-4 h-4 mr-1"/> Thêm câu</Button>
                                     </div>
 
                                     {extractedQuestions.map((q, index) => (
-                                        <Card key={q.tempId} className="border-sky-200 shadow-sm relative">
+                                        <Card key={q.tempId} className="border-sky-200 shadow-sm relative rounded-2xl overflow-hidden">
                                             <div className="absolute top-0 left-0 w-1.5 h-full bg-emerald-400"></div>
                                             <CardHeader className="bg-slate-50 py-3 px-4 border-b border-slate-100 flex flex-row justify-between items-center">
                                               <CardTitle className="text-base font-black text-slate-700 flex items-center gap-2">
                                                 Câu {index + 1} 
-                                                <Badge variant="outline" className="text-[10px] ml-2 bg-white text-slate-500">{q.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'}</Badge>
+                                                <Badge variant="outline" className="text-[10px] ml-2 bg-white text-slate-500 rounded-md">{q.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'}</Badge>
                                               </CardTitle>
-                                              <Button type="button" onClick={() => setExtractedQuestions(extractedQuestions.filter(x => x.tempId !== q.tempId))} variant="ghost" size="icon" className="h-8 w-8 text-rose-400 hover:bg-rose-50"><Trash2 className="w-4 h-4"/></Button>
+                                              <Button type="button" onClick={() => setExtractedQuestions(extractedQuestions.filter(x => x.tempId !== q.tempId))} variant="ghost" size="icon" className="h-8 w-8 text-rose-400 hover:bg-rose-50 rounded-lg"><Trash2 className="w-4 h-4"/></Button>
                                             </CardHeader>
                                             <CardContent className="p-4 space-y-4 bg-white">
                                               <RichTextEditor value={q.content} onChange={(val) => handleExtractedChange(q.tempId, 'content', val)} />
@@ -680,16 +736,18 @@ const QuestionBank = () => {
                                               {q.type === 'multiple_choice' && (
                                                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
                                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                    {q.options.map((opt, i) => (
+                                                    {q.options.map((opt, i) => {
+                                                      const letter = String.fromCharCode(65 + i);
+                                                      return (
                                                       <div key={i} className="flex items-center gap-2">
-                                                        <span className="font-black text-slate-500 w-6">{String.fromCharCode(65 + i)}.</span>
+                                                        <span className="font-black text-slate-500 w-6">{letter}.</span>
                                                         <Input className="h-10 rounded-xl bg-white border-slate-200 shadow-sm text-sm" value={opt} onChange={(e) => handleExtractedOptionChange(q.tempId, i, e.target.value)} />
-                                                        {q.options.length > 2 && <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveExtractedOption(q.tempId, i)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0"><Trash2 className="w-4 h-4"/></Button>}
+                                                        {q.options.length > 2 && <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveExtractedOption(q.tempId, i)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 rounded-lg"><Trash2 className="w-4 h-4"/></Button>}
                                                       </div>
-                                                    ))}
+                                                    )})}
                                                   </div>
                                                   <div className="flex justify-between items-center pt-2 border-t border-slate-200 mt-2">
-                                                    <Button type="button" variant="ghost" size="sm" onClick={() => handleAddExtractedOption(q.tempId)} className="text-sky-600 hover:bg-sky-100"><PlusCircle className="w-4 h-4 mr-1"/> Thêm đáp án</Button>
+                                                    <Button type="button" variant="ghost" size="sm" onClick={() => handleAddExtractedOption(q.tempId)} className="text-sky-600 hover:bg-sky-100 rounded-lg"><PlusCircle className="w-4 h-4 mr-1"/> Thêm đáp án</Button>
                                                     <div className="flex items-center gap-2">
                                                       <label className="text-xs font-bold text-rose-500">ĐÁP ÁN ĐÚNG:</label>
                                                       <Select value={q.correctAnswer || ""} onValueChange={(val) => handleExtractedChange(q.tempId, 'correctAnswer', val)}>
@@ -721,11 +779,11 @@ const QuestionBank = () => {
                         {creationMethod === "manual" && (
                           <div className="space-y-6">
                             {draftQuestions.map((q, index) => (
-                              <Card key={q.tempId} className="border-sky-200 shadow-sm relative overflow-hidden group">
+                              <Card key={q.tempId} className="border-sky-200 shadow-sm relative overflow-hidden group rounded-2xl">
                                 <div className="absolute top-0 left-0 w-1.5 h-full bg-sky-400"></div>
                                 <CardHeader className="bg-slate-50/50 py-3 px-4 border-b border-slate-100 flex flex-row justify-between items-center">
                                   <CardTitle className="text-base font-black text-slate-700">Câu mới {index + 1} (Đang soạn)</CardTitle>
-                                  <Button onClick={() => setDraftQuestions(draftQuestions.filter(x => x.tempId !== q.tempId))} variant="ghost" size="icon" className="h-8 w-8 text-rose-400 hover:bg-rose-50"><Trash2 className="w-4 h-4"/></Button>
+                                  <Button onClick={() => setDraftQuestions(draftQuestions.filter(x => x.tempId !== q.tempId))} variant="ghost" size="icon" className="h-8 w-8 text-rose-400 hover:bg-rose-50 rounded-lg"><Trash2 className="w-4 h-4"/></Button>
                                 </CardHeader>
                                 <CardContent className="p-5 space-y-4 bg-white">
                                    
@@ -755,7 +813,6 @@ const QuestionBank = () => {
                                      </div>
                                    </div>
 
-                                   {/* 👉 Luôn hiện box Hướng dẫn giải KHÔNG ĐIỀU KIỆN */}
                                    <div className="mt-4 p-4 bg-emerald-50/50 rounded-xl border border-emerald-100">
                                       <h4 className="text-sm font-bold text-emerald-700 mb-3 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Đáp án / Hướng dẫn giải </h4>
                                       <div className="flex flex-col md:flex-row gap-4">
@@ -784,12 +841,12 @@ const QuestionBank = () => {
                                         <div className="grid grid-cols-2 gap-3">
                                           {q.options.map((optLabel, i) => (
                                             <div key={i} className="flex items-center gap-2"><span className="font-bold text-slate-500 w-6">{String.fromCharCode(65 + i)}.</span><Input className="h-10 rounded-xl bg-white border-slate-200 shadow-sm text-sm" value={optLabel} onChange={(e) => handleDraftOptionChange(q.tempId, i, e.target.value)} />
-                                            {q.options.length > 2 && <Button type="button" variant="ghost" size="icon" onClick={() => setDraftQuestions(draftQuestions.map(draft => draft.tempId === q.tempId ? {...draft, options: draft.options.filter((_, idx) => idx !== i)} : draft))} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0"><Trash2 className="w-4 h-4"/></Button>}
+                                            {q.options.length > 2 && <Button type="button" variant="ghost" size="icon" onClick={() => setDraftQuestions(draftQuestions.map(draft => draft.tempId === q.tempId ? {...draft, options: draft.options.filter((_, idx) => idx !== i)} : draft))} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 rounded-lg"><Trash2 className="w-4 h-4"/></Button>}
                                             </div>
                                           ))}
                                         </div>
                                         <div className="flex justify-between items-center pt-2 border-t border-slate-200 mt-2">
-                                          <Button type="button" variant="ghost" size="sm" onClick={() => setDraftQuestions(draftQuestions.map(draft => draft.tempId === q.tempId ? {...draft, options: [...draft.options, ""]} : draft))} className="text-sky-600 hover:bg-sky-100"><PlusCircle className="w-4 h-4 mr-1"/> Thêm đáp án</Button>
+                                          <Button type="button" variant="ghost" size="sm" onClick={() => setDraftQuestions(draftQuestions.map(draft => draft.tempId === q.tempId ? {...draft, options: [...draft.options, ""]} : draft))} className="text-sky-600 hover:bg-sky-100 rounded-lg"><PlusCircle className="w-4 h-4 mr-1"/> Thêm đáp án</Button>
                                           <div className="flex items-center gap-2">
                                             <label className="text-sm font-bold text-rose-500">ĐÁP ÁN ĐÚNG:</label>
                                             <Select value={q.correctAnswer || ""} onValueChange={(val) => handleDraftChange(q.tempId, 'correctAnswer', val)}>
@@ -829,15 +886,15 @@ const QuestionBank = () => {
                  ) : (
                     <div className={`space-y-4 ${isAddingNew ? 'opacity-50 pointer-events-none' : ''}`}>
                        {displayedQuestions.map((q, i) => (
-                          <Card key={q._id} className="border-sky-100 shadow-sm bg-white hover:border-sky-300 transition-colors">
+                          <Card key={q._id} className="border-sky-100 shadow-sm bg-white hover:border-sky-300 transition-colors rounded-2xl overflow-hidden">
                               <div className="p-4 sm:p-5 flex flex-col sm:flex-row gap-4 relative">
-                                <div className="absolute top-0 left-0 w-1 sm:w-1.5 h-full bg-sky-400 rounded-l-3xl"></div>
+                                <div className="absolute top-0 left-0 w-1 sm:w-1.5 h-full bg-sky-400"></div>
                                 <div className="font-black text-sky-700 bg-sky-100 px-3 py-1 rounded-lg h-max shrink-0 w-max">Câu {i+1}</div>
                                 <div className="flex-1 space-y-3">
                                    
                                    <div className="flex items-center gap-2">
-                                      <Badge variant="outline" className="bg-slate-50 text-slate-500 text-[10px]">{q.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'}</Badge>
-                                      {q.type === 'essay' && q.points > 0 && <Badge variant="outline" className="bg-indigo-50 border-indigo-200 text-indigo-700 font-black text-[10px]">{q.points} Điểm</Badge>}
+                                      <Badge variant="outline" className="bg-slate-50 text-slate-500 text-[10px] rounded-md">{q.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'}</Badge>
+                                      {q.type === 'essay' && q.points > 0 && <Badge variant="outline" className="bg-indigo-50 border-indigo-200 text-indigo-700 font-black text-[10px] rounded-md">{q.points} Điểm</Badge>}
                                    </div>
 
                                    <div 
@@ -847,7 +904,6 @@ const QuestionBank = () => {
 
                                    {q.imageUrl && <img src={getImageUrl(q.imageUrl)} className="max-h-40 mt-2 rounded-xl border border-slate-200 shadow-sm" alt="Đề bài" />}
                                    
-                                   {/* 👉 HIỂN THỊ HƯỚNG DẪN CHO TOÀN BỘ CÂU HỎI TRONG KHO NẾU CÓ */}
                                    {(q.essayAnswerText || q.essayAnswerImageUrl) && (
                                       <div className="mt-2 p-3 bg-emerald-50 rounded-xl border border-emerald-100">
                                          <p className="text-xs font-bold text-emerald-700 mb-1 flex items-center"><CheckCircle2 className="w-3 h-3 mr-1"/> Hướng dẫn giải</p>
@@ -857,7 +913,7 @@ const QuestionBank = () => {
                                              dangerouslySetInnerHTML={{ __html: q.essayAnswerText }}
                                            />
                                          )}
-                                         {q.essayAnswerImageUrl && <Badge className="mt-1 bg-emerald-100 text-emerald-700 border-0 shadow-none text-[10px]">Có đính kèm ảnh</Badge>}
+                                         {q.essayAnswerImageUrl && <Badge className="mt-1 bg-emerald-100 text-emerald-700 border-0 shadow-none text-[10px] rounded-md">Có đính kèm ảnh</Badge>}
                                       </div>
                                    )}
 
@@ -904,11 +960,17 @@ const QuestionBank = () => {
                 
                 <div className="space-y-2">
                   <label className="font-bold text-slate-700">Môn học</label>
-                  <Input 
-                    value={teacherProfile?.subject || "Chưa rõ"} 
-                    readOnly 
-                    className="h-12 rounded-xl bg-slate-100 border-slate-200 font-bold text-sky-700 cursor-not-allowed" 
-                  />
+                  <Select value={newSetInfo.subject} onValueChange={(val) => setNewSetInfo({...newSetInfo, subject: val})}>
+                    <SelectTrigger className="h-12 rounded-xl bg-slate-50 border-sky-200 font-bold">
+                      <SelectValue placeholder="Chọn môn" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teacherSubjects.map(sub => (
+                        <SelectItem key={sub} value={sub}>Môn: {sub}</SelectItem>
+                      ))}
+                      {teacherSubjects.length === 0 && <SelectItem value="none" disabled>Chưa có môn</SelectItem>}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
@@ -959,7 +1021,6 @@ const QuestionBank = () => {
                 </div>
               </div>
 
-              {/* 👉 ĐÃ SỬA: BỎ ĐIỀU KIỆN ẨN, LUÔN LUÔN HIỆN KHUNG HƯỚNG DẪN GIẢI KHI SỬA */}
               <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 shadow-sm">
                   <label className="text-sm font-bold text-emerald-700 block mb-3 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Đáp án / Hướng dẫn giải</label>
                   <div className="flex flex-col md:flex-row gap-4">
@@ -1000,29 +1061,28 @@ const QuestionBank = () => {
                             <Button type="button" variant="ghost" size="icon" onClick={() => {
                                 const newOpts = editQuestionData.options.filter((_, idx) => idx !== i);
                                 setEditQuestionData({...editQuestionData, options: newOpts});
-                            }} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0"><Trash2 className="w-4 h-4"/></Button>
+                            }} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 rounded-lg"><Trash2 className="w-4 h-4"/></Button>
                         )}
                       </div>
                     )})}
                   </div>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setEditQuestionData({...editQuestionData, options: [...editQuestionData.options, ""]})} className="text-sky-600 hover:bg-sky-100 w-max"><PlusCircle className="w-4 h-4 mr-2"/> Thêm đáp án</Button>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-sky-100">
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setEditQuestionData({...editQuestionData, options: [...editQuestionData.options, ""]})} className="text-sky-600 hover:bg-sky-100 w-max rounded-lg"><PlusCircle className="w-4 h-4 mr-2"/> Thêm đáp án</Button>
                     <div className="flex items-center gap-2">
                       <label className="text-sm font-bold text-rose-600 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Chọn đáp án ĐÚNG:</label>
-                      <Select value={editQuestionData.correctAnswer || ""} onValueChange={(v) => setEditQuestionData({...editQuestionData, correctAnswer: v})}>
-                        <SelectTrigger className="h-11 w-full sm:w-32 bg-rose-50 text-rose-600 font-bold border-rose-200 rounded-xl shadow-sm"><span className="truncate">{editQuestionData.correctAnswer ? `Câu ${editQuestionData.correctAnswer}` : "Chọn"}</span></SelectTrigger>
-                        <SelectContent>
-                          {editQuestionData.options.map((_, i) => {
-                             const l = String.fromCharCode(65 + i);
-                             return <SelectItem key={l} value={l}>Câu {l}</SelectItem>
-                          })}
-                        </SelectContent>
+                      <Select value={editQuestionData.correctAnswer} onValueChange={(v) => setEditQuestionData({...editQuestionData, correctAnswer: v})}>
+                        <SelectTrigger className="h-11 w-full sm:w-32 bg-white text-rose-600 font-bold border-rose-200 rounded-xl shadow-sm">
+                          <span className="truncate">{editQuestionData.correctAnswer ? `Câu ${editQuestionData.correctAnswer}` : "Chọn"}</span>
+                        </SelectTrigger>
+                        <SelectContent><SelectItem value="A">Câu A</SelectItem><SelectItem value="B">Câu B</SelectItem><SelectItem value="C">Câu C</SelectItem><SelectItem value="D">Câu D</SelectItem></SelectContent>
                       </Select>
                     </div>
                   </div>
                 </div>
               )}
-              <Button type="submit" disabled={loading} className="w-full h-12 sm:h-14 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-lg shadow-xl mt-2">Cập nhật thay đổi</Button>
+              <Button type="submit" disabled={loading} className="w-full h-12 sm:h-14 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-lg shadow-xl mt-2">
+                Cập nhật thay đổi
+              </Button>
             </form>
           </DialogContent>
         </Dialog>
@@ -1037,7 +1097,6 @@ const QuestionBank = () => {
                     {viewQuestion.imageUrl && <img src={getImageUrl(viewQuestion.imageUrl)} className="max-w-full max-h-64 mt-4 rounded-xl border border-slate-200 shadow-sm mx-auto" />}
                 </div>
 
-                {/* 👉 ĐÃ SỬA: Luôn hiện hướng dẫn giải (nếu có) cho cả Trắc nghiệm và Tự luận trong Modal Xem trước */}
                 {(viewQuestion.essayAnswerText || viewQuestion.essayAnswerImageUrl) && (
                     <div className="bg-emerald-50 p-6 rounded-2xl border border-emerald-100 shadow-sm">
                         <p className="font-bold text-emerald-700 text-sm uppercase tracking-widest mb-3 flex items-center"><CheckCircle2 className="w-5 h-5 mr-2"/> Hướng dẫn giải</p>

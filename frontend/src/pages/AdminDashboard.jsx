@@ -13,10 +13,10 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   ShieldCheck, Users, GraduationCap, School, LogOut, TrendingUp, UserPlus, 
-  CheckCircle, Loader2, Trash2, Edit, Search, Filter, UploadCloud, FileCheck, 
+  Loader2, Trash2, Edit, Search, Filter, FileCheck, 
   FileSpreadsheet, Sparkles, PenTool, Download, Trophy, Medal, BarChart, Calendar, 
   Menu, X, Key, Lock, Unlock, Library, Database, ChevronLeft, ChevronRight,
-  DownloadCloud, Settings
+  Settings, Save, UploadCloud
 } from "lucide-react";
 
 import AdminClassManagement from "./AdminClassManagement";
@@ -98,7 +98,6 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, adminName) => 
   saveAs(blob, `${fileName}.xlsx`);
 };
 
-// Hàm hỗ trợ lấy mảng môn học để tương thích ngược dữ liệu cũ
 const getSubjects = (user) => {
   if (Array.isArray(user.subjects) && user.subjects.length > 0) return user.subjects;
   if (user.subject) return [user.subject]; 
@@ -109,7 +108,6 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const fullName = localStorage.getItem("fullName") || "Quản trị viên";
   const accountFileRef = useRef(null);
-  const backupFileInputRef = useRef(null);
 
   const [activeTab, setActiveTab] = useState("overview"); 
   const [subTab, setSubTab] = useState("all"); 
@@ -123,8 +121,13 @@ const AdminDashboard = () => {
   const [teachersList, setTeachersList] = useState([]);
   const [dashboardStats, setDashboardStats] = useState({ students: 0, teachers: 0, assignments: 0, submissions: 0 });
 
+  // STATES THI ĐUA ĐÃ ĐƯỢC CẬP NHẬT
   const [adminLeaderboard, setAdminLeaderboard] = useState([]);
-  const [lbTimeFilter, setLbTimeFilter] = useState("month"); 
+  const currentYear = new Date().getFullYear().toString();
+  const currentMonth = (new Date().getMonth() + 1).toString();
+  const [lbYear, setLbYear] = useState(currentYear);
+  const [lbMonth, setLbMonth] = useState(currentMonth);
+  const [lbWeek, setLbWeek] = useState("all");
   const [lbGradeFilter, setLbGradeFilter] = useState("all");
   const [isLoadingLb, setIsLoadingLb] = useState(false);
 
@@ -142,8 +145,8 @@ const AdminDashboard = () => {
   const [uploadGrade, setUploadGrade] = useState("");
   const [uploadClassId, setUploadClassId] = useState("");
 
-  const [isBackingUp, setIsBackingUp] = useState(false);
-  const [isRestoring, setIsRestoring] = useState(false);
+  const [passwordData, setPasswordData] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const carouselImages = [
@@ -194,11 +197,12 @@ const AdminDashboard = () => {
 
   useEffect(() => { fetchData(); }, []);
 
+  // GỌI API THI ĐUA VỚI THAM SỐ MỚI
   useEffect(() => {
     const fetchAdminLeaderboard = async () => {
       setIsLoadingLb(true);
       try {
-        const res = await axios.get(`/admin/leaderboard?timeframe=${lbTimeFilter}&grade=${lbGradeFilter}`, getHeader());
+        const res = await axios.get(`/admin/leaderboard?year=${lbYear}&month=${lbMonth}&week=${lbWeek}&grade=${lbGradeFilter}`, getHeader());
         setAdminLeaderboard(res.data.leaderboard || []);
       } catch (error) {
         console.error("Lỗi tải bảng thi đua:", error);
@@ -207,53 +211,35 @@ const AdminDashboard = () => {
       }
     };
     if (activeTab === "leaderboard") fetchAdminLeaderboard();
-  }, [activeTab, lbTimeFilter, lbGradeFilter]);
+  }, [activeTab, lbYear, lbMonth, lbWeek, lbGradeFilter]);
 
   const handleLogout = () => { localStorage.clear(); navigate("/login"); };
   const handleSubTabChange = (tab) => { setSubTab(tab); setSearchName(""); setFilterUserGrade("all"); setFilterUserClass("all"); };
   const handleMenuClick = (tab) => { setActiveTab(tab); setIsMobileMenuOpen(false); };
 
-  const handleBackupDatabase = async () => {
-    if (!window.confirm("Hệ thống sẽ đóng gói toàn bộ dữ liệu thành file JSON. Bạn có muốn tải về?")) return;
-    setIsBackingUp(true);
-    try {
-      const res = await axios.get('/admin/backup', {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        responseType: 'blob'
-      });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      const dateStr = new Date().toLocaleDateString('vi-VN').replace(/\//g, '-');
-      link.setAttribute('download', `Database_Backup_${dateStr}.json`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      alert("✅ Sao lưu thành công!");
-    } catch (error) { alert("Lỗi khi tạo bản sao lưu!"); } finally { setIsBackingUp(false); }
-  };
-
-  const handleRestoreDatabase = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    if (!window.confirm("⚠️ CẢNH BÁO ĐỎ: Toàn bộ dữ liệu hiện tại trên web sẽ bị XÓA và thay thế bằng dữ liệu từ file này. Bạn có chắc chắn?")) {
-      e.target.value = ''; return;
+  const handleChangeAdminPassword = async (e) => {
+    e.preventDefault();
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      return alert("Mật khẩu mới và xác nhận mật khẩu không khớp!");
     }
-    setIsRestoring(true);
+    if (passwordData.newPassword.length < 6) {
+      return alert("Mật khẩu mới phải có ít nhất 6 ký tự!");
+    }
+    
+    setIsChangingPassword(true);
     try {
-      const formData = new FormData();
-      formData.append("backupFile", file);
-      await axios.post('/admin/restore', formData, {
-        headers: { 
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-      alert("✅ Phục hồi dữ liệu thành công! Hệ thống sẽ tải lại trang.");
-      window.location.reload();
-    } catch (error) { 
-      alert(error.response?.data?.message || "Lỗi khi phục hồi dữ liệu!"); 
-    } finally { setIsRestoring(false); e.target.value = ''; }
+      await axios.put('/auth/change-password', {
+        oldPassword: passwordData.oldPassword,
+        newPassword: passwordData.newPassword
+      }, getHeader());
+      
+      alert("✅ Đổi mật khẩu thành công! Vui lòng đăng nhập lại với mật khẩu mới.");
+      handleLogout(); 
+    } catch (error) {
+      alert(error.response?.data?.message || "Lỗi khi đổi mật khẩu! Vui lòng kiểm tra lại mật khẩu cũ.");
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
   const handleCreateUser = async (e) => {
@@ -584,44 +570,59 @@ const AdminDashboard = () => {
 
         {activeTab === "settings" && (
           <div className="space-y-6 sm:space-y-8">
-            <Card className="border-slate-100 shadow-sm rounded-3xl bg-white overflow-hidden">
+            <Card className="border-slate-100 shadow-sm rounded-3xl bg-white overflow-hidden max-w-2xl mx-auto">
                 <CardHeader className="bg-slate-50 border-b border-slate-100">
                     <CardTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                        <Database className="w-5 h-5 text-emerald-600" /> Quản lý Dữ liệu Hệ thống
+                        <Key className="w-5 h-5 text-sky-600" /> Đổi mật khẩu Quản trị viên
                     </CardTitle>
                 </CardHeader>
-                <CardContent className="p-6">
-                    <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-                       <div className="flex items-center gap-4">
-                          <div className="bg-emerald-100 p-3 rounded-2xl"><Database className="h-8 w-8 text-emerald-600" /></div>
-                          <div>
-                            <h3 className="font-black text-slate-800 text-lg">Sao lưu & Phục hồi</h3>
-                            <p className="text-slate-500 text-sm font-medium mt-1">Đóng gói toàn bộ Database thành file JSON để dự phòng, hoặc nạp lại dữ liệu từ file.</p>
-                          </div>
-                       </div>
-                       <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                <CardContent className="p-6 sm:p-8">
+                    <form onSubmit={handleChangeAdminPassword} className="space-y-5">
+                        <div className="space-y-2">
+                            <label className="text-sm font-bold text-slate-700">Mật khẩu hiện tại</label>
+                            <Input 
+                                type="password" 
+                                required 
+                                value={passwordData.oldPassword} 
+                                onChange={e => setPasswordData({...passwordData, oldPassword: e.target.value})} 
+                                className="h-12 rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-sky-500" 
+                                placeholder="Nhập mật khẩu cũ để xác thực..." 
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-bold text-slate-700">Mật khẩu mới</label>
+                            <Input 
+                                type="password" 
+                                required 
+                                value={passwordData.newPassword} 
+                                onChange={e => setPasswordData({...passwordData, newPassword: e.target.value})} 
+                                className="h-12 rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-sky-500" 
+                                placeholder="Nhập mật khẩu mới..." 
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-bold text-slate-700">Xác nhận mật khẩu mới</label>
+                            <Input 
+                                type="password" 
+                                required 
+                                value={passwordData.confirmPassword} 
+                                onChange={e => setPasswordData({...passwordData, confirmPassword: e.target.value})} 
+                                className="h-12 rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-sky-500" 
+                                placeholder="Nhập lại mật khẩu mới..." 
+                            />
+                        </div>
+                        
+                        <div className="pt-2">
                           <Button 
-                            onClick={handleBackupDatabase} 
-                            disabled={isBackingUp || isRestoring}
-                            className="flex-1 sm:flex-none bg-emerald-500 hover:bg-emerald-600 text-white font-bold h-12 px-6 rounded-xl shadow-md shadow-emerald-100 transition-all active:scale-95"
+                              type="submit" 
+                              disabled={isChangingPassword} 
+                              className="w-full h-12 sm:h-14 bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl mt-2 transition-all shadow-md shadow-sky-200 active:scale-95 text-base"
                           >
-                            {isBackingUp ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <DownloadCloud className="w-5 h-5 mr-2" />}
-                            Sao lưu JSON
+                              {isChangingPassword ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Save className="w-5 h-5 mr-2" />}
+                              Lưu thay đổi mật khẩu
                           </Button>
-
-                          <div className="relative flex-1 sm:flex-none">
-                            <input type="file" ref={backupFileInputRef} onChange={handleRestoreDatabase} accept=".json" className="hidden" />
-                            <Button 
-                              onClick={() => backupFileInputRef.current.click()} 
-                              disabled={isBackingUp || isRestoring}
-                              className="w-full bg-rose-500 hover:bg-rose-600 text-white font-bold h-12 px-6 rounded-xl shadow-md shadow-rose-100 transition-all active:scale-95"
-                            >
-                              {isRestoring ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <UploadCloud className="w-5 h-5 mr-2" />}
-                              Phục hồi
-                            </Button>
-                          </div>
-                       </div>
-                    </div>
+                        </div>
+                    </form>
                 </CardContent>
             </Card>
           </div>
@@ -648,18 +649,71 @@ const AdminDashboard = () => {
 
         {activeTab === "leaderboard" && (
           <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-slate-100">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-slate-100">
               <div>
                 <h2 className="text-xl sm:text-2xl font-bold text-slate-800 flex items-center gap-2"><Trophy className="w-6 h-6 text-amber-500" /> Thi đua toàn trường</h2>
               </div>
-              <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
-                <Select value={lbTimeFilter} onValueChange={setLbTimeFilter}>
-                  <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-slate-50 min-w-[120px] border-none font-bold text-slate-700 shadow-sm"><Calendar className="w-4 h-4 mr-2" /><span className="truncate">{lbTimeFilter === 'week' ? 'Tuần này' : lbTimeFilter === 'month' ? 'Tháng này' : lbTimeFilter === 'year' ? 'Năm nay' : 'Tất cả'}</span></SelectTrigger>
-                  <SelectContent><SelectItem value="all">Tất cả</SelectItem><SelectItem value="week">Tuần này</SelectItem><SelectItem value="month">Tháng này</SelectItem><SelectItem value="year">Năm nay</SelectItem></SelectContent>
-                </Select>
+              
+              <div className="flex flex-wrap gap-3 w-full lg:w-auto">
+                {/* Nhóm lọc thời gian */}
+                <div className="flex items-center gap-1 sm:gap-2 bg-slate-50 p-1 sm:p-1.5 rounded-xl border border-slate-200 shadow-sm">
+                  <Calendar className="w-4 h-4 text-slate-500 ml-2 hidden sm:block" />
+                  
+                  {/* Chọn Năm */}
+                  <Select value={lbYear} onValueChange={setLbYear}>
+                    <SelectTrigger className="h-9 bg-white border-none font-bold text-sky-700 shadow-sm w-[90px] sm:w-[100px]">
+                      <span className="truncate">Năm {lbYear}</span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2024">Năm 2024</SelectItem>
+                      <SelectItem value="2025">Năm 2025</SelectItem>
+                      <SelectItem value="2026">Năm 2026</SelectItem>
+                      <SelectItem value="2027">Năm 2027</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {/* Chọn Tháng */}
+                  <Select value={lbMonth} onValueChange={(val) => { setLbMonth(val); if(val === "all") setLbWeek("all"); }}>
+                    <SelectTrigger className="h-9 bg-white border-none font-bold text-sky-700 shadow-sm w-[110px] sm:w-[120px]">
+                      <span className="truncate">{lbMonth === "all" ? "Cả năm" : `Tháng ${lbMonth}`}</span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Cả năm</SelectItem>
+                      {[...Array(12)].map((_, i) => (
+                        <SelectItem key={i+1} value={(i+1).toString()}>Tháng {i+1}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {/* Chọn Tuần */}
+                  <Select value={lbWeek} onValueChange={setLbWeek} disabled={lbMonth === "all"}>
+                    <SelectTrigger className="h-9 bg-white border-none font-bold text-sky-700 shadow-sm w-[110px] sm:w-[120px]">
+                      <span className="truncate">{lbWeek === "all" ? "Cả tháng" : `Tuần ${lbWeek}`}</span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Cả tháng</SelectItem>
+                      <SelectItem value="1">Tuần 1</SelectItem>
+                      <SelectItem value="2">Tuần 2</SelectItem>
+                      <SelectItem value="3">Tuần 3</SelectItem>
+                      <SelectItem value="4">Tuần 4</SelectItem>
+                      <SelectItem value="5">Tuần 5</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Nhóm lọc khối */}
                 <Select value={lbGradeFilter} onValueChange={setLbGradeFilter}>
-                  <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-slate-50 min-w-[120px] border-none font-bold text-slate-700 shadow-sm"><Filter className="w-4 h-4 mr-2" /><span className="truncate">{lbGradeFilter === "all" ? "Tất cả Khối" : `Khối ${lbGradeFilter}`}</span></SelectTrigger>
-                  <SelectContent><SelectItem value="all">Tất cả Khối</SelectItem><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent>
+                  <SelectTrigger className="h-11 sm:h-[50px] rounded-xl bg-slate-50 min-w-[120px] border border-slate-200 font-bold text-slate-700 shadow-sm">
+                    <Filter className="w-4 h-4 mr-2" />
+                    <span className="truncate">{lbGradeFilter === "all" ? "Tất cả Khối" : `Khối ${lbGradeFilter}`}</span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tất cả Khối</SelectItem>
+                    <SelectItem value="6">Khối 6</SelectItem>
+                    <SelectItem value="7">Khối 7</SelectItem>
+                    <SelectItem value="8">Khối 8</SelectItem>
+                    <SelectItem value="9">Khối 9</SelectItem>
+                  </SelectContent>
                 </Select>
               </div>
             </div>
@@ -667,7 +721,7 @@ const AdminDashboard = () => {
             {isLoadingLb ? (
               <div className="text-center py-20 bg-white rounded-3xl border border-slate-100"><Loader2 className="w-12 h-12 animate-spin mx-auto text-sky-500 mb-4"/></div>
             ) : adminLeaderboard.length === 0 ? (
-              <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-sky-200"><BarChart className="w-16 h-16 text-slate-200 mx-auto mb-4" /><p className="text-slate-500 font-medium">Chưa có dữ liệu</p></div>
+              <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-sky-200"><BarChart className="w-16 h-16 text-slate-200 mx-auto mb-4" /><p className="text-slate-500 font-medium">Chưa có dữ liệu cho thời gian này.</p></div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-1 space-y-4">
@@ -720,7 +774,6 @@ const AdminDashboard = () => {
                 {subTab === "teacher" && (
                   <Button onClick={() => {
                     const data = filteredUsers.map((u, i) => {
-                      // Xử lý xuất Excel nhiều môn học
                       const subs = getSubjects(u);
                       const subjectStr = subs.length > 0 ? subs.map(s => `Tổ ${s}`).join(", ") : "Chưa phân tổ";
 
@@ -792,7 +845,6 @@ const AdminDashboard = () => {
                             user.grade ? `Khối ${user.grade} - ${renderClassName(user)}` : "Chưa phân lớp"
                          ) : (
                             <div className="flex flex-col gap-1 items-start">
-                               {/* Render mảng môn học */}
                                <div className="flex flex-wrap gap-1">
                                  {getSubjects(user).length > 0 ? (
                                     getSubjects(user).map((sub, idx) => (

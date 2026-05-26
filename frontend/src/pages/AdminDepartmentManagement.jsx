@@ -1,44 +1,263 @@
 import React, { useState, useEffect } from "react";
 import axios from "../lib/axios";
 import ExcelJS from 'exceljs';
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { saveAs } from 'file-saver';
+import schoolLogo from "../assets/logo-truong_221020252129.jpg";
+import {
+  Document,
+  Packer,
+  Paragraph,
+  Table as DocxTable,
+  TableRow as DocxTableRow,
+  TableCell as DocxTableCell,
+  TextRun,
+  Footer,
+  ImageRun,
+} from "docx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Loader2, UserCog, Search, Download, Layers, Unlock, Save, Plus, X, BookOpen, ShieldAlert, Lock } from "lucide-react";
+import { Loader2, UserCog, Search, Download, Layers, Unlock, Save, Plus, X, BookOpen, ShieldAlert, Lock, Filter } from "lucide-react";
 
-// CẤU HÌNH TỔ (Chỉ giữ lại tên Tổ lớn, loại bỏ hoàn toàn môn học cứng)
-const DEPARTMENT_CONFIG = {
-  KHTN: { name: "Tổ KHTN" },
-  KHXH: { name: "Tổ KHXH" }
+// ================== CÁC HÀM XUẤT FILE (WORD, PDF) ==================
+
+const exportPDF = async (dataList, reportTitle, adminName) => {
+  if (!dataList || dataList.length === 0) return alert("Không có dữ liệu!");
+
+  const doc = new jsPDF("l", "mm", "a4"); // Xuất khổ ngang (landscape) để vừa 6 cột
+
+  try {
+    const [regularFontRes, boldFontRes] = await Promise.all([
+      fetch("https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Regular.ttf"),
+      fetch("https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Medium.ttf")
+    ]);
+
+    const regularFontBuffer = await regularFontRes.arrayBuffer();
+    const boldFontBuffer = await boldFontRes.arrayBuffer();
+
+    const regularBase64 = btoa(new Uint8Array(regularFontBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+    const boldBase64 = btoa(new Uint8Array(boldFontBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+
+    doc.addFileToVFS("Roboto-Regular.ttf", regularBase64);
+    doc.addFileToVFS("Roboto-Medium.ttf", boldBase64);
+    doc.addFont("Roboto-Regular.ttf", "Roboto", "normal");
+    doc.addFont("Roboto-Medium.ttf", "Roboto", "bold");
+    doc.setFont("Roboto", "normal");
+  } catch (error) {
+    console.error("Lỗi tải font:", error);
+  }
+
+  const today = new Date();
+  const dateStr = `Ngày ${today.getDate().toString().padStart(2, '0')} tháng ${(today.getMonth() + 1).toString().padStart(2, '0')} năm ${today.getFullYear()}`;
+
+  try { doc.addImage(schoolLogo, "JPEG", 20, 10, 22, 22); } catch (e) {}
+
+  doc.setFontSize(12);
+  doc.setFont("Roboto", "bold");
+  doc.text("UBND HUYỆN THỦY NGUYÊN", 70, 16, { align: "center" });
+  doc.text("TRƯỜNG THCS TRẦN HƯNG ĐẠO", 70, 22, { align: "center" });
+
+  doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", 220, 16, { align: "center" });
+  doc.text("ĐỘC LẬP - TỰ DO - HẠNH PHÚC", 220, 22, { align: "center" });
+
+  const sloganWidth = doc.getTextWidth("ĐỘC LẬP - TỰ DO - HẠNH PHÚC");
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.5);
+  doc.line(220 - sloganWidth / 2, 23.5, 220 + sloganWidth / 2, 23.5);
+
+  doc.setFontSize(16);
+  doc.setTextColor(0, 112, 192);
+  doc.text(reportTitle.toUpperCase(), 148, 40, { align: "center" });
+  doc.setTextColor(0, 0, 0);
+
+  autoTable(doc, {
+    startY: 50,
+    head: [Object.keys(dataList[0])],
+    body: dataList.map((obj) => Object.values(obj)),
+    styles: { font: "Roboto", fontSize: 10, halign: "center", valign: "middle", lineColor: [0, 0, 0], lineWidth: 0.1 },
+    headStyles: { fillColor: [0, 112, 192], textColor: [255, 255, 255], fontStyle: "bold" },
+    columnStyles: {
+      1: { halign: "left" }, // Tài khoản
+      2: { halign: "left" }, // Họ tên
+      4: { halign: "left" }, // Môn dạy
+      5: { halign: "left" }, // Lớp
+    },
+  });
+
+  const finalY = doc.lastAutoTable.finalY + 12;
+
+  doc.setFontSize(12);
+  doc.setFont("Roboto", "normal");
+  doc.text(dateStr, 230, finalY, { align: "center" });
+  
+  doc.setFont("Roboto", "bold");
+  doc.text("Quản trị viên", 230, finalY + 6, { align: "center" });
+  doc.text(adminName, 230, finalY + 25, { align: "center" });
+
+  doc.setFontSize(10);
+  doc.setFont("Roboto", "normal");
+  doc.text(`Người xuất file: ${adminName}`, 280, 195, { align: "right" });
+
+  doc.save(`Phan_Bo_Chuyen_Mon.pdf`);
 };
 
+const exportWord = async (dataList, reportTitle, adminName) => {
+  if (!dataList || dataList.length === 0) return alert("Không có dữ liệu!");
+
+  const today = new Date();
+  const dateStr = `Ngày ${today.getDate()} tháng ${today.getMonth() + 1} năm ${today.getFullYear()}`;
+
+  const table = new DocxTable({
+    width: { size: 100, type: "pct" },
+    rows: [
+      new DocxTableRow({
+        children: Object.keys(dataList[0]).map((key) =>
+          new DocxTableCell({
+            children: [new Paragraph({ alignment: "center", children: [new TextRun({ text: key, bold: true, color: "FFFFFF", size: 22 })] })],
+            shading: { fill: "0070C0" },
+          })
+        ),
+      }),
+      ...dataList.map((obj) =>
+        new DocxTableRow({
+          children: Object.values(obj).map((val, index) =>
+            new DocxTableCell({
+              children: [new Paragraph({ alignment: index === 1 || index === 2 || index === 4 || index === 5 ? "left" : "center", children: [new TextRun({ text: String(val), size: 22 })] })],
+            })
+          ),
+        })
+      ),
+    ],
+  });
+
+  const doc = new Document({
+    sections: [
+      {
+        properties: {
+          page: { size: { orientation: "landscape" }, margin: { top: 720, right: 720, bottom: 720, left: 720 } },
+        },
+        footers: {
+          default: new Footer({
+            children: [new Paragraph({ alignment: "right", children: [new TextRun({ text: `Người xuất file: ${adminName}`, font: "Times New Roman", size: 22, italics: true, bold: true })] })],
+          }),
+        },
+        children: [
+          new DocxTable({
+            width: { size: 100, type: "pct" },
+            borders: { top: { style: "none" }, bottom: { style: "none" }, left: { style: "none" }, right: { style: "none" }, insideHorizontal: { style: "none" }, insideVertical: { style: "none" } },
+            rows: [
+              new DocxTableRow({
+                children: [
+                  new DocxTableCell({
+                    width: { size: 15, type: "pct" },
+                    verticalAlign: "center",
+                    borders: { top: { style: "none" }, bottom: { style: "none" }, left: { style: "none" }, right: { style: "none" } },
+                    children: [
+                      new Paragraph({
+                        alignment: "center",
+                        children: [
+                          new ImageRun({
+                            data: await fetch(schoolLogo).then((res) => res.arrayBuffer()),
+                            transformation: { width: 50, height: 50 },
+                          }),
+                        ],
+                      }),
+                    ],
+                  }),
+                  new DocxTableCell({
+                    width: { size: 85, type: "pct" },
+                    borders: { top: { style: "none" }, bottom: { style: "none" }, left: { style: "none" }, right: { style: "none" } },
+                    children: [
+                      new DocxTable({
+                        width: { size: 100, type: "pct" },
+                        borders: { top: { style: "none" }, bottom: { style: "none" }, left: { style: "none" }, right: { style: "none" }, insideHorizontal: { style: "none" }, insideVertical: { style: "none" } },
+                        rows: [
+                          new DocxTableRow({
+                            children: [
+                              new DocxTableCell({ borders: { top: { style: "none" }, bottom: { style: "none" }, left: { style: "none" }, right: { style: "none" } }, children: [new Paragraph({ alignment: "center", children: [new TextRun({ text: "UBND HUYỆN THỦY NGUYÊN", bold: true, size: 22, font: "Times New Roman" })] })] }),
+                              new DocxTableCell({ borders: { top: { style: "none" }, bottom: { style: "none" }, left: { style: "none" }, right: { style: "none" } }, children: [new Paragraph({ alignment: "center", children: [new TextRun({ text: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", bold: true, size: 22, font: "Times New Roman" })] })] }),
+                            ],
+                          }),
+                          new DocxTableRow({
+                            children: [
+                              new DocxTableCell({ borders: { top: { style: "none" }, bottom: { style: "none" }, left: { style: "none" }, right: { style: "none" } }, children: [new Paragraph({ alignment: "center", children: [new TextRun({ text: "TRƯỜNG THCS TRẦN HƯNG ĐẠO", bold: true, size: 24, font: "Times New Roman" })] })] }),
+                              new DocxTableCell({ borders: { top: { style: "none" }, bottom: { style: "none" }, left: { style: "none" }, right: { style: "none" } }, children: [new Paragraph({ alignment: "center", children: [new TextRun({ text: "ĐỘC LẬP - TỰ DO - HẠNH PHÚC", bold: true, underline: {}, size: 24, font: "Times New Roman" })] })] }),
+                            ],
+                          }),
+                        ],
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
+          }),
+          new Paragraph(""),
+          new Paragraph({ alignment: "center", children: [new TextRun({ text: reportTitle.toUpperCase(), bold: true, size: 30, color: "0070C0", font: "Times New Roman" })] }),
+          new Paragraph(""),
+          table,
+          new Paragraph(""),
+          new DocxTable({
+            width: { size: 100, type: "pct" },
+            borders: { top: { style: "none" }, bottom: { style: "none" }, left: { style: "none" }, right: { style: "none" }, insideHorizontal: { style: "none" }, insideVertical: { style: "none" } },
+            rows: [
+              new DocxTableRow({
+                children: [
+                  new DocxTableCell({ width: { size: 65, type: "pct" }, borders: { top: { style: "none" }, bottom: { style: "none" }, left: { style: "none" }, right: { style: "none" } }, children: [new Paragraph("")] }),
+                  new DocxTableCell({
+                    width: { size: 35, type: "pct" },
+                    borders: { top: { style: "none" }, bottom: { style: "none" }, left: { style: "none" }, right: { style: "none" } },
+                    children: [
+                      new Paragraph({ alignment: "center", children: [new TextRun({ text: dateStr, italics: true, size: 24, font: "Times New Roman" })] }),
+                      new Paragraph({ alignment: "center", children: [new TextRun({ text: "Quản trị viên", bold: true, size: 24, font: "Times New Roman" })] }),
+                      new Paragraph(""),
+                      new Paragraph(""),
+                      new Paragraph({ alignment: "center", children: [new TextRun({ text: adminName, bold: true, size: 24, font: "Times New Roman" })] }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      },
+    ],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  saveAs(blob, "Phan_Bo_Chuyen_Mon.docx");
+};
+
+// ================== COMPONENT CHÍNH ==================
+
 const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
+  // Lọc
   const [searchTerm, setSearchTerm] = useState("");
-  
-  // State Quản lý danh mục môn học
+  const [searchDept, setSearchDept] = useState("all");
+  const [searchSubject, setSearchSubject] = useState("all");
+
   const [subjectList, setSubjectList] = useState([]);
   const [newSubjectName, setNewSubjectName] = useState("");
   const [newSubjectDept, setNewSubjectDept] = useState("KHTN");
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
-  
-  // State Khóa/Mở khóa Xóa môn học hệ thống
   const [isSubjectEditMode, setIsSubjectEditMode] = useState(false);
 
-  // State Quản lý chế độ Sửa (Edit Mode) cho từng Giáo viên
   const [editingTeacherId, setEditingTeacherId] = useState(null);
   const [tempEditData, setTempEditData] = useState({ department: "", subjects: [] });
   const [isSavingTeacher, setIsSavingTeacher] = useState(false);
+  
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
 
   const getHeader = () => {
     const token = localStorage.getItem("token");
     return { headers: { Authorization: `Bearer ${token}` } };
   };
 
-  // ================== LẤY DANH MỤC MÔN HỌC TỪ DB ==================
   const fetchSubjects = async () => {
     try {
         const res = await axios.get("/admin/subjects", getHeader());
@@ -66,22 +285,18 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
       }
   };
 
-  // Hàm xóa môn học với Cảnh báo mạnh
   const handleDeleteSubject = async (id, name) => {
       const confirmMsg = `🚨 CẢNH BÁO NGUY HIỂM:\n\nBạn đang chuẩn bị xóa môn "${name}" khỏi hệ thống!\nNếu có giáo viên nào đang được phân công môn này, dữ liệu của họ có thể bị ảnh hưởng.\n\nBạn có CHẮC CHẮN muốn xóa?`;
       if (!window.confirm(confirmMsg)) return;
-      
       try {
           await axios.delete(`/admin/subjects/${id}`, getHeader());
           await fetchSubjects();
-          // Cập nhật lại danh sách giáo viên để clear môn đã xóa khỏi giao diện
           await fetchData(); 
       } catch (error) {
           alert("Lỗi khi xóa môn học!");
       }
   };
 
-  // ================== LOGIC GIÁO VIÊN ==================
   const getTeacherSubjects = (teacher) => {
     if (Array.isArray(teacher.subjects)) return teacher.subjects;
     if (teacher.subject) return [teacher.subject]; 
@@ -126,26 +341,74 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
     }));
   };
 
-  // ================== XUẤT EXCEL ==================
+  // Filter dữ liệu bảng
+  const filteredTeachers = teachersList.filter(t => {
+    const term = searchTerm.toLowerCase();
+    const matchName = !searchTerm || (t.fullName && t.fullName.toLowerCase().includes(term)) || (t.username && t.username.toLowerCase().includes(term));
+    const matchDept = searchDept === "all" || t.department === searchDept;
+    
+    const subs = getTeacherSubjects(t);
+    const matchSubject = searchSubject === "all" || subs.includes(searchSubject);
+
+    return matchName && matchDept && matchSubject;
+  });
+
+  const getExportData = () => {
+    return filteredTeachers.map((t, idx) => {
+      const assignedStr = t.assignedClasses && t.assignedClasses.length > 0 
+        ? t.assignedClasses.map(c => c.name || c).join(", ") 
+        : "Chưa có lớp";
+      const subs = getTeacherSubjects(t);
+      return {
+        "STT": idx + 1,
+        "Tài khoản": t.username,
+        "Họ và tên": t.fullName,
+        "Tổ chuyên môn": t.department === "KHTN" ? "Tổ KHTN" : t.department === "KHXH" ? "Tổ KHXH" : "Chưa phân tổ",
+        "Môn giảng dạy": subs.length > 0 ? subs.join(", ") : "Chưa đăng ký môn",
+        "Lớp đang phụ trách": assignedStr
+      };
+    });
+  };
+
+  const adminName = localStorage.getItem("fullName") || "Quản trị viên";
+  const reportTitle = "DANH SÁCH PHÂN BỔ TỔ CHUYÊN MÔN & MÔN HỌC GIÁO VIÊN";
+
   const handleExportExcel = async () => {
     if (filteredTeachers.length === 0) return alert("Không có dữ liệu để xuất!");
-
-    const adminName = localStorage.getItem("fullName") || "Quản trị viên";
+    
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Phân bổ chuyên môn', { views: [{ showGridLines: false }] });
 
-    sheet.columns = [ { width: 10 }, { width: 25 }, { width: 30 }, { width: 25 }, { width: 35 }, { width: 35 } ];
+    // Chỉnh lại tỷ lệ cột: Cột A chứa Logo và STT
+    sheet.columns = [ { width: 8 }, { width: 20 }, { width: 30 }, { width: 20 }, { width: 30 }, { width: 30 } ];
 
-    sheet.addRow(["UBND HUYỆN THỦY NGUYÊN", "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"]);
-    sheet.addRow(["TRƯỜNG THCS TRẦN HƯNG ĐẠO", "", "", "Độc lập - Tự do - Hạnh phúc"]);
-    sheet.mergeCells('A1:C1'); sheet.mergeCells('A2:C2');
+    // Thêm các dòng tiêu đề (Dịch text sang cột B để chừa chỗ cho Logo ở cột A)
+    sheet.addRow(["", "UBND HUYỆN THỦY NGUYÊN", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"]);
+    sheet.addRow(["", "TRƯỜNG THCS TRẦN HƯNG ĐẠO", "", "ĐỘC LẬP - TỰ DO - HẠNH PHÚC"]);
+    sheet.mergeCells('B1:C1'); sheet.mergeCells('B2:C2');
     sheet.mergeCells('D1:F1'); sheet.mergeCells('D2:F2');
+
+    // CHÈN LOGO VÀO GÓC CỘT A
+    try {
+      const logoResponse = await fetch(schoolLogo);
+      const logoBuffer = await logoResponse.arrayBuffer();
+      const logoId = workbook.addImage({ buffer: logoBuffer, extension: "jpeg" });
+      sheet.addImage(logoId, {
+        tl: { col: 0.1, row: 0.1 },
+        ext: { width: 55, height: 55 },
+      });
+    } catch (err) {
+      console.log("Không tải được logo", err);
+    }
 
     const formatHeader = (rowNum) => {
       const row = sheet.getRow(rowNum);
-      row.eachCell(cell => {
-        cell.font = { name: 'Times New Roman', size: 12, bold: true };
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      row.height = 25;
+      row.eachCell((cell, colNum) => {
+        if (colNum > 1) { // Bỏ qua format đè lên cột A chứa logo
+          cell.font = { name: 'Times New Roman', size: 12, bold: true };
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        }
       });
     };
     formatHeader(1); formatHeader(2);
@@ -153,7 +416,7 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
 
     sheet.addRow([]);
 
-    const titleRow = sheet.addRow(["DANH SÁCH PHÂN BỔ TỔ CHUYÊN MÔN & MÔN HỌC GIÁO VIÊN"]);
+    const titleRow = sheet.addRow([reportTitle]);
     sheet.mergeCells('A4:F4');
     titleRow.height = 35;
     const titleCell = sheet.getCell('A4');
@@ -162,7 +425,8 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
 
     sheet.addRow([]); 
 
-    const tableHeaders = ["STT", "Tài khoản", "Họ và tên", "Tổ chuyên môn", "Môn giảng dạy", "Lớp đang phụ trách"];
+    const dataToExport = getExportData();
+    const tableHeaders = Object.keys(dataToExport[0]);
     const headerRow = sheet.addRow(tableHeaders);
     headerRow.height = 25;
     headerRow.eachCell((cell) => {
@@ -172,27 +436,13 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
       cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
     });
 
-    filteredTeachers.forEach((t, index) => {
-      const assignedStr = t.assignedClasses && t.assignedClasses.length > 0 
-        ? t.assignedClasses.map(c => c.name || c).join(", ") 
-        : "Chưa có lớp";
-
-      const subs = getTeacherSubjects(t);
-      const rowData = [
-        index + 1,
-        t.username,
-        t.fullName,
-        t.department ? (t.department === "KHTN" ? "Tổ KHTN" : "Tổ KHXH") : "Chưa phân tổ",
-        subs.length > 0 ? subs.join(", ") : "Chưa đăng ký môn",
-        assignedStr
-      ];
-
-      const row = sheet.addRow(rowData);
+    dataToExport.forEach((t) => {
+      const row = sheet.addRow(Object.values(t));
       row.height = 25;
       row.eachCell((cell, colNumber) => {
         cell.font = { name: 'Times New Roman', size: 12 };
         cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
-        if (colNumber === 1 || colNumber === 4 || colNumber === 5) cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        if (colNumber === 1 || colNumber === 4) cell.alignment = { vertical: 'middle', horizontal: 'center' };
         else cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
       });
     });
@@ -221,20 +471,24 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    saveAs(blob, `Bao_Cao_Phan_Bo_To_Chuyen_Mon.xlsx`);
+    saveAs(blob, `Phan_Bo_Chuyen_Mon.xlsx`);
   };
 
-  // ================== FILTER & STATS ==================
-  const filteredTeachers = teachersList.filter(t => {
-    if (!searchTerm) return true;
-    const term = searchTerm.toLowerCase();
-    return ((t.fullName && t.fullName.toLowerCase().includes(term)) || (t.username && t.username.toLowerCase().includes(term)));
-  });
+  const handleExportPDF = async () => {
+    if (filteredTeachers.length === 0) return alert("Không có dữ liệu để xuất!");
+    setIsExportingPDF(true);
+    await exportPDF(getExportData(), reportTitle, adminName);
+    setIsExportingPDF(false);
+  };
+
+  const handleExportWord = async () => {
+    if (filteredTeachers.length === 0) return alert("Không có dữ liệu để xuất!");
+    await exportWord(getExportData(), reportTitle, adminName);
+  };
 
   const khtnCount = teachersList.filter(t => t.department === "KHTN").length;
   const khxhCount = teachersList.filter(t => t.department === "KHXH").length;
   
-  // CHỈ LẤY MÔN TỪ DATABASE (Loại bỏ mảng fix cứng)
   const khtnSubjects = subjectList.filter(s => s.department === "KHTN");
   const khxhSubjects = subjectList.filter(s => s.department === "KHXH");
 
@@ -243,7 +497,6 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
       
       {/* 1. KHU VỰC THỐNG KÊ SỐ LƯỢNG GIÁO VIÊN THEO TỔ */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        {/* TỔ KHTN */}
         <Card className="bg-white border-blue-100 shadow-sm rounded-3xl overflow-hidden flex flex-col">
           <div className="bg-gradient-to-r from-blue-500 to-blue-400 p-5 text-white flex justify-between items-center">
              <div>
@@ -271,7 +524,6 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
           </CardContent>
         </Card>
 
-        {/* TỔ KHXH */}
         <Card className="bg-white border-orange-100 shadow-sm rounded-3xl overflow-hidden flex flex-col">
           <div className="bg-gradient-to-r from-orange-500 to-orange-400 p-5 text-white flex justify-between items-center">
              <div>
@@ -324,7 +576,6 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
             </div>
           </div>
           
-          {/* NÚT KHÓA / MỞ KHÓA CHẾ ĐỘ XÓA MÔN */}
           <div className="w-full lg:w-auto flex justify-end border-t lg:border-t-0 lg:border-l border-slate-200 pt-4 lg:pt-0 lg:pl-4">
              <Button 
                 onClick={() => setIsSubjectEditMode(!isSubjectEditMode)} 
@@ -338,13 +589,29 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
 
       {/* 2. BẢNG PHÂN BỔ NHÂN SỰ CHÍNH */}
       <Card className="border-sky-100/50 shadow-sm rounded-3xl overflow-hidden bg-white">
-        <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <CardTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
-            <UserCog className="w-5 h-5 text-slate-500" /> Bảng phân công nhiệm vụ Giáo viên
-          </CardTitle>
-          
-          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-            <div className="relative w-full sm:w-[250px]">
+        <CardHeader className="bg-slate-50/50 border-b border-slate-100 p-4 sm:p-6 flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <CardTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <UserCog className="w-5 h-5 text-slate-500" /> Bảng phân công nhiệm vụ Giáo viên
+            </CardTitle>
+            
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
+              <Button onClick={handleExportExcel} variant="outline" className="h-10 text-emerald-600 border-emerald-300 hover:bg-emerald-50 rounded-xl font-bold shadow-sm">
+                <Download className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Excel</span>
+              </Button>
+              <Button onClick={handleExportPDF} disabled={isExportingPDF} variant="outline" className="h-10 text-rose-600 border-rose-300 hover:bg-rose-50 rounded-xl font-bold shadow-sm">
+                {isExportingPDF ? <Loader2 className="w-4 h-4 sm:mr-2 animate-spin" /> : <Download className="w-4 h-4 sm:mr-2" />} 
+                <span className="hidden sm:inline">PDF</span>
+              </Button>
+              <Button onClick={handleExportWord} variant="outline" className="h-10 text-blue-600 border-blue-300 hover:bg-blue-50 rounded-xl font-bold shadow-sm">
+                <Download className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Word</span>
+              </Button>
+            </div>
+          </div>
+
+          {/* BỘ LỌC BẢNG GIÁO VIÊN */}
+          <div className="flex flex-wrap md:flex-nowrap gap-3 pt-2">
+            <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input 
                 placeholder="Tìm tên hoặc tài khoản GV..." 
@@ -353,9 +620,35 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Button onClick={handleExportExcel} className="h-10 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold shadow-sm px-6">
-              <Download className="w-4 h-4 mr-2" /> Xuất Excel
-            </Button>
+
+            <Select value={searchDept} onValueChange={setSearchDept}>
+               <SelectTrigger className="h-10 w-[150px] bg-white border-slate-200 rounded-xl font-medium">
+                  <div className="flex items-center">
+                    <Filter className="w-4 h-4 mr-2 text-slate-400 shrink-0" />
+                    <SelectValue placeholder="Tất cả tổ" />
+                  </div>
+               </SelectTrigger>
+               <SelectContent>
+                  <SelectItem value="all">Tất cả tổ</SelectItem>
+                  <SelectItem value="KHTN">Tổ KHTN</SelectItem>
+                  <SelectItem value="KHXH">Tổ KHXH</SelectItem>
+               </SelectContent>
+            </Select>
+
+            <Select value={searchSubject} onValueChange={setSearchSubject}>
+               <SelectTrigger className="h-10 w-[160px] bg-white border-slate-200 rounded-xl font-medium">
+                  <div className="flex items-center">
+                    <Filter className="w-4 h-4 mr-2 text-slate-400 shrink-0" />
+                    <SelectValue placeholder="Tất cả môn" />
+                  </div>
+               </SelectTrigger>
+               <SelectContent>
+                  <SelectItem value="all">Tất cả môn</SelectItem>
+                  {subjectList.map(sub => (
+                    <SelectItem key={sub._id} value={sub.name}>{sub.name}</SelectItem>
+                  ))}
+               </SelectContent>
+            </Select>
           </div>
         </CardHeader>
         
@@ -372,7 +665,7 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
             </TableHeader>
             <TableBody>
               {filteredTeachers.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-10 text-slate-500">Không tìm thấy giáo viên nào.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center py-10 text-slate-500">Không tìm thấy giáo viên nào phù hợp.</TableCell></TableRow>
               ) : (
                 filteredTeachers.map((teacher, index) => {
                   const isAssigned = teacher.assignedClasses && teacher.assignedClasses.length > 0;
@@ -380,20 +673,17 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
                   const teacherSubs = isEditing ? tempEditData.subjects : getTeacherSubjects(teacher);
                   const teacherDept = isEditing ? tempEditData.department : teacher.department;
                   
-                  // Lấy danh sách môn tương ứng với Tổ để cho phép GV tích chọn
                   const availableSubjects = teacherDept === 'KHTN' ? khtnSubjects : teacherDept === 'KHXH' ? khxhSubjects : [];
 
                   return (
                     <TableRow key={teacher._id} className={`transition-colors ${isEditing ? 'bg-sky-50/50' : 'hover:bg-slate-50/50'}`}>
                       <TableCell className="text-center font-bold text-slate-400 align-top pt-5">{index + 1}</TableCell>
                       
-                      {/* THÔNG TIN GV */}
                       <TableCell className="align-top pt-4">
                          <p className="font-bold text-slate-700">{teacher.fullName}</p>
                          <p className="text-sky-600 font-medium text-xs mt-0.5">{teacher.username}</p>
                       </TableCell>
                       
-                      {/* CỘT 1: CHỌN TỔ LỚN */}
                       <TableCell className="align-top pt-4">
                         {isEditing ? (
                           <div className="flex flex-col gap-1">
@@ -425,7 +715,6 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
                         )}
                       </TableCell>
                       
-                      {/* CỘT 2: CHỌN MÔN (MULTI-SELECT BADGES) */}
                       <TableCell className="align-top pt-4">
                         {isEditing ? (
                           teacherDept ? (
@@ -466,7 +755,6 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
                         )}
                       </TableCell>
 
-                      {/* CỘT 3: THAO TÁC KHÓA / MỞ KHÓA */}
                       <TableCell className="align-top pt-3 pr-4 text-right">
                         {isEditing ? (
                           <div className="flex flex-col gap-1 items-end">
@@ -489,7 +777,6 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
                           </Button>
                         )}
                       </TableCell>
-
                     </TableRow>
                   );
                 })

@@ -9,10 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   School, Loader2, Users, CheckSquare, BarChart, Download, Settings, Search,
   Trophy, Calendar, Sparkles, Medal, Eye, Trash2, Filter, Pencil, Image as ImageIcon,
-  PenTool, FileText, FileQuestion, CalendarClock
+  PenTool, FileText, FileQuestion, CalendarClock, BellRing, Lock, Clock
 } from "lucide-react";
 
-// 👉 GHI CHÚ CHỈNH MÀU: Màu huy chương Top 1 (Vàng amber), Top 2 (Bạc slate), Top 3 (Đồng orange)
 const getRankMedal = (index) => {
   if (index === 0) return <Medal className="w-8 h-8 text-amber-400 drop-shadow-md" fill="currentColor" />;
   if (index === 1) return <Medal className="w-8 h-8 text-slate-300 drop-shadow-md" fill="currentColor" />;
@@ -215,65 +214,111 @@ export const LeaderboardTab = ({
 )};
 
 // ==========================================
-// 3. TAB BÀI TẬP ĐÃ GIAO
+// 3. TAB BÀI TẬP ĐÃ GIAO (THÊM CỘT CHỜ CHẤM & NÚT PASS ĐÚNG CHUẨN)
 // ==========================================
-export const AssignmentsTab = ({ isLoadingData, assignments, handleDeleteAssignment, handleEditAssignment, openDeadlineModal }) => {
+export const AssignmentsTab = ({ isLoadingData, assignments, handleDeleteAssignment, handleEditAssignment, openDeadlineModal, openPasswordModal }) => {
   const navigate = useNavigate();
   return (
     <Card className="border-sky-100/50 shadow-sm rounded-3xl overflow-hidden bg-white">
       <div className="overflow-x-auto">
-        <Table className="min-w-[700px]">
+        <Table className="min-w-[900px]">
           <TableHeader className="bg-sky-50/80">
             <TableRow>
               <TableHead className="pl-4 sm:pl-8 font-bold h-14 text-sky-800">Tên bài tập</TableHead>
               <TableHead className="text-center font-bold text-sky-800">Lớp</TableHead>
               <TableHead className="text-center font-bold text-sky-800">Số câu</TableHead>
               <TableHead className="font-bold text-sky-800">Hạn nộp</TableHead>
-              <TableHead className="text-right pr-4 sm:pr-8 font-bold text-sky-800 w-[180px]">Thao tác</TableHead>
+              <TableHead className="text-center font-bold text-sky-800">Đã nộp</TableHead>
+              {/* Cột Chờ chấm */}
+              <TableHead className="text-center font-bold text-sky-800">Chờ chấm</TableHead>
+              <TableHead className="text-right pr-4 sm:pr-8 font-bold text-sky-800 w-[220px]">Thao tác</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoadingData ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-20"><Loader2 className="animate-spin mx-auto text-sky-500 h-10 w-10" /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-20"><Loader2 className="animate-spin mx-auto text-sky-500 h-10 w-10" /></TableCell></TableRow>
             ) : assignments.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-24 text-slate-400 italic">Chưa có bài tập nào.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-24 text-slate-400 italic">Chưa có bài tập nào.</TableCell></TableRow>
             ) : (
-              assignments.map(assig => (
-                <TableRow key={assig._id} className={`transition-colors border-sky-50 ${assig.status === 'draft' ? 'bg-slate-50/50 hover:bg-slate-100/50' : 'hover:bg-sky-50/50'}`}>
-                  <TableCell className="pl-4 sm:pl-8">
-                    <div className="flex flex-col gap-1 items-start">
-                      <span className="font-bold text-sky-700">{assig.title}</span>
-                      {assig.status === 'draft' ? (
-                        <Badge className="bg-amber-100 text-amber-700 shadow-none border-0 text-[10px] px-2 uppercase py-0 leading-tight h-5">Bản nháp</Badge>
-                      ) : (
-                        <Badge className="bg-emerald-100 text-emerald-700 shadow-none border-0 text-[10px] px-2 uppercase py-0 leading-tight h-5">Đã giao</Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Badge className="bg-sky-100 text-sky-700 font-bold px-3 shadow-none hover:bg-sky-200">{assig.targetClass}</Badge>
-                  </TableCell>
-                  <TableCell className="font-semibold text-center text-slate-600">{assig.questions?.length || 0}</TableCell>
-                  <TableCell className="text-slate-500 text-sm font-medium">
-                    {new Date(assig.dueDate).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-                  </TableCell>
-                  <TableCell className="text-right pr-4 sm:pr-8">
-                    <div className="flex justify-end gap-1 sm:gap-2">
-                      <Button onClick={() => openDeadlineModal(assig)} variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-amber-500 hover:bg-amber-50 hover:text-amber-600 rounded-xl" title="Gia hạn nộp bài">
-                        <CalendarClock className="h-4 w-4" />
-                      </Button>
+              assignments.map((assig) => {
+                const submittedCount = assig.submittedCount || 0;
+                const pendingCount = assig.pendingCount || 0;
+                const totalStudents = assig.totalStudents || 0;
 
-                      {assig.status === 'draft' ? (
-                         <Button onClick={() => handleEditAssignment(assig._id)} variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-amber-600 hover:bg-amber-100 rounded-xl" title="Sửa bản nháp"><PenTool className="h-4 w-4" /></Button>
+                return (
+                  <TableRow key={assig._id} className={`transition-colors border-sky-50 ${assig.status === 'draft' ? 'bg-slate-50/50 hover:bg-slate-100/50' : 'hover:bg-sky-50/50'}`}>
+                    <TableCell className="pl-4 sm:pl-8">
+                      <div className="flex flex-col gap-1 items-start">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sky-700 text-base">{assig.title}</span>
+                        </div>
+                        {assig.status === 'draft' ? (
+                          <Badge className="bg-amber-100 text-amber-700 shadow-none border-0 text-[10px] px-2 uppercase py-0 leading-tight h-5">Bản nháp</Badge>
+                        ) : (
+                          <Badge className="bg-emerald-100 text-emerald-700 shadow-none border-0 text-[10px] px-2 uppercase py-0 leading-tight h-5">Đã giao</Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge className="bg-sky-100 text-sky-700 font-bold px-3 shadow-none hover:bg-sky-200">{assig.targetClass}</Badge>
+                    </TableCell>
+                    <TableCell className="font-semibold text-center text-slate-600">{assig.questions?.length || 0}</TableCell>
+                    <TableCell className="text-slate-500 text-sm font-medium">
+                      {new Date(assig.dueDate).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </TableCell>
+                    <TableCell className="text-center font-bold text-slate-700">
+                      {assig.status === 'published' ? (
+                          <div className="flex items-center justify-center gap-1.5">
+                            <Users className="w-4 h-4 text-sky-500" />
+                            <span className={submittedCount > 0 ? "text-sky-600 text-base" : "text-slate-400 text-base"}>{submittedCount} {totalStudents > 0 && `/ ${totalStudents}`}</span>
+                          </div>
                       ) : (
-                         <Button onClick={() => navigate(`/teacher/assignment/${assig._id}/grades`)} variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-sky-600 hover:bg-sky-100 rounded-xl" title="Xem điểm"><FileText className="h-4 w-4" /></Button>
+                          <span className="text-slate-300">-</span>
                       )}
-                      
-                      <Button onClick={() => handleDeleteAssignment(assig._id, assig.title)} variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-rose-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl" title="Xóa bài"><Trash2 className="h-4 w-4" /></Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+                    </TableCell>
+                    
+                    {/* Ô Chờ chấm tự luận */}
+                    <TableCell className="text-center font-bold text-slate-700">
+                      {assig.status === 'published' ? (
+                          <div className="flex items-center justify-center gap-1.5" title={`${pendingCount} bài đang chờ chấm`}>
+                            {pendingCount > 0 ? (
+                               <span className="text-amber-500 text-base font-black bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg flex items-center shadow-sm">
+                                 <Clock className="w-3 h-3 mr-1" /> {pendingCount}
+                               </span>
+                            ) : (
+                               <span className="text-slate-400 text-base">0</span>
+                            )}
+                          </div>
+                      ) : (
+                          <span className="text-slate-300">-</span>
+                      )}
+                    </TableCell>
+
+                    <TableCell className="text-right pr-4 sm:pr-8">
+                      <div className="flex justify-end gap-1 sm:gap-2">
+                        <Button onClick={() => openDeadlineModal(assig)} variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-amber-500 hover:bg-amber-50 hover:text-amber-600 rounded-xl" title="Gia hạn nộp bài">
+                          <CalendarClock className="h-4 w-4" />
+                        </Button>
+
+                        {/* 👉 CHỈ HIỂN THỊ NÚT ĐỔI PASS KHI BÀI TẬP ĐÓ CÓ PASS */}
+                        {assig.status === 'published' && assig.password && (
+                          <Button onClick={() => openPasswordModal(assig)} variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-indigo-500 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl" title="Đổi mật khẩu vào đề">
+                            <Lock className="h-4 w-4" />
+                          </Button>
+                        )}
+
+                        {assig.status === 'draft' ? (
+                           <Button onClick={() => handleEditAssignment(assig._id)} variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-amber-600 hover:bg-amber-100 rounded-xl" title="Sửa bản nháp"><PenTool className="h-4 w-4" /></Button>
+                        ) : (
+                           <Button onClick={() => navigate(`/teacher/assignment/${assig._id}/grades`)} variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-sky-600 hover:bg-sky-100 rounded-xl" title="Xem điểm"><FileText className="h-4 w-4" /></Button>
+                        )}
+                        
+                        <Button onClick={() => handleDeleteAssignment(assig._id, assig.title)} variant="ghost" className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-rose-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl" title="Xóa bài"><Trash2 className="h-4 w-4" /></Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -329,7 +374,6 @@ export const QuestionsTab = ({
               </SelectContent>
             </Select>
 
-            {/* 👉 ĐÃ SỬA: Đổi từ Input thành Select chọn Môn học */}
             <Select value={filterSubject || "all"} onValueChange={(val) => setFilterSubject(val === "all" ? "" : val)}>
               <SelectTrigger className="h-11 w-auto min-w-[160px] max-w-[250px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl px-3">
                 <span className="truncate">

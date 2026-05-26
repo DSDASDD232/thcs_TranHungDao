@@ -18,7 +18,7 @@ import {
   BookOpen, FileQuestion, LogOut, CheckSquare, School,
   Loader2, PlusCircle, Trash2, Pencil, Image as ImageIcon, X,
   UserCircle, Users, CheckCircle2, ArrowUpDown, Menu, Trophy, History, Database, Search, Filter,
-  CalendarClock, Calendar
+  CalendarClock, Calendar, Lock, AlertCircle
 } from "lucide-react";
 
 // Import các Tab
@@ -106,7 +106,6 @@ const getPrimarySubject = (profile) => {
   return "";
 };
 
-// Hàm định dạng ngày tháng hiển thị DD/MM/YYYY
 const formatDisplayDate = (ymdString) => {
   if (!ymdString) return "";
   const [year, month, day] = ymdString.split("-");
@@ -168,6 +167,12 @@ const TeacherDashboard = () => {
   const [newDeadlineDate, setNewDeadlineDate] = useState("");
   const [newDeadlineTime, setNewDeadlineTime] = useState("");
   const [isUpdatingDeadline, setIsUpdatingDeadline] = useState(false);
+
+  // 👉 CÁC STATE QUẢN LÝ MẬT KHẨU
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [selectedAssignmentForPassword, setSelectedAssignmentForPassword] = useState(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
   const getHeader = (isMultipart = false) => {
     const token = localStorage.getItem("token");
@@ -431,6 +436,30 @@ const TeacherDashboard = () => {
         alert("Lỗi khi cập nhật hạn nộp!");
     } finally {
         setIsUpdatingDeadline(false);
+    }
+  };
+
+  // 👉 HÀM MỞ MODAL VÀ LƯU ĐỔI MẬT KHẨU
+  const handleOpenPasswordModal = (assignment) => {
+    setSelectedAssignmentForPassword(assignment);
+    setNewPassword(""); // Xóa rỗng ô mật khẩu mới
+    setIsPasswordModalOpen(true);
+  };
+
+  const handleUpdatePassword = async () => {
+    setIsUpdatingPassword(true);
+    try {
+      const token = localStorage.getItem("token");
+      await axios.put(`/assignments/update-password/${selectedAssignmentForPassword._id}`, { password: newPassword.trim() }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert("✅ Cập nhật mật khẩu thành công!");
+      setIsPasswordModalOpen(false);
+      fetchData(); // Reload lại bảng
+    } catch(e) {
+      alert("Lỗi khi đổi mật khẩu bài thi!");
+    } finally {
+      setIsUpdatingPassword(false);
     }
   };
 
@@ -698,7 +727,7 @@ const TeacherDashboard = () => {
           </DialogContent>
         </Dialog>
 
-        {/* MODAL GIA HẠN BÀI TẬP (MỚI CUSTOM FORMAT NGÀY) */}
+        {/* MODAL GIA HẠN BÀI TẬP */}
         <Dialog open={isDeadlineModalOpen} onOpenChange={setIsDeadlineModalOpen}>
             <DialogContent className="sm:max-w-[450px] rounded-3xl border-none p-6 bg-white shadow-2xl">
                 <DialogHeader>
@@ -751,6 +780,57 @@ const TeacherDashboard = () => {
             </DialogContent>
         </Dialog>
 
+        {/* 👉 MODAL ĐỔI MẬT KHẨU BÀI THI (ĐÃ UPDATE THEO YÊU CẦU) */}
+        <Dialog open={isPasswordModalOpen} onOpenChange={setIsPasswordModalOpen}>
+          <DialogContent className="sm:max-w-[450px] rounded-3xl p-6 border-none shadow-2xl bg-white">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-black text-sky-950 flex items-center gap-2">
+                <Lock className="w-6 h-6 text-indigo-500" /> Quản lý mật khẩu bài thi
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4 pt-2">
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs font-bold flex items-start gap-2 leading-relaxed">
+                <AlertCircle className="w-5 h-5 shrink-0 text-amber-500" />
+                <p>Cảnh báo: Thay đổi mật khẩu này sẽ ảnh hưởng trực tiếp đến những học sinh chưa vào làm bài. Hãy thông báo cho học sinh nếu đổi!</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-bold text-slate-600">Bài thi</label>
+                <Input value={selectedAssignmentForPassword?.title || ""} readOnly className="bg-slate-50 font-bold border-none text-slate-500 cursor-not-allowed h-11" />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-bold text-slate-600">Mật khẩu cũ (hiện tại)</label>
+                <Input value={selectedAssignmentForPassword?.password || "Không có mật khẩu"} readOnly className="bg-slate-50 font-bold border-sky-100 text-sky-700 h-11 cursor-not-allowed" />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-bold text-indigo-600">Nhập mật khẩu mới</label>
+                <Input
+                  type="text"
+                  placeholder="Để trống nếu muốn xóa mật khẩu..."
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="h-12 rounded-xl font-bold border-indigo-200 focus-visible:ring-indigo-500 text-indigo-700 bg-white"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <Button variant="ghost" onClick={() => setIsPasswordModalOpen(false)} className="rounded-xl font-bold text-slate-500 hover:text-slate-800 h-11 px-6">Hủy</Button>
+                <Button
+                  disabled={isUpdatingPassword}
+                  onClick={handleUpdatePassword}
+                  className="h-11 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl px-6 shadow-md shadow-indigo-200"
+                >
+                  {isUpdatingPassword ? <Loader2 className="animate-spin w-5 h-5 mr-2"/> : null}
+                  Lưu thay đổi
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {activeTab === "my-classes" && (
           <MyClassesTab 
             isLoadingData={isLoadingData} filteredClasses={filteredClasses} allClasses={allClasses} classStatsMap={classStatsMap} 
@@ -777,6 +857,7 @@ const TeacherDashboard = () => {
             handleDeleteAssignment={handleDeleteAssignment} 
             handleEditAssignment={handleEditAssignmentClick}
             openDeadlineModal={openDeadlineModal}
+            openPasswordModal={handleOpenPasswordModal} 
           />
         )}
 

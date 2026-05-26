@@ -36,8 +36,13 @@ const submissionSchema = new mongoose.Schema(
                     type: String,
                     default: "",
                 },
-                // [MỚI] Ảnh học sinh upload cho câu tự luận
+                // [MỚI] Ảnh học sinh upload tay cho câu tự luận
                 studentImage: {
+                    type: String,
+                    default: "",
+                },
+                // 👉 [THÊM MỚI] Chuỗi Base64 chứa hình ảnh học sinh vẽ từ GeoGebra
+                studentBase64Image: {
                     type: String,
                     default: "",
                 },
@@ -75,7 +80,6 @@ const submissionSchema = new mongoose.Schema(
             default: "submitted",
         },
 
-        
         feedback: {
             type: String,
             default: "",

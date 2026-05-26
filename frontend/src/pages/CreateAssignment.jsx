@@ -269,31 +269,98 @@ const CreateAssignment = () => {
     setTemplateConfig({...templateConfig, essayCount: count, essayPoints: newPts});
   };
 
+  // 1. Đưa hàm isUglyDecimal ra ngoài để dùng chung cho cả checkPointValidity và handleSubmit
+  const isUglyDecimal = (num) => {
+    const fixed = Number(num).toFixed(10);
+    const decimal = fixed.split(".")[1]?.replace(/0+$/, "") || "";
+
+    return (
+      decimal.includes("333") ||
+      decimal.includes("666") ||
+      decimal.includes("999") ||
+      decimal.length > 2
+    );
+  };
+
   const checkPointValidity = () => {
     const mcq = Number(templateConfig.mcqCount) || 0;
     const essay = Number(templateConfig.essayCount) || 0;
     const essayPtsNum = templateConfig.essayPoints.map(p => Number(p) || 0);
     const totalEssayPoints = essayPtsNum.reduce((a, b) => a + b, 0);
     const totalQs = mcq + essay;
-    
-    if (totalQs === 0) return { valid: false, msg: "Vui lòng nhập số lượng câu hỏi." };
-    if (templateConfig.type === 'full_mcq') {
+
+    if (totalQs === 0) {
+      return { valid: false, msg: "Vui lòng nhập số lượng câu hỏi." };
+    }
+
+    if (templateConfig.type === "full_mcq") {
       const pt = 10 / mcq;
-      if ((pt * 100) % 5 !== 0) return { valid: false, msg: `CẢNH BÁO: Điểm lẻ (${pt.toFixed(2)} đ/câu). Hãy đổi số lượng câu!` };
-      return { valid: true, msg: `Hợp lệ: Máy sẽ tự chia mỗi câu ${pt.toFixed(2)} điểm.` };
+
+      if ((pt * 100) % 5 !== 0 || isUglyDecimal(pt)) {
+        return {
+          valid: false,
+          msg: `CẢNH BÁO: Điểm mỗi câu bị lẻ (${pt.toFixed(4)} đ/câu). Hãy đổi số lượng câu!`
+        };
+      }
+
+      return {
+        valid: true,
+        msg: `Hợp lệ: Máy sẽ tự chia mỗi câu ${pt.toFixed(2)} điểm.`
+      };
     }
-    if (templateConfig.type === 'full_essay') {
-      if (essay > 0 && essayPtsNum.some(p => p <= 0)) return { valid: false, msg: "Vui lòng nhập điểm cho các câu Tự luận." };
-      if (totalEssayPoints !== 10) return { valid: false, msg: `LỖI: Tổng điểm đang là ${totalEssayPoints}. Phải bằng 10.` };
-      return { valid: true, msg: `Hợp lệ: Đề có tổng 10 điểm.` };
+
+    if (templateConfig.type === "full_essay") {
+      if (essay > 0 && essayPtsNum.some(p => p <= 0)) {
+        return { valid: false, msg: "Vui lòng nhập điểm cho các câu Tự luận." };
+      }
+
+      if (totalEssayPoints !== 10) {
+        return {
+          valid: false,
+          msg: `LỖI: Tổng điểm đang là ${totalEssayPoints}. Phải bằng 10.`
+        };
+      }
+
+      return {
+        valid: true,
+        msg: "Hợp lệ: Đề có tổng 10 điểm."
+      };
     }
-    if (templateConfig.type === 'mixed') {
-      if (mcq === 0 || essay === 0) return { valid: false, msg: "Đề hỗn hợp cần nhập cả Trắc nghiệm và Tự luận." };
-      if (totalEssayPoints >= 10) return { valid: false, msg: `LỖI: Tổng tự luận phải nhỏ hơn 10.` };
+
+    if (templateConfig.type === "mixed") {
+      if (mcq === 0 || essay === 0) {
+        return {
+          valid: false,
+          msg: "Đề hỗn hợp cần nhập cả Trắc nghiệm và Tự luận."
+        };
+      }
+
+      if (totalEssayPoints >= 10) {
+        return {
+          valid: false,
+          msg: "LỖI: Tổng tự luận phải nhỏ hơn 10."
+        };
+      }
+
       const mcqPt = (10 - totalEssayPoints) / mcq;
-      if ((mcqPt * 100) % 5 !== 0) return { valid: false, msg: `CẢNH BÁO: Trắc nghiệm bị lẻ (${mcqPt.toFixed(2)} đ/câu).` };
-      return { valid: true, msg: `Hợp lệ: Tổng Tự luận ${totalEssayPoints}đ. Trắc nghiệm ${mcqPt.toFixed(2)}đ/câu.` };
+
+      if ((mcqPt * 100) % 5 !== 0 || isUglyDecimal(mcqPt)) {
+        return {
+          valid: false,
+          msg: `CẢNH BÁO: Trắc nghiệm bị lẻ (${mcqPt.toFixed(4)} đ/câu). Hãy đổi số câu trắc nghiệm hoặc điểm tự luận.`
+        };
+      }
+
+      return {
+        valid: true,
+        msg: `Hợp lệ: Tổng Tự luận ${totalEssayPoints}đ. Trắc nghiệm ${mcqPt.toFixed(2)}đ/câu.`
+      };
     }
+
+    return {
+      valid: false,
+      msg: "Vui lòng chọn cấu trúc đề."
+    };
   };
 
   const pointStatus = checkPointValidity();
@@ -641,7 +708,18 @@ const CreateAssignment = () => {
 
   const handleSubmit = async (actionType) => {
     if (!newAssignment.targetClass) return alert("Vui lòng chọn lớp để giao bài!");
-    if (actionType === 'published' && !isPointsValid) return alert(`Tổng điểm hiện tại là ${roundedTotal.toFixed(2)}. Bạn bắt buộc phải chia điểm sao cho bằng đúng 10.00 mới được PHÁT HÀNH!`);
+    
+    // 2. Chặn điều kiện điểm tại thời điểm phát hành
+    if (actionType === 'published') {
+      if (!isPointsValid) {
+        return alert(`Tổng điểm hiện tại là ${roundedTotal.toFixed(2)}. Bạn bắt buộc phải chia điểm sao cho bằng đúng 10.00 mới được PHÁT HÀNH!`);
+      }
+      
+      const hasUglyPoints = Object.values(questionPoints).some(p => isUglyDecimal(p));
+      if (hasUglyPoints) {
+        return alert("KHÔNG THỂ TẠO BÀI TẬP: Đề thi đang có câu hỏi chứa điểm bị lẻ. Vui lòng điều chỉnh lại số lượng câu hoặc điểm để tạo bài tập !");
+      }
+    }
     
     if (hasPassword && (!newAssignment.password || newAssignment.password.trim() === "")) {
        return alert("Bạn đã chọn Yêu cầu Mật khẩu nhưng chưa nhập mật khẩu! Vui lòng nhập mật khẩu hoặc tắt tính năng này.");
@@ -696,10 +774,8 @@ const CreateAssignment = () => {
     } catch (err) { alert("Lỗi xử lý! Vui lòng thử lại."); } finally { setLoading(false); }
   };
 
-  // Cập nhật lại logic tìm availableSets từ list questions theo môn học được chọn (nếu filter)
   const availableSets = [...new Set(questions.filter(q => bankSubject === "all" || q.subject === bankSubject).map(q => q.questionSet).filter(Boolean))];
 
-  // 👉 ĐÃ SỬA BỘ LỌC TỪ KHO VÀO MANUAL: Bổ sung matchSubject
   const filteredBankQuestions = questions.filter(q => {
     const matchSearch = (q.content || "").toLowerCase().includes(bankSearch.toLowerCase());
     const matchGrade = bankGrade === "all" || q.grade === bankGrade;
@@ -758,21 +834,33 @@ const CreateAssignment = () => {
                 <Input placeholder="Nhập tên bài tập..." className="h-12 sm:h-14 rounded-xl bg-slate-50 font-bold text-base sm:text-lg border-sky-100 focus-visible:ring-sky-500" value={newAssignment.title} onChange={(e) => setNewAssignment({...newAssignment, title: e.target.value})} required />
                 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {/* Cột 1: Giao cho Lớp */}
                   <div className="space-y-1.5">
                     <label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Giao cho Lớp</label>
                     <Select value={newAssignment.targetClass || ""} onValueChange={(val) => setNewAssignment({...newAssignment, targetClass: val})} required>
-                      <SelectTrigger className="h-11 sm:h-12 rounded-xl bg-slate-50 font-bold border-sky-100 w-full"><SelectValue placeholder="Chọn Lớp" /></SelectTrigger>
-                      <SelectContent>{!teacherProfile?.assignedClasses || teacherProfile.assignedClasses.length === 0 ? (<SelectItem value="none" disabled>Chưa có lớp</SelectItem>) : (teacherProfile.assignedClasses.map(c => <SelectItem key={c._id || c} value={c.name}>{c.name}</SelectItem>))}</SelectContent>
+                      {/* Thêm [&>span]:truncate để nếu tên lớp dài nó sẽ tự cắt thành "..." không đè vào icon */}
+                      <SelectTrigger className="h-11 sm:h-12 px-4 rounded-xl bg-slate-50 font-bold border-sky-100 w-full text-slate-700 [&>span]:truncate">
+                        <SelectValue placeholder="Chọn Lớp" />
+                      </SelectTrigger>
+                      {/* Thêm position="popper" và sideOffset={4} để nó sổ thẳng xuống dưới */}
+                      <SelectContent position="popper" sideOffset={4} className="bg-white max-h-[300px]">
+                        {!teacherProfile?.assignedClasses || teacherProfile.assignedClasses.length === 0 ? (
+                          <SelectItem value="none" disabled>Chưa có lớp</SelectItem>
+                        ) : (
+                          teacherProfile.assignedClasses.map(c => <SelectItem key={c._id || c} value={c.name}>{c.name}</SelectItem>)
+                        )}
+                      </SelectContent>
                     </Select>
                   </div>
 
+                  {/* Cột 2: Môn học */}
                   <div className="space-y-1.5">
                       <label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Môn học</label>
                       <Select value={newAssignment.subject} onValueChange={(val) => setNewAssignment({...newAssignment, subject: val})}>
-                        <SelectTrigger className="h-11 sm:h-12 rounded-xl bg-slate-50 font-bold border-sky-100 text-sky-700 w-full">
+                        <SelectTrigger className="h-11 sm:h-12 px-4 rounded-xl bg-slate-50 font-bold border-sky-100 text-sky-700 w-full [&>span]:truncate">
                           <SelectValue placeholder="Chọn môn" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent position="popper" sideOffset={4} className="bg-white max-h-[300px]">
                           {teacherSubjects.map(sub => (
                             <SelectItem key={sub} value={sub}>{sub}</SelectItem>
                           ))}
@@ -781,9 +869,10 @@ const CreateAssignment = () => {
                       </Select>
                   </div>
 
+                  {/* Cột 3: Thời gian làm bài */}
                   <div className="space-y-1.5">
                       <label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Thời gian làm bài (Phút)</label>
-                      <Input type="number" placeholder="VD: 45" className="h-11 sm:h-12 rounded-xl bg-slate-50 border-sky-100 font-bold text-sky-700" value={newAssignment.duration} onChange={(e) => setNewAssignment({...newAssignment, duration: e.target.value})} required />
+                      <Input type="number" placeholder="VD: 45" className="w-full h-11 sm:h-12 px-4 rounded-xl bg-slate-50 border-sky-100 font-bold text-sky-700 focus-visible:ring-sky-500" value={newAssignment.duration} onChange={(e) => setNewAssignment({...newAssignment, duration: e.target.value})} required />
                   </div>
                 </div>
 
@@ -1122,7 +1211,7 @@ const CreateAssignment = () => {
                                           <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base">{letter}.</span>
                                           <Input className={`h-11 rounded-xl bg-white text-sm sm:text-base ${isSlotEmpty ? 'border-dashed border-slate-300' : 'border-sky-100'}`} value={q.options[optIdx]} onChange={(e) => handleManualOptionChange(q.tempId, optIdx, e.target.value)} />
                                           {q.options.length > 2 && (
-                                             <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveManualOption(q.tempId, optIdx)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0"><Trash2 className="w-4 h-4"/></Button>
+                                              <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveManualOption(q.tempId, optIdx)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0"><Trash2 className="w-4 h-4"/></Button>
                                           )}
                                         </div>
                                       )})}
@@ -1155,52 +1244,55 @@ const CreateAssignment = () => {
                       )}
 
                       {creationMethod === "bank" && (
-                        <div className="border border-sky-200 rounded-xl sm:rounded-2xl overflow-hidden bg-white shadow-sm">
-                          <div className="bg-sky-50 px-3 sm:px-4 py-4 flex flex-col space-y-4 border-b border-sky-100">
-                            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-                              <span className="font-bold text-sky-800 flex items-center text-sm sm:text-base"><Database className="w-4 h-4 mr-2 shrink-0"/> Chọn câu hỏi từ hệ thống</span>
-                              <div className="flex gap-2">
-                                <Button type="button" onClick={handleImportFromBankToManual} variant="outline" className="h-9 border-sky-300 text-sky-700 hover:bg-sky-100 font-bold px-3 shadow-sm text-xs sm:text-sm"><PenTool className="w-3.5 h-3.5 mr-1.5" /> Rót vào khung trực tiếp</Button>
-                                <Badge className="bg-sky-500 font-bold px-3 py-1 text-white flex items-center h-9">Đã chọn: {bankSelected.length}</Badge>
-                              </div>
+                      <div className="border border-sky-200 rounded-xl sm:rounded-2xl overflow-hidden bg-white shadow-sm">
+                        <div className="bg-sky-50 px-3 sm:px-4 py-4 flex flex-col space-y-4 border-b border-sky-100">
+                          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                            <span className="font-bold text-sky-800 flex items-center text-sm sm:text-base"><Database className="w-4 h-4 mr-2 shrink-0"/> Chọn câu hỏi từ hệ thống</span>
+                            <div className="flex gap-2">
+                              <Button type="button" onClick={handleImportFromBankToManual} variant="outline" className="h-9 border-sky-300 text-sky-700 hover:bg-sky-100 font-bold px-3 shadow-sm text-xs sm:text-sm"><PenTool className="w-3.5 h-3.5 mr-1.5" /> Rót vào khung trực tiếp</Button>
+                              <Badge className="bg-sky-500 font-bold px-3 py-1 text-white flex items-center h-9">Đã chọn: {bankSelected.length}</Badge>
                             </div>
+                          </div>
 
-                            <div className="flex flex-wrap items-center gap-3">
-                              <Select value={bankType || ""} onValueChange={(val) => {setBankType(val); if(val !== 'essay') setBankPoints("");}}>
-                                 <SelectTrigger className="h-10 w-[140px] bg-white border-sky-200 font-bold text-sky-700"><span className="truncate">{bankType === 'all' ? 'Tất cả loại' : bankType === 'multiple_choice' ? 'Trắc nghiệm' : 'Tự luận'}</span></SelectTrigger>
-                                 <SelectContent><SelectItem value="all">Tất cả loại</SelectItem><SelectItem value="multiple_choice">Trắc nghiệm</SelectItem><SelectItem value="essay">Tự luận</SelectItem></SelectContent>
-                              </Select>
-                              
-                              {/* ĐÃ SỬA: Thay thế <Input readOnly> thành <Select> để chọn môn học trong mục Rót từ Kho câu hỏi */}
-                              <Select value={bankSubject || "all"} onValueChange={(val) => setBankSubject(val === "all" ? "" : val)}>
-                                <SelectTrigger className="h-10 w-auto min-w-[140px] max-w-[200px] bg-white border-sky-200 font-bold text-sky-700">
-                                  <span className="truncate">
-                                    {bankSubject ? `Môn: ${bankSubject}` : "Tất cả môn của tôi"}
-                                  </span>
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="all">Tất cả môn của tôi</SelectItem>
-                                  {teacherSubjects.map((sub, idx) => (
-                                    <SelectItem key={idx} value={sub}>Môn: {sub}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                          <div className="flex flex-wrap items-center gap-3">
+                            {/* Bộ lọc Loại câu hỏi */}
+                            <Select value={bankType || ""} onValueChange={(val) => {setBankType(val); if(val !== 'essay') setBankPoints("");}}>
+                              <SelectTrigger className="h-10 w-[140px] px-3 bg-white border-sky-200 font-bold text-sky-700 text-left [&>span]:truncate"><span className="truncate">{bankType === 'all' ? 'Tất cả loại' : bankType === 'multiple_choice' ? 'Trắc nghiệm' : 'Tự luận'}</span></SelectTrigger>
+                              <SelectContent position="popper" sideOffset={4} className="bg-white"><SelectItem value="all">Tất cả loại</SelectItem><SelectItem value="multiple_choice">Trắc nghiệm</SelectItem><SelectItem value="essay">Tự luận</SelectItem></SelectContent>
+                            </Select>
+                            
+                            {/* Bộ lọc Môn học */}
+                            <Select value={bankSubject || "all"} onValueChange={(val) => setBankSubject(val === "all" ? "" : val)}>
+                              <SelectTrigger className="h-10 w-auto min-w-[140px] max-w-[200px] px-3 bg-white border-sky-200 font-bold text-sky-700 text-left [&>span]:truncate">
+                                <span className="truncate">{bankSubject ? `Môn: ${bankSubject}` : "Tất cả môn"}</span>
+                              </SelectTrigger>
+                              <SelectContent position="popper" sideOffset={4} className="bg-white">
+                                <SelectItem value="all">Tất cả môn</SelectItem>
+                                {teacherSubjects.map((sub, idx) => (
+                                  <SelectItem key={idx} value={sub}>{sub}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
 
-                              <Select value={bankGrade || ""} onValueChange={setBankGrade}>
-                                <SelectTrigger className="h-10 w-[110px] bg-white border-sky-200 font-bold text-sky-700"><span className="truncate">{bankGrade === 'all' ? 'Tất cả khối' : `Khối ${bankGrade}`}</span></SelectTrigger>
-                                <SelectContent><SelectItem value="all">Tất cả khối</SelectItem><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent>
-                              </Select>
-                              
-                              <Select value={bankSetName || ""} onValueChange={setBankSetName} disabled={!isSetSelectionEnabled}>
-                                <SelectTrigger className={`h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700 ${!isSetSelectionEnabled ? 'opacity-50' : ''}`}><span className="truncate">{!isSetSelectionEnabled ? "Chọn Khối" : bankSetName === 'all' ? 'Tất cả bộ đề' : bankSetName}</span></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="all">Tất cả</SelectItem>
-                                  {availableSets.map((setName, idx) => (<SelectItem key={idx} value={setName}>{setName}</SelectItem>))}
-                                </SelectContent>
-                              </Select>
-                              {bankType === 'essay' && (<Input type="number" step="0.25" placeholder="Lọc điểm..." className="h-10 w-[110px] bg-white border-sky-200 text-sky-700 font-bold" value={bankPoints} onChange={(e) => setBankPoints(e.target.value)} />)}
-                              <div className="relative flex-1 min-w-[200px]"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><Input placeholder="Tìm nội dung..." className="pl-9 h-10 bg-white border-sky-200" value={bankSearch} onChange={e => setBankSearch(e.target.value)} /></div>
-                            </div>
+                            {/* Bộ lọc Khối */}
+                            <Select value={bankGrade || ""} onValueChange={setBankGrade}>
+                              <SelectTrigger className="h-10 w-[110px] px-3 bg-white border-sky-200 font-bold text-sky-700 text-left [&>span]:truncate"><span className="truncate">{bankGrade === 'all' ? 'Tất cả khối' : `Khối ${bankGrade}`}</span></SelectTrigger>
+                              <SelectContent position="popper" sideOffset={4} className="bg-white"><SelectItem value="all">Tất cả khối</SelectItem><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent>
+                            </Select>
+                            
+                            {/* Bộ lọc Bộ đề */}
+                            <Select value={bankSetName || ""} onValueChange={setBankSetName} disabled={!isSetSelectionEnabled}>
+                              <SelectTrigger className={`h-10 w-[160px] px-3 bg-white border-sky-200 font-bold text-sky-700 text-left [&>span]:truncate ${!isSetSelectionEnabled ? 'opacity-50' : ''}`}><span className="truncate">{!isSetSelectionEnabled ? "Chọn Khối" : bankSetName === 'all' ? 'Tất cả bộ đề' : bankSetName}</span></SelectTrigger>
+                              <SelectContent position="popper" sideOffset={4} className="bg-white">
+                                <SelectItem value="all">Tất cả bộ đề</SelectItem>
+                                {availableSets.map((setName, idx) => (<SelectItem key={idx} value={setName}>{setName}</SelectItem>))}
+                              </SelectContent>
+                          </Select>
+
+                          {bankType === 'essay' && (<Input type="number" step="0.25" placeholder="Lọc điểm..." className="h-10 w-[110px] bg-white border-sky-200 text-sky-700 font-bold" value={bankPoints} onChange={(e) => setBankPoints(e.target.value)} />)}
+        
+                          <div className="relative flex-1 min-w-[200px]"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><Input placeholder="Tìm nội dung..." className="pl-9 h-10 bg-white border-sky-200" value={bankSearch} onChange={e => setBankSearch(e.target.value)} /></div>
+                          </div>
                           </div>
                           
                           <div className="max-h-[400px] overflow-y-auto p-1 sm:p-2">

@@ -16,7 +16,6 @@ const router = express.Router();
 
 const uploadWord = multer({ storage: multer.memoryStorage() });
 
-// Hàm hỗ trợ tách public_id từ URL Cloudinary
 const getCloudinaryPublicId = (url) => {
     if (!url || !url.includes("cloudinary.com")) return null;
     try {
@@ -34,10 +33,8 @@ const getCloudinaryPublicId = (url) => {
     }
 };
 
-// 👉 THÊM HÀM NÀY: Quét chuỗi HTML để moi tất cả các link ảnh Cloudinary ẩn bên trong (dán từ Jodit)
 const extractCloudinaryUrlsFromHtml = (htmlContent) => {
     if (!htmlContent) return [];
-    // Quét tìm tất cả các đoạn text bắt đầu bằng https://res.cloudinary.com/...
     const regex = /https:\/\/res\.cloudinary\.com\/[^\s"'>]+/g;
     return htmlContent.match(regex) || [];
 };
@@ -94,7 +91,7 @@ router.post("/extract-word", verifyToken, isTeacherOrAdmin, uploadWord.single("f
 // ==========================================================
 router.post("/create-manual", verifyToken, isTeacherOrAdmin, uploadCloud.any(), async (req, res) => {
     try {
-        const { title, targetClass, subject, duration, dueDate, status, action, saveToBank, questionsData } = req.body;
+        const { title, targetClass, subject, duration, dueDate, status, action, saveToBank, questionsData, password } = req.body;
         
         const parsedQuestions = typeof questionsData === 'string' ? JSON.parse(questionsData) : questionsData;
         
@@ -156,6 +153,7 @@ router.post("/create-manual", verifyToken, isTeacherOrAdmin, uploadCloud.any(), 
             duration: duration || 45, 
             dueDate, 
             status: status || "published", 
+            password: password || "", 
             teacher: req.user.id
         });
 
@@ -197,19 +195,58 @@ router.post("/create", verifyToken, isTeacherOrAdmin, async (req, res) => {
     }
 });
 
+// ==========================================================
+// 👉 4. [GET] LẤY DANH SÁCH BÀI TẬP & ĐẾM ĐÚNG LƯỢT NỘP / CHỜ CHẤM
+// ==========================================================
 router.get("/my-assignments", verifyToken, async (req, res) => {
     try {
         const user = await User.findById(req.user.id).populate("classId");
+        
         if (user.role === "student") {
             const studentClassName = user.classId ? user.classId.name : user.className;
             if (!studentClassName) return res.status(200).json({ assignments: [] }); 
             const assignments = await Assignment.find({ targetClass: studentClassName, status: "published" }).sort({ createdAt: -1 }).populate("teacher", "fullName");
             return res.status(200).json({ assignments });
         } else {
-            const myAssignments = await Assignment.find({ teacher: req.user.id }).sort({ createdAt: -1 }).populate("questions.questionId", "content difficulty type points"); 
-            return res.status(200).json({ assignments: myAssignments });
+            const myAssignments = await Assignment.find({ teacher: req.user.id })
+                .sort({ createdAt: -1 })
+                .populate("questions.questionId", "content difficulty type points")
+                .lean(); 
+            
+            const assignmentIds = myAssignments.map(a => a._id);
+            // 👉 ĐÃ SỬA: Lấy thêm trường status để đếm chờ chấm
+            const allSubmissions = await Submission.find({ assignment: { $in: assignmentIds } }).select("assignment student status");
+
+            const classesInvolved = [...new Set(myAssignments.map(a => a.targetClass))];
+            const classStudentCounts = {};
+            for (const className of classesInvolved) {
+                const count = await User.countDocuments({ role: "student", $or: [{ className: className }, { "classId.name": className }] }); 
+                classStudentCounts[className] = count || 0; 
+            }
+
+            const assignmentsWithCounts = myAssignments.map(assig => {
+                const submissionsForThisAssignment = allSubmissions.filter(sub => sub.assignment.toString() === assig._id.toString());
+                
+                // Đếm Đã nộp (Tính tất cả: submitted, pending, graded)
+                const uniqueStudents = new Set(submissionsForThisAssignment.map(sub => sub.student.toString()));
+                
+                // 👉 ĐẾM THÊM CHỜ CHẤM: Lọc những bài có status = pending
+                const pendingSubs = submissionsForThisAssignment.filter(sub => sub.status === 'pending');
+                const uniquePendingStudents = new Set(pendingSubs.map(sub => sub.student.toString()));
+
+                return {
+                    ...assig,
+                    submittedCount: uniqueStudents.size, 
+                    pendingCount: uniquePendingStudents.size, // Gửi biến này về cho React
+                    totalStudents: classStudentCounts[assig.targetClass] || 0
+                };
+            });
+
+            return res.status(200).json({ assignments: assignmentsWithCounts });
         }
-    } catch (error) { res.status(500).json({ message: "Lỗi server", error }); }
+    } catch (error) { 
+        res.status(500).json({ message: "Lỗi server", error }); 
+    }
 });
 
 router.get("/student", verifyToken, async (req, res) => {
@@ -231,7 +268,7 @@ router.get("/:id", verifyToken, async (req, res) => {
 });
 
 // ==========================================================
-// 👉 5. THÊM LOGIC DỌN RÁC CLOUDINARY KHI XÓA BÀI TẬP (BAO GỒM NỘI SOI ẢNH TRONG JODIT)
+// 5. LOGIC DỌN RÁC CLOUDINARY KHI XÓA BÀI TẬP
 // ==========================================================
 router.delete("/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
     try {
@@ -243,14 +280,10 @@ router.delete("/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
             return res.status(404).json({ message: "Không tìm thấy bài tập!" });
         }
 
-        // Duyệt qua từng câu hỏi trong bài tập
         for (const item of assignment.questions) {
             const question = item.questionId;
             
-            // Chỉ xóa ảnh và xóa câu hỏi nếu nó KHÔNG LƯU TRONG KHO (câu hỏi nháp)
             if (question && question.isBank === false) {
-                
-                // 1. Dọn ảnh đính kèm (Ảnh chính & Ảnh phụ)
                 if (question.imageUrl) {
                     const publicId = getCloudinaryPublicId(question.imageUrl);
                     if (publicId) await cloudinary.uploader.destroy(publicId);
@@ -261,7 +294,6 @@ router.delete("/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
                     if (essayPublicId) await cloudinary.uploader.destroy(essayPublicId);
                 }
 
-                // 2. Dọn ảnh nấp trong đoạn HTML (Dán từ Jodit Editor)
                 const hiddenUrls = [
                     ...extractCloudinaryUrlsFromHtml(question.content),
                     ...extractCloudinaryUrlsFromHtml(question.essayAnswerText)
@@ -271,16 +303,13 @@ router.delete("/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
                     const hiddenPublicId = getCloudinaryPublicId(url);
                     if (hiddenPublicId) {
                         await cloudinary.uploader.destroy(hiddenPublicId);
-                        console.log("-> Đã tiêu diệt ảnh ẩn trong Jodit:", hiddenPublicId);
                     }
                 }
 
-                // 3. Xóa câu hỏi
                 await Question.findByIdAndDelete(question._id);
             }
         }
 
-        // Xóa bài tập và lịch sử
         await Assignment.findByIdAndDelete(assignmentId);
         await Submission.deleteMany({ assignment: assignmentId });
         
@@ -296,7 +325,7 @@ router.delete("/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
 router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), async (req, res) => {
     try {
         const assignmentId = req.params.id;
-        const { title, targetClass, subject, duration, dueDate, status, saveToBank, questionsData } = req.body;
+        const { title, targetClass, subject, duration, dueDate, status, saveToBank, questionsData, password } = req.body;
 
         const existingAssignment = await Assignment.findById(assignmentId);
         if (!existingAssignment) return res.status(404).json({ message: "Không tìm thấy bài tập!" });
@@ -378,6 +407,7 @@ router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asyn
         existingAssignment.duration = duration || existingAssignment.duration;
         existingAssignment.dueDate = dueDate || existingAssignment.dueDate;
         existingAssignment.status = status || existingAssignment.status; 
+        if (password !== undefined) existingAssignment.password = password; 
         existingAssignment.questions = questionsWithPoints;
 
         await existingAssignment.save();
@@ -389,6 +419,7 @@ router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asyn
         res.status(500).json({ message: "Lỗi server khi cập nhật bài tập", error: error.message });
     }
 });
+
 // [PATCH] CẬP NHẬT NHANH HẠN NỘP BÀI
 router.patch("/update-deadline/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
     try {
@@ -397,7 +428,6 @@ router.patch("/update-deadline/:id", verifyToken, isTeacherOrAdmin, async (req, 
         
         if (!assignment) return res.status(404).json({ message: "Không tìm thấy bài tập!" });
         
-        // Kiểm tra quyền giáo viên (nếu cần)
         if (assignment.teacher.toString() !== req.user.id) {
             return res.status(403).json({ message: "Bạn không có quyền sửa bài này!" });
         }
@@ -410,4 +440,26 @@ router.patch("/update-deadline/:id", verifyToken, isTeacherOrAdmin, async (req, 
         res.status(500).json({ message: "Lỗi server khi cập nhật hạn nộp", error });
     }
 });
+
+// [PUT] API ĐỔI MẬT KHẨU VÀO ĐỀ
+router.put("/update-password/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
+    try {
+        const { password } = req.body;
+        const assignment = await Assignment.findById(req.params.id);
+        
+        if (!assignment) return res.status(404).json({ message: "Không tìm thấy bài tập!" });
+        
+        if (assignment.teacher.toString() !== req.user.id) {
+            return res.status(403).json({ message: "Bạn không có quyền sửa bài này!" });
+        }
+
+        assignment.password = password || "";
+        await assignment.save();
+
+        res.status(200).json({ message: "✅ Cập nhật mật khẩu thành công!" });
+    } catch (error) {
+        res.status(500).json({ message: "Lỗi server khi cập nhật mật khẩu", error });
+    }
+});
+
 export default router;

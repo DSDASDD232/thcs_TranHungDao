@@ -21,9 +21,11 @@ const GradeStudent = () => {
   const [isSaving, setIsSaving] = useState(false);
   
   const serverUrl = axios.defaults.baseURL.replace('/api', '');
+
+  // 👉 ĐÃ SỬA: Hàm này nhận biết hoàn hảo cả link API, ảnh thường và ảnh Base64 GeoGebra
   const getImageUrl = (url) => {
       if (!url) return "";
-      if (url.startsWith("http")) return url;
+      if (url.startsWith("http") || url.startsWith("data:image")) return url;
       let cleanUrl = url.replace(/\\/g, '/'); 
       return `${serverUrl}${cleanUrl.startsWith("/") ? "" : "/"}${cleanUrl}`;
   };
@@ -122,6 +124,10 @@ const GradeStudent = () => {
           const q = ans.question;
           const isEssay = q.type === 'essay';
           
+          // 👉 ĐÃ SỬA: Gom tất cả các trường có khả năng chứa ảnh vào 1 mảng để kiểm tra
+          // Nếu Backend lưu Base64 vào thẳng studentImage thì vẫn lên ảnh!
+          const submittedImages = [ans.studentImage, ans.studentBase64Image].filter(Boolean);
+          
           return (
             <Card key={idx} className={`border-none shadow-md rounded-3xl overflow-hidden ${isEssay ? 'ring-2 ring-amber-300 bg-white' : 'bg-white'}`}>
               <div className={`p-4 border-b flex justify-between items-center ${isEssay ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100'}`}>
@@ -136,7 +142,6 @@ const GradeStudent = () => {
               
               <div className="p-6 sm:p-8 space-y-6">
                 <div className="space-y-3">
-                  {/* 👉 ĐÃ SỬA: Hiển thị Đề bài dùng dangerouslySetInnerHTML để dịch HTML Editor */}
                   <div 
                       className="font-medium text-slate-800 text-lg leading-relaxed q-content-view"
                       dangerouslySetInnerHTML={{ __html: q.content }}
@@ -146,7 +151,6 @@ const GradeStudent = () => {
                   )}
                 </div>
 
-                {/* 👉 ĐÃ SỬA: Bỏ điều kiện isEssay, áp dụng cho cả Trắc nghiệm & Tự luận */}
                 {(q.essayAnswerText || q.essayAnswerImageUrl) && (
                     <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 mt-4">
                         <p className="text-xs font-black text-emerald-700 uppercase mb-3 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/> Đáp án / Hướng dẫn chấm:</p>
@@ -165,7 +169,6 @@ const GradeStudent = () => {
                   
                   {isEssay ? (
                     <div className="space-y-4">
-                      {/* 👉 ĐÃ SỬA: Hiển thị Bài làm của học sinh dùng dangerouslySetInnerHTML (phòng trường hợp form hs cũng có Editor) */}
                       <div className="text-slate-700 font-medium text-lg leading-relaxed bg-white p-4 rounded-xl border border-slate-100 min-h-[80px] q-content-view">
                         {ans.studentAnswer ? (
                            <div dangerouslySetInnerHTML={{ __html: ans.studentAnswer }} />
@@ -173,10 +176,14 @@ const GradeStudent = () => {
                            <span className="text-slate-400 italic">Không gõ nội dung</span>
                         )}
                       </div>
-                      {ans.studentImage && (
-                        <div>
-                          <p className="text-xs font-bold text-slate-400 uppercase mb-2">Ảnh đính kèm:</p>
-                          <img src={getImageUrl(ans.studentImage)} className="w-full max-w-2xl rounded-xl border-2 border-slate-200 shadow-md object-contain bg-white" alt="Ảnh bài làm" />
+                      
+                      {/* Hiển thị tất cả ảnh nộp (nếu có up tay và vẽ GeoGebra thì hiện cả 2) */}
+                      {submittedImages.length > 0 && (
+                        <div className="space-y-3">
+                          <p className="text-xs font-bold text-slate-400 uppercase mb-2">Ảnh bài làm đính kèm:</p>
+                          {submittedImages.map((imgSrc, imgIdx) => (
+                             <img key={imgIdx} src={getImageUrl(imgSrc)} className="w-full max-w-2xl rounded-xl border-2 border-slate-200 shadow-md object-contain bg-white" alt={`Hình bài làm ${imgIdx + 1}`} />
+                          ))}
                         </div>
                       )}
                     </div>
@@ -214,7 +221,6 @@ const GradeStudent = () => {
                                           <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black shrink-0 ${isCorrectAnswer ? 'bg-emerald-500 text-white' : isStudentChoice ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
                                               {optLetter}
                                           </div>
-                                          {/* 👉 ĐÃ SỬA: Hiển thị Các đáp án trắc nghiệm dùng dangerouslySetInnerHTML */}
                                           <div 
                                               className={`text-base ${textColor} leading-relaxed q-content-view`}
                                               dangerouslySetInnerHTML={{ __html: opt }}

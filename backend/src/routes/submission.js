@@ -130,7 +130,11 @@ router.post("/submit", verifyToken, uploadSubmission.any(), async (req, res) => 
                 question: ans.question,
                 type: questionDoc ? questionDoc.type : "multiple_choice",
                 studentAnswer: ans.studentAnswer || "", // Text trả lời trắc nghiệm hoặc gõ tự luận
-                studentImage: finalImageUrl, // Link ảnh học sinh chụp (tự luận)
+                studentImage: finalImageUrl, // Link ảnh học sinh chụp lên (tự luận)
+                
+                // 👉 ĐÃ THÊM: Hứng chuỗi Base64 từ GeoGebra và lưu thẳng vào Database
+                studentBase64Image: ans.studentBase64Image || "",
+                
                 isCorrect: isCorrect,
                 pointsAwarded: pointsAwarded,
                 maxPoints: maxPoints
@@ -198,7 +202,6 @@ router.get("/assignment/:id/grades", verifyToken, isTeacherOrAdmin, async (req, 
 router.put("/grade/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
     try {
         const { id } = req.params;
-        // 👉 ĐÃ SỬA: Lấy thêm teacherComment từ request body
         const { grades, teacherComment } = req.body; 
 
         const submission = await Submission.findById(id).populate("answers.question");
@@ -217,7 +220,6 @@ router.put("/grade/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
         submission.score = Number(newTotalScore.toFixed(2));
         submission.status = "graded"; 
         
-        // 👉 CẬP NHẬT TRƯỜNG FEEDBACK TỪ teacherComment
         if (teacherComment !== undefined) {
             submission.feedback = teacherComment;
         }
@@ -345,6 +347,7 @@ router.get("/student/:studentId", verifyToken, isTeacherOrAdmin, async (req, res
         res.status(500).json({ message: "Lỗi server", error });
     }
 });
+
 // ======================================================================
 // 6. [GET] API XEM CHI TIẾT 1 BÀI NỘP (Dành cho Học sinh xem lại bài)
 // ======================================================================
@@ -366,14 +369,11 @@ router.get("/detail/:id", verifyToken, async (req, res) => {
             return res.status(403).json({ message: "Bạn không có quyền xem bài làm của người khác!" });
         }
 
-        // Tùy chọn (Bảo mật): Nếu bài tập CÓ TỰ LUẬN mà CHƯA CHẤM XONG (pending) 
-        // thì có thể xem xét ẩn đáp án đúng đi, chỉ hiện đáp án khi status = 'graded'.
-        // Ở đây mình cứ trả về hết, Frontend sẽ xử lý việc ẩn/hiện tùy trạng thái.
-
         res.status(200).json(submission);
     } catch (error) {
         console.error("Lỗi lấy chi tiết bài nộp:", error);
         res.status(500).json({ message: "Lỗi server", error });
     }
 });
+
 export default router;

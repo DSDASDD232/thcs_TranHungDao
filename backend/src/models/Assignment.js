@@ -76,6 +76,12 @@ const assignmentSchema = new mongoose.Schema(
             type: String,
             enum: ["draft", "published"], 
             default: "published" // Mặc định nếu không gửi gì thì là Đã giao
+        },
+
+        // 👉 [THÊM MỚI] Mật khẩu bài thi
+        password: {
+            type: String,
+            default: "", // Rỗng nghĩa là không yêu cầu mật khẩu
         }
     },
     { 

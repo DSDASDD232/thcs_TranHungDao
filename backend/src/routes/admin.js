@@ -18,6 +18,41 @@ const upload = multer({ dest: 'uploads/temp_backups/' });
 const excelUpload = multer({ storage: multer.memoryStorage() });
 
 // ==========================================
+// HÀM HỖ TRỢ: Lọc thời gian (Năm, Tháng, Tuần)
+// ==========================================
+const buildDateFilter = (year, month, week) => {
+    if (!year) return {};
+    let startDate, endDate;
+    const y = parseInt(year);
+
+    if (!month || month === "all") {
+        // Lọc cả năm
+        startDate = new Date(y, 0, 1);
+        endDate = new Date(y, 11, 31, 23, 59, 59, 999);
+    } else {
+        const m = parseInt(month) - 1; // Trong JS tháng bắt đầu từ 0
+        if (!week || week === "all") {
+            // Lọc cả tháng
+            startDate = new Date(y, m, 1);
+            endDate = new Date(y, m + 1, 0, 23, 59, 59, 999);
+        } else {
+            // Lọc theo tuần
+            const w = parseInt(week);
+            const startDay = (w - 1) * 7 + 1;
+            let endDay = w * 7;
+            const lastDayOfMonth = new Date(y, m + 1, 0).getDate();
+            
+            if (endDay > lastDayOfMonth || w === 5) {
+                endDay = lastDayOfMonth;
+            }
+            startDate = new Date(y, m, startDay);
+            endDate = new Date(y, m, endDay, 23, 59, 59, 999);
+        }
+    }
+    return { createdAt: { $gte: startDate, $lte: endDate } };
+};
+
+// ==========================================
 // 1. [GET] Lấy thống kê tổng quan toàn trường
 // ==========================================
 router.get("/stats", verifyToken, isAdmin, async (req, res) => {
@@ -259,7 +294,7 @@ router.delete("/users/:id", verifyToken, isAdmin, async (req, res) => {
 });
 
 // ==========================================
-// 7. [PUT] CẬP NHẬT TÀI KHOẢN (ĐÃ UPDATE HỖ TRỢ ĐA MÔN HỌC)
+// 7. [PUT] CẬP NHẬT TÀI KHOẢN
 // ==========================================
 router.put("/users/:id", verifyToken, isAdmin, async (req, res) => {
     try {
@@ -326,11 +361,11 @@ router.put("/users/:id", verifyToken, isAdmin, async (req, res) => {
 });
 
 // ======================================================================
-// 8. [GET] BẢNG XẾP HẠNG THI ĐUA CÁC LỚP
+// 8. [GET] BẢNG XẾP HẠNG THI ĐUA TỔNG CỦA CÁC LỚP
 // ======================================================================
 router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
     try {
-        const { timeframe, grade } = req.query;
+        const { year, month, week, grade } = req.query;
 
         let classQuery = {};
         if (grade && grade !== 'all') {
@@ -338,19 +373,8 @@ router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
         }
         const classes = await Class.find(classQuery);
 
-        let dateFilter = {};
-        const now = new Date();
-        if (timeframe === 'week') {
-            const firstDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + 1));
-            firstDayOfWeek.setHours(0, 0, 0, 0);
-            dateFilter = { createdAt: { $gte: firstDayOfWeek } };
-        } else if (timeframe === 'month') {
-            const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-            dateFilter = { createdAt: { $gte: firstDayOfMonth } };
-        } else if (timeframe === 'year') {
-            const firstDayOfYear = new Date(now.getFullYear(), 0, 1);
-            dateFilter = { createdAt: { $gte: firstDayOfYear } };
-        }
+        // Sử dụng bộ lọc thời gian mới
+        const dateFilter = buildDateFilter(year, month, week);
 
         let leaderboard = await Promise.all(classes.map(async (cls) => {
             const students = await User.find({ classId: cls._id, role: 'student' }).select('_id');
@@ -362,7 +386,7 @@ router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
             });
 
             const totalTests = submissions.length;
-            const totalScore = submissions.reduce((sum, sub) => sum + sub.score, 0);
+            const totalScore = submissions.reduce((sum, sub) => sum + (sub.score || 0), 0);
             
             const averageScore = totalTests > 0 ? (totalScore / totalTests).toFixed(2) : 0;
 
@@ -390,8 +414,61 @@ router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
     }
 });
 
+// ======================================================================
+// 9. [GET] CHI TIẾT THI ĐUA CỦA HỌC SINH TRONG 1 LỚP CỤ THỂ
+// ======================================================================
+router.get("/leaderboard/class/:classId", verifyToken, isAdmin, async (req, res) => {
+    try {
+        const { classId } = req.params;
+        const { year, month, week } = req.query;
+
+        // 1. Tìm tất cả học sinh thuộc lớp này
+        const students = await User.find({ classId: classId, role: 'student' }).select('fullName username');
+
+        if (!students || students.length === 0) {
+            return res.json({ students: [] });
+        }
+
+        // 2. Lấy ID học sinh và xây dựng bộ lọc thời gian
+        const studentIds = students.map(s => s._id);
+        const dateFilter = buildDateFilter(year, month, week);
+
+        // 3. Truy vấn các bài tập đã nộp của các học sinh này trong khoảng thời gian trên
+        const submissions = await Submission.find({
+            student: { $in: studentIds },
+            ...dateFilter
+        });
+
+        // 4. Map dữ liệu để tính toán tổng bài nộp & điểm TB cho từng cá nhân
+        const studentStats = students.map(student => {
+            const studentSubs = submissions.filter(sub => String(sub.student) === String(student._id));
+            const totalTests = studentSubs.length;
+            
+            let averageScore = 0;
+            if (totalTests > 0) {
+                const totalScore = studentSubs.reduce((sum, sub) => sum + Number(sub.score || 0), 0);
+                averageScore = (totalScore / totalTests).toFixed(2);
+            }
+
+            return {
+                _id: student._id,
+                fullName: student.fullName,
+                username: student.username,
+                totalTests: totalTests,
+                averageScore: parseFloat(averageScore)
+            };
+        });
+
+        res.status(200).json({ students: studentStats });
+
+    } catch (error) {
+        console.error("Lỗi API chi tiết thi đua lớp:", error);
+        res.status(500).json({ message: "Lỗi máy chủ", error: error.message });
+    }
+});
+
 // ==========================================
-// [MÔN HỌC] - ĐÃ SỬA LẠI ĐỂ NHẬN DEPARTMENT
+// 10. [GET & POST & DELETE] MÔN HỌC (SUBJECTS)
 // ==========================================
 router.get("/subjects", verifyToken, async (req, res) => {
     try {
@@ -405,16 +482,14 @@ router.get("/subjects", verifyToken, async (req, res) => {
 router.post("/subjects", verifyToken, isAdmin, async (req, res) => {
     try {
         const { name, department } = req.body;
-        // Bắt lỗi nếu thiếu department
         if (!name || !department) return res.status(400).json({ message: "Vui lòng nhập tên môn và chọn Tổ chuyên môn!" });
 
         const existing = await Subject.findOne({ name: name.trim() });
         if (existing) return res.status(400).json({ message: "Môn học này đã tồn tại trong hệ thống!" });
 
-        // Tạo môn học mới kèm department
         const newSubject = new Subject({ 
             name: name.trim(),
-            department: department // Thêm dòng này
+            department: department 
         });
         
         await newSubject.save();

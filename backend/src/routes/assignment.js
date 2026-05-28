@@ -6,8 +6,6 @@ import Submission from "../models/Submission.js";
 import { verifyToken, isTeacherOrAdmin } from "../middleware/auth.js";
 import multer from "multer"; 
 import mammoth from "mammoth";
-import fs from "fs";
-import path from "path";
 
 // 👉 1. IMPORT CẤU HÌNH CLOUDINARY
 import cloudinary, { uploadCloud } from "../config/cloudinary.js";
@@ -16,6 +14,7 @@ const router = express.Router();
 
 const uploadWord = multer({ storage: multer.memoryStorage() });
 
+// Hàm bóc tách Public ID từ link Cloudinary để dùng cho việc xóa
 const getCloudinaryPublicId = (url) => {
     if (!url || !url.includes("cloudinary.com")) return null;
     try {
@@ -31,6 +30,14 @@ const getCloudinaryPublicId = (url) => {
     } catch (error) {
         return null;
     }
+};
+
+// Phân biệt resource_type (image hay video/audio) để Cloudinary xóa cho đúng
+const getCloudinaryResourceType = (url) => {
+    if (!url) return 'image';
+    if (url.includes('/video/upload/')) return 'video'; // Audio (mp3) cũng tính là video trong Cloudinary
+    if (url.includes('/raw/upload/')) return 'raw';
+    return 'image';
 };
 
 const extractCloudinaryUrlsFromHtml = (htmlContent) => {
@@ -104,11 +111,22 @@ router.post("/create-manual", verifyToken, isTeacherOrAdmin, uploadCloud.any(), 
         const questionsWithPoints = [];
 
         for (const q of parsedQuestions) {
-            const imageFile = req.files && req.files.find(f => f.fieldname === `image_${q.tempId}`);
-            const imageUrl = imageFile ? imageFile.path : (q.existingImageUrl || "");
+            // 👉 Lấy link Ảnh và Video từ Cloudinary (qua Multer req.files)
+            let imageUrl = q.existingImageUrl || "";
+            let essayImageUrl = q.existingEssayAnswerImageUrl || "";
+            let videoUrl = q.videoUrl || ""; // Dùng link GG drive/Youtube nếu có
 
-            const essayImageFile = req.files && req.files.find(f => f.fieldname === `essayImage_${q.tempId}`);
-            const essayImageUrl = essayImageFile ? essayImageFile.path : (q.existingEssayAnswerImageUrl || "");
+            if (req.files && req.files.length > 0) {
+                const imageFile = req.files.find(f => f.fieldname === `image_${q.tempId}`);
+                if (imageFile) imageUrl = imageFile.path;
+
+                const essayImageFile = req.files.find(f => f.fieldname === `essayImage_${q.tempId}`);
+                if (essayImageFile) essayImageUrl = essayImageFile.path;
+
+                // Bắt file Video / MP3
+                const videoFile = req.files.find(f => f.fieldname === `video_${q.tempId}`);
+                if (videoFile) videoUrl = videoFile.path;
+            }
 
             let actualCorrectAnswer = "Chưa có đáp án"; 
             if (q.type === "multiple_choice") {
@@ -127,10 +145,12 @@ router.post("/create-manual", verifyToken, isTeacherOrAdmin, uploadCloud.any(), 
                 options: q.type === "multiple_choice" ? q.options : [], 
                 correctAnswer: actualCorrectAnswer, 
                 imageUrl: imageUrl, 
+                videoUrl: videoUrl, // Lưu URL video/audio vào MongoDB
                 essayAnswerText: q.essayAnswerText || "",
                 essayAnswerImageUrl: essayImageUrl, 
                 teacher: req.user.id,
-                isBank: isBankFlag 
+                isBank: isBankFlag,
+                points: Number(q.points) || 1
             });
             await newQ.save();
             
@@ -196,7 +216,7 @@ router.post("/create", verifyToken, isTeacherOrAdmin, async (req, res) => {
 });
 
 // ==========================================================
-// 👉 4. [GET] LẤY DANH SÁCH BÀI TẬP & ĐẾM ĐÚNG LƯỢT NỘP / CHỜ CHẤM
+// 4. [GET] LẤY DANH SÁCH BÀI TẬP & ĐẾM ĐÚNG LƯỢT NỘP / CHỜ CHẤM
 // ==========================================================
 router.get("/my-assignments", verifyToken, async (req, res) => {
     try {
@@ -214,7 +234,6 @@ router.get("/my-assignments", verifyToken, async (req, res) => {
                 .lean(); 
             
             const assignmentIds = myAssignments.map(a => a._id);
-            // 👉 ĐÃ SỬA: Lấy thêm trường status để đếm chờ chấm
             const allSubmissions = await Submission.find({ assignment: { $in: assignmentIds } }).select("assignment student status");
 
             const classesInvolved = [...new Set(myAssignments.map(a => a.targetClass))];
@@ -227,17 +246,14 @@ router.get("/my-assignments", verifyToken, async (req, res) => {
             const assignmentsWithCounts = myAssignments.map(assig => {
                 const submissionsForThisAssignment = allSubmissions.filter(sub => sub.assignment.toString() === assig._id.toString());
                 
-                // Đếm Đã nộp (Tính tất cả: submitted, pending, graded)
                 const uniqueStudents = new Set(submissionsForThisAssignment.map(sub => sub.student.toString()));
-                
-                // 👉 ĐẾM THÊM CHỜ CHẤM: Lọc những bài có status = pending
                 const pendingSubs = submissionsForThisAssignment.filter(sub => sub.status === 'pending');
                 const uniquePendingStudents = new Set(pendingSubs.map(sub => sub.student.toString()));
 
                 return {
                     ...assig,
                     submittedCount: uniqueStudents.size, 
-                    pendingCount: uniquePendingStudents.size, // Gửi biến này về cho React
+                    pendingCount: uniquePendingStudents.size, 
                     totalStudents: classStudentCounts[assig.targetClass] || 0
                 };
             });
@@ -284,16 +300,25 @@ router.delete("/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
             const question = item.questionId;
             
             if (question && question.isBank === false) {
-                if (question.imageUrl) {
+                // Xóa ảnh đề bài
+                if (question.imageUrl && question.imageUrl.includes('cloudinary.com')) {
                     const publicId = getCloudinaryPublicId(question.imageUrl);
-                    if (publicId) await cloudinary.uploader.destroy(publicId);
+                    if (publicId) await cloudinary.uploader.destroy(publicId, { resource_type: getCloudinaryResourceType(question.imageUrl) });
                 }
 
-                if (question.essayAnswerImageUrl) {
+                // Xóa ảnh tự luận
+                if (question.essayAnswerImageUrl && question.essayAnswerImageUrl.includes('cloudinary.com')) {
                     const essayPublicId = getCloudinaryPublicId(question.essayAnswerImageUrl);
-                    if (essayPublicId) await cloudinary.uploader.destroy(essayPublicId);
+                    if (essayPublicId) await cloudinary.uploader.destroy(essayPublicId, { resource_type: getCloudinaryResourceType(question.essayAnswerImageUrl) });
+                }
+                
+                // 👉 Xóa Video / MP3 đề bài
+                if (question.videoUrl && question.videoUrl.includes('cloudinary.com')) {
+                    const videoPublicId = getCloudinaryPublicId(question.videoUrl);
+                    if (videoPublicId) await cloudinary.uploader.destroy(videoPublicId, { resource_type: getCloudinaryResourceType(question.videoUrl) });
                 }
 
+                // Xóa ảnh bị ẩn trong khung Rich Text
                 const hiddenUrls = [
                     ...extractCloudinaryUrlsFromHtml(question.content),
                     ...extractCloudinaryUrlsFromHtml(question.essayAnswerText)
@@ -302,7 +327,7 @@ router.delete("/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
                 for (const url of hiddenUrls) {
                     const hiddenPublicId = getCloudinaryPublicId(url);
                     if (hiddenPublicId) {
-                        await cloudinary.uploader.destroy(hiddenPublicId);
+                        await cloudinary.uploader.destroy(hiddenPublicId, { resource_type: getCloudinaryResourceType(url) });
                     }
                 }
 
@@ -313,7 +338,7 @@ router.delete("/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
         await Assignment.findByIdAndDelete(assignmentId);
         await Submission.deleteMany({ assignment: assignmentId });
         
-        res.status(200).json({ message: " Đã xóa bài tập và dọn dẹp sạch sẽ ảnh rác thành công!" });
+        res.status(200).json({ message: " Đã xóa bài tập và dọn dẹp sạch sẽ tài nguyên rác thành công!" });
     } catch (error) { 
         res.status(500).json({ message: "Lỗi server khi xóa", error: error.message }); 
     }
@@ -344,11 +369,22 @@ router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asyn
         const questionsWithPoints = [];
 
         for (const q of parsedQuestions) {
-            const imageFile = req.files && req.files.find(f => f.fieldname === `image_${q.tempId}` || f.fieldname === `image_${q._id}`);
-            const imageUrl = imageFile ? imageFile.path : (q.existingImageUrl || "");
+            let imageUrl = q.existingImageUrl || "";
+            let essayImageUrl = q.existingEssayAnswerImageUrl || "";
+            let videoUrl = q.videoUrl || "";
 
-            const essayImageFile = req.files && req.files.find(f => f.fieldname === `essayImage_${q.tempId}` || f.fieldname === `essayImage_${q._id}`);
-            const essayImageUrl = essayImageFile ? essayImageFile.path : (q.existingEssayAnswerImageUrl || "");
+            // Check files từ formData lên
+            if (req.files && req.files.length > 0) {
+                const imageFile = req.files.find(f => f.fieldname === `image_${q.tempId}` || f.fieldname === `image_${q._id}`);
+                if (imageFile) imageUrl = imageFile.path;
+
+                const essayImageFile = req.files.find(f => f.fieldname === `essayImage_${q.tempId}` || f.fieldname === `essayImage_${q._id}`);
+                if (essayImageFile) essayImageUrl = essayImageFile.path;
+                
+                // Bắt video/mp3 update
+                const videoFile = req.files.find(f => f.fieldname === `video_${q.tempId}` || f.fieldname === `video_${q._id}`);
+                if (videoFile) videoUrl = videoFile.path;
+            }
 
             let actualCorrectAnswer = "Chưa có đáp án";
             if (q.type === "multiple_choice") {
@@ -371,6 +407,7 @@ router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asyn
                     options: q.type === "multiple_choice" ? q.options : [],
                     correctAnswer: actualCorrectAnswer,
                     imageUrl: imageUrl,
+                    videoUrl: videoUrl, // 👉 Cập nhật URL video
                     essayAnswerText: q.essayAnswerText || "",
                     essayAnswerImageUrl: essayImageUrl,
                     isBank: isBankFlag
@@ -386,10 +423,12 @@ router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asyn
                     options: q.type === "multiple_choice" ? q.options : [],
                     correctAnswer: actualCorrectAnswer,
                     imageUrl: imageUrl,
+                    videoUrl: videoUrl, // 👉 Thêm mới URL video
                     essayAnswerText: q.essayAnswerText || "",
                     essayAnswerImageUrl: essayImageUrl,
                     teacher: req.user.id,
-                    isBank: isBankFlag
+                    isBank: isBankFlag,
+                    points: Number(q.points) || 1
                 });
                 await newQ.save();
                 finalQuestionId = newQ._id;

@@ -2,10 +2,16 @@ import mongoose from "mongoose";
 
 const questionSchema = new mongoose.Schema(
     {
-        // Nội dung câu hỏi
+        // Nội dung câu hỏi (Đã bỏ required: true để cho phép câu hỏi chỉ có ảnh/video)
         content: {
             type: String,
-            required: true,
+            default: "", // Nếu không gõ chữ, mặc định sẽ lưu chuỗi rỗng
+        },
+
+        // Link Video đề bài (YouTube, Google Drive...)
+        videoUrl: {
+            type: String,
+            default: ""
         },
 
         // Phân loại: Trắc nghiệm (multiple_choice) hoặc Tự luận (essay)

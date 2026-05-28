@@ -14,11 +14,40 @@ import {
   ArrowLeft, UploadCloud, CheckCircle, CheckCircle2, AlertTriangle, Eraser,
   Sparkles, FileText, Loader2, Image as ImageIcon, ListChecks, Layers,
   PenTool, Database, Calculator, Save, Search, Eye, Trash2, PlusCircle, ArrowRight, FolderOpen, Lock,
-  Calendar 
+  Calendar, Video, FileAudio, PlayCircle
 } from "lucide-react";
 
 import RichTextEditor from "@/components/ui/RichTextEditor";
 import 'katex/dist/katex.min.css';
+
+// ==========================================
+// HÀM XỬ LÝ LINK YOUTUBE VÀ GOOGLE DRIVE & KIỂM TRA AUDIO
+// ==========================================
+const getYoutubeEmbedUrl = (url) => {
+  if (!url) return "";
+  if (url.includes("youtube.com/watch?v=")) return url.replace("watch?v=", "embed/").split("&")[0];
+  if (url.includes("youtu.be/")) return url.replace("youtu.be/", "youtube.com/embed/").split("?")[0];
+  return url;
+};
+
+const getDriveEmbedUrl = (url) => {
+  if (!url) return "";
+  let fileId = null;
+  if (url.includes("/file/d/")) {
+    const matches = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (matches && matches[1]) fileId = matches[1];
+  } else if (url.includes("?id=")) {
+    const matches = url.match(/\?id=([a-zA-Z0-9_-]+)/);
+    if (matches && matches[1]) fileId = matches[1];
+  }
+  if (fileId) return `https://drive.google.com/file/d/${fileId}/preview`;
+  return url;
+};
+
+const isAudioFile = (url) => {
+  if (!url) return false;
+  return url.toLowerCase().match(/\.(mp3|wav|m4a|ogg)$/) != null;
+};
 
 // ==========================================
 // COMPONENT CHỌN NGÀY TÙY CHỈNH
@@ -109,7 +138,7 @@ const CreateAssignment = () => {
   const [extractedQuestions, setExtractedQuestions] = useState([]);
 
   const [templateConfig, setTemplateConfig] = useState({
-    type: null, mcqCount: 0, essayCount: 0, essayPoints: [], totalPoints: 10
+    mcqCount: 0, essayCount: 0, essayPoints: []
   });
 
   const getCurrentDate = () => {
@@ -131,12 +160,6 @@ const CreateAssignment = () => {
     const now = new Date();
     now.setHours(now.getHours() + 24); 
     return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`; 
-  };
-
-  const formatDisplayDate = (ymdString) => {
-    if (!ymdString) return "";
-    const [year, month, day] = ymdString.split("-");
-    return `${day}/${month}/${year}`;
   };
 
   const [newAssignment, setNewAssignment] = useState({ 
@@ -201,6 +224,13 @@ const CreateAssignment = () => {
     const headers = { Authorization: `Bearer ${token}` };
     if (isMultipart) headers["Content-Type"] = "multipart/form-data";
     return { headers };
+  };
+
+  const getImageUrl = (url) => {
+    if (!url) return "";
+    if (url.startsWith("http") || url.startsWith("blob:") || url.startsWith("data:image")) return url;
+    let cleanUrl = url.replace(/\\/g, '/'); 
+    return `${serverUrl}${cleanUrl.startsWith("/") ? "" : "/"}${cleanUrl}`;
   };
 
   useEffect(() => {
@@ -269,19 +299,17 @@ const CreateAssignment = () => {
             return {
               _id: q._id, tempId, content: q.content, type: q.type || "multiple_choice",
               options: parsedOptions, correctAnswer: correctKey, difficulty: q.difficulty || "medium",
-              imageFile: null, previewUrl: q.imageUrl ? `${serverUrl}${q.imageUrl}` : "", existingImageUrl: q.imageUrl,
+              videoUrl: q.videoUrl || "", 
+              videoFile: null, videoPreviewUrl: "",
+              imageFile: null, previewUrl: q.imageUrl ? getImageUrl(q.imageUrl) : "", existingImageUrl: q.imageUrl,
               essayAnswerText: q.essayAnswerText || "",
-              essayAnswerPreviewUrl: q.essayAnswerImageUrl ? `${serverUrl}${q.essayAnswerImageUrl}` : "",
+              essayAnswerPreviewUrl: q.essayAnswerImageUrl ? getImageUrl(q.essayAnswerImageUrl) : "",
             };
           });
 
-          let type = 'mixed';
-          if (mcqCount > 0 && essayCount === 0) type = 'full_mcq';
-          if (essayCount > 0 && mcqCount === 0) type = 'full_essay';
-
           const essayPtsArr = formattedQuestions.filter(q => q.type === 'essay').map(q => loadedPoints[q.tempId]);
 
-          setTemplateConfig({ type, mcqCount, essayCount, essayPoints: essayPtsArr, totalPoints: 10 });
+          setTemplateConfig({ mcqCount, essayCount, essayPoints: essayPtsArr });
           setManualQuestions(formattedQuestions);
           setQuestionPoints(loadedPoints); 
           setCreationMethod("manual"); 
@@ -314,7 +342,7 @@ const CreateAssignment = () => {
             setNewAssignment(prev => ({ ...prev, subject: defaultSub }));
             setBankSubject(defaultSub); 
         }
-        setQuestions(questionsRes.data?.questions || []);
+        questionsRes.data && setQuestions(questionsRes.data.questions || []);
       } catch (error) {}
     };
     fetchData();
@@ -324,12 +352,6 @@ const CreateAssignment = () => {
     ? teacherProfile.subjects 
     : teacherProfile?.subject ? [teacherProfile.subject] : [];
 
-  const handleSelectTemplate = (type) => {
-    if (templateConfig.type !== type) {
-      setTemplateConfig({ type, mcqCount: 0, essayCount: 0, essayPoints: [] });
-    }
-  };
-
   const handleEssayCountChange = (e) => {
     const count = parseInt(e.target.value) || 0;
     const newPts = [...templateConfig.essayPoints];
@@ -338,11 +360,9 @@ const CreateAssignment = () => {
     setTemplateConfig({...templateConfig, essayCount: count, essayPoints: newPts});
   };
 
-  // 👉 THÊM TÍNH NĂNG BẮT LỖI SỐ ĐIỂM LẺ (SỐ THẬP PHÂN XẤU)
   const isUglyDecimal = (num) => {
     const fixed = Number(num).toFixed(10);
     const decimal = fixed.split(".")[1]?.replace(/0+$/, "") || "";
-    // Kiểm tra các chuỗi lặp phổ biến khi chia bị lẻ 1/3, 2/3
     return (decimal.includes("333") || decimal.includes("666") || decimal.includes("999") || decimal.length > 2);
   };
 
@@ -355,16 +375,19 @@ const CreateAssignment = () => {
 
     if (totalQs === 0) return { valid: false, msg: "Vui lòng nhập số lượng câu hỏi (Trắc nghiệm hoặc Tự luận)." };
 
-    if (mcq > 0 && essay === 0) { // Full MCQ
+    let type = 'mixed';
+    if (mcq > 0 && essay === 0) type = 'full_mcq';
+    else if (mcq === 0 && essay > 0) type = 'full_essay';
+
+    if (type === "full_mcq") {
       const pt = 10 / mcq;
-      // 👉 CHẶN HOÀN TOÀN: Nếu điểm bị lẻ (không chia hết cho 0.25 hoặc 0.5) hoặc là số thập phân vô hạn
       if ((pt * 100) % 5 !== 0 || isUglyDecimal(pt)) {
         return { valid: false, msg: `LỖI: Máy chia bị lẻ (${pt.toFixed(4)} đ/câu). Vui lòng đổi số lượng câu trắc nghiệm!` };
       }
       return { valid: true, msg: `Hợp lệ: Máy sẽ chia đều mỗi câu ${pt.toFixed(2)} điểm.` };
     }
 
-    if (mcq === 0 && essay > 0) { // Full Essay
+    if (type === "full_essay") {
       if (essayPtsNum.some(p => p <= 0)) {
         return { valid: false, msg: "Vui lòng nhập điểm lớn hơn 0 cho các câu Tự luận." };
       }
@@ -374,12 +397,11 @@ const CreateAssignment = () => {
       return { valid: true, msg: "Hợp lệ: Đề có tổng 10 điểm." };
     }
 
-    if (mcq > 0 && essay > 0) { // Mixed
+    if (type === "mixed") {
       if (totalEssayPoints >= 10) {
         return { valid: false, msg: "LỖI: Tổng tự luận phải nhỏ hơn 10 để nhường điểm cho trắc nghiệm." };
       }
       const mcqPt = (10 - totalEssayPoints) / mcq;
-      // 👉 CHẶN HOÀN TOÀN: Nếu điểm bị lẻ
       if ((mcqPt * 100) % 5 !== 0 || isUglyDecimal(mcqPt)) {
         return { valid: false, msg: `LỖI: Trắc nghiệm bị lẻ (${mcqPt.toFixed(4)} đ/câu). Vui lòng đổi số câu trắc nghiệm hoặc điểm tự luận.` };
       }
@@ -392,7 +414,6 @@ const CreateAssignment = () => {
   const pointStatus = checkPointValidity();
 
   const handleGenerateSlots = () => {
-    // 👉 Nếu điểm không hợp lệ (có chữ "LỖI") thì chặn không cho tạo khung
     if (!pointStatus.valid) {
        alert(pointStatus.msg);
        return;
@@ -409,12 +430,12 @@ const CreateAssignment = () => {
     const newPoints = {};
     for (let i = 0; i < mcqCount; i++) {
         const tempId = `mcq_${Date.now()}_${i}`;
-        generatedSlots.push({ tempId, type: "multiple_choice", content: "", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium", essayAnswerText: "" });
+        generatedSlots.push({ tempId, type: "multiple_choice", content: "", videoUrl: "", videoFile: null, videoPreviewUrl: "", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium", essayAnswerText: "" });
         newPoints[tempId] = mcqPt; 
     }
     for (let i = 0; i < essayCount; i++) {
         const tempId = `essay_${Date.now()}_${i}`;
-        generatedSlots.push({ tempId, type: "essay", content: "", options: [], correctAnswer: "", difficulty: "medium", essayAnswerText: "" });
+        generatedSlots.push({ tempId, type: "essay", content: "", videoUrl: "", videoFile: null, videoPreviewUrl: "", options: [], correctAnswer: "", difficulty: "medium", essayAnswerText: "" });
         newPoints[tempId] = Number(templateConfig.essayPoints[i]) || 0; 
     }
     setManualQuestions(generatedSlots);
@@ -443,8 +464,6 @@ const CreateAssignment = () => {
   const totalPoints = Object.values(questionPoints).reduce((sum, p) => sum + (Number(p) || 0), 0);
   const roundedTotal = Math.round(totalPoints * 100) / 100; 
   const isPointsValid = roundedTotal === 10; 
-
-  useEffect(() => { setBankSetName("all"); }, [bankGrade, bankSubject]);
 
   const fillEmptySlots = (importedQs) => {
     let newManuals = [...manualQuestions];
@@ -479,6 +498,8 @@ const CreateAssignment = () => {
 
       const payloadToInject = {
         content: impQ.content || "",
+        videoUrl: impQ.videoUrl || "",
+        videoFile: null, videoPreviewUrl: "",
         options: impQ.type === 'multiple_choice' ? parsedOptions : [],
         correctAnswer: correctKey,
         difficulty: impQ.difficulty || "medium",
@@ -597,6 +618,7 @@ const CreateAssignment = () => {
       const baseData = { 
           type: type, 
           content: content, 
+          videoUrl: "", 
           options: options, 
           correctAnswer: correctAnswer,
           essayAnswerText: essayAnswerText, 
@@ -708,12 +730,13 @@ const CreateAssignment = () => {
 
   const handleAddSlot = (type) => {
     const tempId = `${type}_${Date.now()}`;
-    const newSlot = { tempId, type, content: "", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium", essayAnswerText: "" };
+    const newSlot = { tempId, type, content: "", videoUrl: "", videoFile: null, videoPreviewUrl: "", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium", essayAnswerText: "" };
     const updatedQuestions = [...manualQuestions, newSlot];
     const updatedPoints = { ...questionPoints, [tempId]: 0 }; 
     setManualQuestions(updatedQuestions);
     recalculatePoints(updatedQuestions, updatedPoints);
   };
+  
   const handleDeleteSlot = (tempId) => {
     if (!window.confirm("XÓA HOÀN TOÀN khung này khỏi đề thi?")) return;
     const updatedQuestions = manualQuestions.filter(q => q.tempId !== tempId);
@@ -722,25 +745,37 @@ const CreateAssignment = () => {
     setManualQuestions(updatedQuestions);
     recalculatePoints(updatedQuestions, updatedPoints);
   };
+
   const handleClearSlot = (tempId) => { 
     if(!window.confirm("Xóa nội dung khung này?")) return; 
     setManualQuestions(manualQuestions.map(q => { 
       if (q.tempId === tempId) { 
-        return { ...q, content: "", options: ["", "", "", ""], imageFile: null, previewUrl: "", existingImageUrl: "", essayAnswerText: "", essayAnswerImageFile: null, essayAnswerPreviewUrl: "", existingEssayAnswerImageUrl: "", _id: undefined }; 
+        return { ...q, content: "", videoUrl: "", videoFile: null, videoPreviewUrl: "", options: ["", "", "", ""], imageFile: null, previewUrl: "", existingImageUrl: "", essayAnswerText: "", essayAnswerImageFile: null, essayAnswerPreviewUrl: "", existingEssayAnswerImageUrl: "", _id: undefined }; 
       } 
       return q; 
     })); 
   };
 
   const handleManualImageChange = (tempId, e) => { const file = e.target.files[0]; if (file) setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, imageFile: file, previewUrl: URL.createObjectURL(file) } : q)); };
-  const handleRemoveManualImage = (tempId) => { setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, imageFile: null, previewUrl: "" } : q)); };
+  const handleRemoveManualImage = (tempId) => { setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, imageFile: null, previewUrl: "", existingImageUrl: "" } : q)); };
+  
+  // 👉 THÊM HÀM XỬ LÝ CHỌN VIDEO UPLOAD (Local -> Cloudinary)
+  const handleManualVideoChange = (tempId, e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, videoFile: file, videoPreviewUrl: URL.createObjectURL(file) } : q));
+    }
+  };
+  const handleRemoveManualVideo = (tempId) => {
+    setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, videoFile: null, videoPreviewUrl: "", videoUrl: "" } : q));
+  };
+
   const handleManualEssayImageChange = (tempId, e) => { const file = e.target.files[0]; if (file) setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, essayAnswerImageFile: file, essayAnswerPreviewUrl: URL.createObjectURL(file) } : q)); };
-  const handleRemoveManualEssayImage = (tempId) => { setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, essayAnswerImageFile: null, essayAnswerPreviewUrl: "" } : q)); };
+  const handleRemoveManualEssayImage = (tempId) => { setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, essayAnswerImageFile: null, essayAnswerPreviewUrl: "", existingEssayAnswerImageUrl: "" } : q)); };
 
   const handleSubmit = async (actionType) => {
     if (!newAssignment.targetClass) return alert("Vui lòng chọn lớp để giao bài!");
     
-    // 2. Chặn điều kiện điểm tại thời điểm phát hành
     if (actionType === 'published') {
       if (!isPointsValid) {
         return alert(`Tổng điểm hiện tại là ${roundedTotal.toFixed(2)}. Bạn bắt buộc phải chia điểm sao cho bằng đúng 10.00 mới được PHÁT HÀNH!`);
@@ -767,6 +802,37 @@ const CreateAssignment = () => {
     const finalStartDateISO = finalStartDate.toISOString();
     const finalDueDateISO = finalDueDate.toISOString();
 
+    let questionsValid = true;
+    const updatedManualQuestions = [...manualQuestions];
+
+    for (let i = 0; i < updatedManualQuestions.length; i++) {
+      let q = updatedManualQuestions[i];
+      let textContent = q.content ? q.content.replace(/<[^>]*>/g, '').trim() : "";
+
+      if (!textContent) {
+        if (q.imageFile || q.existingImageUrl || q.videoFile || q.videoUrl) {
+          q.content = "<p><i>(Dựa vào dữ liệu đính kèm bên dưới để trả lời câu hỏi)</i></p>";
+        } else {
+          alert(`LỖI LƯU BÀI: Câu số ${i + 1} đang bị bỏ trống nội dung đề bài! Vui lòng gõ chữ hoặc tải file đính kèm trước khi lưu.`);
+          questionsValid = false;
+          break;
+        }
+      }
+
+      if (q.type === 'multiple_choice') {
+        const hasEmptyOption = q.options.some(opt => !opt || opt.replace(/<[^>]*>/g, '').trim() === "");
+        if (hasEmptyOption) {
+          alert(`LỖI LƯU BÀI: Câu trắc nghiệm số ${i + 1} đang có đáp án bị trống. Vui lòng điền đủ!`);
+          questionsValid = false;
+          break;
+        }
+      }
+    }
+
+    if (!questionsValid) return;
+
+    setManualQuestions(updatedManualQuestions);
+
     setLoading(true);
     try {
       const formData = new FormData();
@@ -784,17 +850,27 @@ const CreateAssignment = () => {
           formData.append("password", ""); 
       }
       
-      const questionsToSave = manualQuestions.map(q => ({
-          _id: q._id, tempId: q.tempId, content: q.content, type: q.type, options: q.options, correctAnswer: q.correctAnswer, difficulty: q.difficulty, subject: newAssignment.subject,
-          points: questionPoints[q.tempId] || 0, essayAnswerText: q.essayAnswerText || "",
+      const questionsToSave = updatedManualQuestions.map(q => ({
+          _id: q._id, 
+          tempId: q.tempId, 
+          content: q.content, 
+          videoUrl: q.videoUrl || "", 
+          type: q.type, 
+          options: q.options, 
+          correctAnswer: q.correctAnswer, 
+          difficulty: q.difficulty, 
+          subject: newAssignment.subject,
+          points: questionPoints[q.tempId] || 0, 
+          essayAnswerText: q.essayAnswerText || "",
           existingImageUrl: q.existingImageUrl || "",
           existingEssayAnswerImageUrl: q.existingEssayAnswerImageUrl || "" 
       }));
       formData.append("questionsData", JSON.stringify(questionsToSave));
 
-      manualQuestions.forEach(q => { 
+      updatedManualQuestions.forEach(q => { 
           if (q.imageFile) formData.append(`image_${q.tempId}`, q.imageFile); 
           if (q.essayAnswerImageFile) formData.append(`essayImage_${q.tempId}`, q.essayAnswerImageFile);
+          if (q.videoFile) formData.append(`video_${q.tempId}`, q.videoFile); // 👉 Đóng gói file video gửi lên server
       });
       
       if (id) await axios.put(`/assignments/update/${id}`, formData, getHeader(true));
@@ -861,13 +937,11 @@ const CreateAssignment = () => {
           <CardContent className="p-4 sm:p-8">
             <form onSubmit={(e) => e.preventDefault()} className="space-y-8">
               
-              {/* PHẦN 1: THÔNG TIN CHUNG */}
               <div className="space-y-4">
                 <h3 className="text-lg sm:text-xl font-black text-sky-900 border-b border-sky-100 pb-2">1. Thông tin chung</h3>
                 <Input placeholder="Nhập tên bài tập..." className="h-12 sm:h-14 rounded-xl bg-slate-50 font-bold text-base sm:text-lg border-sky-100 focus-visible:ring-sky-500" value={newAssignment.title} onChange={(e) => setNewAssignment({...newAssignment, title: e.target.value})} required />
                 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {/* Cột 1: Giao cho Lớp */}
                   <div className="space-y-1.5">
                     <label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Giao cho Lớp</label>
                     <Select value={newAssignment.targetClass || ""} onValueChange={(val) => setNewAssignment({...newAssignment, targetClass: val})} required>
@@ -884,7 +958,6 @@ const CreateAssignment = () => {
                     </Select>
                   </div>
 
-                  {/* Cột 2: Môn học */}
                   <div className="space-y-1.5">
                       <label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Môn học</label>
                       <Select value={newAssignment.subject} onValueChange={(val) => setNewAssignment({...newAssignment, subject: val})}>
@@ -900,7 +973,6 @@ const CreateAssignment = () => {
                       </Select>
                   </div>
 
-                  {/* Cột 3: Thời gian làm bài */}
                   <div className="space-y-1.5">
                       <label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Thời gian làm bài (Phút)</label>
                       <Input type="number" placeholder="VD: 45" className="w-full h-11 sm:h-12 px-4 rounded-xl bg-slate-50 border-sky-100 font-bold text-sky-700 focus-visible:ring-sky-500" value={newAssignment.duration} onChange={(e) => setNewAssignment({...newAssignment, duration: e.target.value})} required />
@@ -973,7 +1045,6 @@ const CreateAssignment = () => {
                 </div>
               </div>
 
-              {/* PHẦN 2: CẤU TRÚC ĐỀ THI */}
               <div className="border-t border-sky-100 pt-6 mt-6">
                 <div className="flex items-center justify-between mb-4">
                    <h3 className="text-lg sm:text-xl font-black text-sky-900">2. Cấu trúc Đề thi</h3>
@@ -981,7 +1052,7 @@ const CreateAssignment = () => {
                      <Button variant="outline" className="border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-300 h-9 font-bold" onClick={() => {
                         if(window.confirm("Các câu hỏi đã điền sẽ bị xóa sạch. Bạn có chắc chắn muốn làm lại cấu trúc?")) {
                            setManualQuestions([]);
-                           setTemplateConfig({...templateConfig, mcqCount:0, essayCount:0, essayPoints:[]});
+                           setTemplateConfig({ mcqCount:0, essayCount:0, essayPoints:[] });
                         }
                      }}>
                         <Eraser className="w-4 h-4 mr-2"/> Xóa & Làm lại
@@ -989,24 +1060,17 @@ const CreateAssignment = () => {
                    )}
                 </div>
 
-                {/* Nhập số lượng và điểm (Chỉ hiện khi chưa tạo khung) */}
                 {manualQuestions.length === 0 && (
                   <div className="p-5 sm:p-8 rounded-3xl border border-slate-200 bg-white shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-300">
                       <div className="space-y-4">
                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                             <div className="space-y-2">
                                <label className="font-bold text-slate-700 flex items-center gap-2"><ListChecks className="w-4 h-4 text-sky-500"/> Số lượng câu Trắc nghiệm</label>
-                               <Input type="number" min="0" value={templateConfig.mcqCount} onChange={(e) => setTemplateConfig({...templateConfig, mcqCount: e.target.value, type: e.target.value > 0 && templateConfig.essayCount > 0 ? 'mixed' : e.target.value > 0 ? 'full_mcq' : templateConfig.essayCount > 0 ? 'full_essay' : null})} className="h-12 rounded-xl border-slate-200 font-bold text-lg bg-slate-50 focus-visible:ring-sky-500" />
+                               <Input type="number" min="0" value={templateConfig.mcqCount} onChange={(e) => setTemplateConfig({...templateConfig, mcqCount: e.target.value})} className="h-12 rounded-xl border-slate-200 font-bold text-lg bg-slate-50 focus-visible:ring-sky-500" />
                             </div>
                             <div className="space-y-2">
                                <label className="font-bold text-slate-700 flex items-center gap-2"><FileText className="w-4 h-4 text-emerald-500"/> Số lượng câu Tự luận</label>
-                               <Input type="number" min="0" value={templateConfig.essayCount} onChange={(e) => {
-                                 const count = parseInt(e.target.value) || 0;
-                                 const newPts = [...templateConfig.essayPoints];
-                                 if (count > newPts.length) { while (newPts.length < count) newPts.push(""); } 
-                                 else { newPts.length = count; }
-                                 setTemplateConfig({...templateConfig, essayCount: count, essayPoints: newPts, type: templateConfig.mcqCount > 0 && count > 0 ? 'mixed' : count > 0 ? 'full_essay' : templateConfig.mcqCount > 0 ? 'full_mcq' : null});
-                               }} className="h-12 rounded-xl border-slate-200 font-bold text-lg bg-slate-50 focus-visible:ring-emerald-500" />
+                               <Input type="number" min="0" value={templateConfig.essayCount} onChange={handleEssayCountChange} className="h-12 rounded-xl border-slate-200 font-bold text-lg bg-slate-50 focus-visible:ring-emerald-500" />
                             </div>
                          </div>
 
@@ -1036,7 +1100,6 @@ const CreateAssignment = () => {
                   </div>
                 )}
 
-                {/* Banner báo thành công khi đã tạo khung */}
                 {manualQuestions.length > 0 && (
                    <div className="mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -1050,7 +1113,6 @@ const CreateAssignment = () => {
                 )}
               </div>
 
-              {/* PHẦN 3: NỘI DUNG CHI TIẾT (Chỉ hiển thị khi đã có khung) */}
               {manualQuestions.length > 0 && (
                 <div className="border-t border-sky-100 pt-6 mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                   <h3 className="text-lg sm:text-xl font-black text-sky-900 mb-4">3. Nội dung chi tiết</h3>
@@ -1061,7 +1123,6 @@ const CreateAssignment = () => {
                     <button type="button" onClick={() => setCreationMethod("bank")} className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${creationMethod === 'bank' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-sky-600'}`}><Database className="w-4 h-4 shrink-0"/> Rót từ Kho Câu hỏi</button>
                   </div>
 
-                  {/* NỘI DUNG HIỂN THỊ THEO TAB */}
                   {creationMethod === "upload" && (
                     <div className="border border-sky-100 bg-sky-50/30 rounded-2xl p-3 sm:p-4 md:p-6 space-y-4">
                       {!isReviewingExtraction ? (
@@ -1097,11 +1158,6 @@ const CreateAssignment = () => {
                                 className="w-full h-[600px] p-4 rounded-b-xl border border-slate-200 font-mono text-sm leading-relaxed bg-white shadow-inner resize-none focus-visible:ring-sky-500 outline-none"
                                 placeholder="Nội dung file Word sẽ hiển thị ở đây..."
                               />
-                              <div className="bg-amber-50 p-3 mt-2 rounded-lg border border-amber-200">
-                                <p className="text-xs text-amber-700 font-medium">
-                                  💡 <b>Mẹo sửa lỗi:</b> Chỉnh sửa văn bản ở trên (thêm chữ <b>Câu X:</b> hoặc <b>A. B. C. D.</b> nếu máy bị thiếu), sau đó ấn nút <b>Rót lại Text</b> để cập nhật danh sách bên phải.
-                                </p>
-                              </div>
                            </div>
 
                            <div className="w-full lg:w-3/5 space-y-4 sm:space-y-6">
@@ -1123,6 +1179,49 @@ const CreateAssignment = () => {
                                       <CardContent className="p-4 space-y-4 bg-white">
                                         <div className="flex flex-col">
                                             <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁN ẢNH CÔNG THỨC..." value={q.content} onChange={(val) => handleExtractedChange(q.tempId, 'content', val)} />
+                                            <div className="mt-3 flex items-center gap-2">
+                                               <Video className="w-5 h-5 text-indigo-500 shrink-0" />
+                                               <Input placeholder="Nhập link YouTube / Google Drive đính kèm câu hỏi (Tùy chọn)" value={q.videoUrl || ""} onChange={(e) => handleExtractedChange(q.tempId, 'videoUrl', e.target.value)} className="bg-slate-50 border-sky-100 focus-visible:ring-indigo-400" />
+                                            </div>
+                                            {/* 👉 HIỂN THỊ TRÌNH PHÁT VIDEO / AUDIO */}
+                                            {q.videoUrl && (
+                                              <div className="w-full mt-3 flex justify-center">
+                                                 {(q.videoUrl.includes("youtube.com") || q.videoUrl.includes("youtu.be")) ? (
+                                                     <div className="h-[250px] sm:h-[400px] w-full max-w-3xl rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                                                         <iframe className="w-full h-full" src={getYoutubeEmbedUrl(q.videoUrl)} allow="autoplay; fullscreen" allowFullScreen></iframe>
+                                                     </div>
+                                                 ) : q.videoUrl.includes("drive.google.com") ? (
+                                                     <div className="flex flex-col items-center w-full">
+                                                         <div className="h-[200px] sm:h-[350px] w-full max-w-2xl rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-slate-100 flex items-center justify-center relative">
+                                                             <iframe 
+                                                                className="w-full h-full relative z-10" 
+                                                                src={getDriveEmbedUrl(q.videoUrl)} 
+                                                                allow="autoplay; fullscreen; encrypted-media" 
+                                                                allowFullScreen
+                                                                referrerPolicy="no-referrer"
+                                                                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                                                             ></iframe>
+                                                             <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center z-0">
+                                                                 <Video className="w-8 h-8 text-slate-300 mb-2" />
+                                                                 <p className="text-slate-500 font-medium text-xs">Video đang bị Google Drive chặn hiển thị trực tiếp do cài đặt trình duyệt.</p>
+                                                             </div>
+                                                         </div>
+                                                         <a href={q.videoUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center justify-center h-10 px-6 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-sm transition-colors border border-indigo-200 shadow-sm">
+                                                            <Video className="w-4 h-4 mr-2" /> Click mở Video sang Tab mới
+                                                         </a>
+                                                     </div>
+                                                 ) : isAudioFile(q.videoUrl) ? (
+                                                     <div className="w-full max-w-md bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center">
+                                                        <FileAudio className="w-12 h-12 text-indigo-400 mb-4" />
+                                                        <audio controls className="w-full rounded-full" src={q.videoUrl} preload="metadata" />
+                                                     </div>
+                                                 ) : (
+                                                     <div className="w-full max-w-3xl rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-black flex justify-center">
+                                                        <video controls className="w-full max-h-[450px]" src={q.videoUrl} preload="metadata" playsInline />
+                                                     </div>
+                                                 )}
+                                              </div>
+                                            )}
                                         </div>
                                         
                                         <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-3">
@@ -1132,7 +1231,6 @@ const CreateAssignment = () => {
 
                                         {q.type === 'multiple_choice' && (
                                           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
-                                            
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                               {q.options.map((opt, i) => {
                                                 const letter = String.fromCharCode(65 + i);
@@ -1146,10 +1244,8 @@ const CreateAssignment = () => {
                                                 </div>
                                               )})}
                                             </div>
-
                                             <div className="flex justify-between items-center pt-2 gap-3 border-t border-slate-200 mt-2">
                                               <Button type="button" variant="ghost" size="sm" onClick={() => handleAddExtractedOption(q.tempId)} className="text-sky-600 hover:bg-sky-100 rounded-lg"><PlusCircle className="w-4 h-4 mr-1"/> Thêm đáp án</Button>
-                                              
                                               <div className="flex items-center gap-2">
                                                 <label className="text-xs font-bold text-rose-500">ĐÁP ÁN ĐÚNG:</label>
                                                 <Select value={q.correctAnswer || ""} onValueChange={(val) => handleExtractedChange(q.tempId, 'correctAnswer', val)}>
@@ -1263,6 +1359,10 @@ const CreateAssignment = () => {
                     <div className="w-full space-y-4 sm:space-y-6 mt-4">
                       {manualQuestions.map((q, index) => {
                         const isSlotEmpty = !q.content || q.content.replace(/<[^>]*>/g, '').trim() === "";
+                        
+                        // Lấy URL thực tế để hiển thị preview (nếu vừa chọn file thì lấy previewUrl tạo từ object, nếu ko lấy url từ DB)
+                        const currentVideoUrl = q.videoPreviewUrl || q.videoUrl;
+
                         return (
                         <Card key={q.tempId} className={`shadow-sm relative overflow-visible transition-all ${isSlotEmpty ? 'border-sky-300 bg-white shadow-md' : 'border-sky-200'}`}>
                           <div className={`absolute top-0 left-0 w-1.5 sm:w-2 h-full ${isSlotEmpty ? 'bg-sky-300' : 'bg-sky-500'}`}></div>
@@ -1290,10 +1390,77 @@ const CreateAssignment = () => {
                             <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
                               <div className={`flex-1 transition-all ${isSlotEmpty ? 'border-dashed border-2 border-slate-300 rounded-xl p-1 bg-white' : ''}`}>
                                 <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={q.content} onChange={(val) => handleManualChange(q.tempId, 'content', val)} />
+                                
+                                {/* 👉 VÙNG QUẢN LÝ VIDEO/AUDIO/LINK MỞ RỘNG */}
+                                <div className="mt-4 p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl">
+                                   <div className="flex justify-between items-center mb-3">
+                                     <h4 className="text-sm font-bold text-indigo-700 flex items-center"><Video className="w-4 h-4 mr-2" /> Đính kèm Video / Audio / Link</h4>
+                                   </div>
+                                   
+                                   {q.videoFile || (q.videoUrl && !q.videoUrl.includes("youtube") && !q.videoUrl.includes("drive.google.com")) ? (
+                                       <div className="relative w-full max-w-[450px] mx-auto rounded-xl overflow-hidden border border-indigo-200 shadow-sm bg-black group flex flex-col items-center justify-center p-4">
+                                           {isAudioFile(q.videoUrl) || (q.videoFile && q.videoFile.type.includes("audio")) ? (
+                                              <div className="bg-white p-4 w-full rounded-xl flex flex-col items-center">
+                                                <FileAudio className="w-12 h-12 text-indigo-400 mb-3" />
+                                                <audio controls className="w-full" src={currentVideoUrl} />
+                                              </div>
+                                           ) : (
+                                              <video className="w-full max-h-[300px] object-contain" controls src={currentVideoUrl} />
+                                           )}
+                                           <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                                              <Button type="button" onClick={() => handleRemoveManualVideo(q.tempId)} size="sm" className="bg-rose-500 hover:bg-rose-600 text-white rounded-full"><Trash2 className="w-4 h-4 mr-2"/> Xóa tệp</Button>
+                                           </div>
+                                       </div>
+                                   ) : (q.videoUrl && (q.videoUrl.includes("youtube") || q.videoUrl.includes("youtu.be") || q.videoUrl.includes("drive.google.com"))) ? (
+                                       <div className="relative w-full flex flex-col items-center group">
+                                           {(q.videoUrl.includes("youtube.com") || q.videoUrl.includes("youtu.be")) ? (
+                                                <div className="h-[200px] sm:h-[300px] w-full max-w-[400px] rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                                                    <iframe className="w-full h-full" src={getYoutubeEmbedUrl(q.videoUrl)} allow="autoplay; fullscreen" allowFullScreen></iframe>
+                                                </div>
+                                            ) : (
+                                                <div className="w-full flex flex-col items-center">
+                                                    <div className="h-[200px] sm:h-[300px] w-full max-w-[400px] rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-slate-100 flex items-center justify-center relative">
+                                                        <iframe 
+                                                           className="w-full h-full relative z-10" 
+                                                           src={getDriveEmbedUrl(q.videoUrl)} 
+                                                           allow="autoplay; fullscreen; encrypted-media" 
+                                                           allowFullScreen
+                                                           referrerPolicy="no-referrer"
+                                                           sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                                                        ></iframe>
+                                                        <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center z-0">
+                                                            <Video className="w-8 h-8 text-slate-300 mb-2" />
+                                                            <p className="text-slate-500 font-medium text-xs">Video đang bị trình duyệt chặn...</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                           <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                                              <Button type="button" onClick={() => handleRemoveManualVideo(q.tempId)} size="sm" className="bg-rose-500 hover:bg-rose-600 text-white rounded-full shadow-md"><Trash2 className="w-4 h-4 mr-2"/> Xóa Link</Button>
+                                           </div>
+                                       </div>
+                                   ) : (
+                                       <div className="flex flex-col gap-3">
+                                          <Input placeholder="Dán link YouTube / Google Drive vào đây..." value={q.videoUrl || ""} onChange={(e) => handleManualChange(q.tempId, 'videoUrl', e.target.value)} className="bg-white border-indigo-200 focus-visible:ring-indigo-400 font-medium" />
+                                          <div className="flex items-center gap-4">
+                                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hoặc tải tệp lên</span>
+                                             <hr className="flex-1 border-slate-200" />
+                                          </div>
+                                          <label className="flex flex-col items-center justify-center w-full h-28 rounded-xl border-2 border-dashed border-indigo-300 hover:border-indigo-500 hover:bg-indigo-100 bg-white cursor-pointer transition-all">
+                                             <div className="flex gap-3 mb-2">
+                                                <Video className="w-6 h-6 text-indigo-400" />
+                                                <FileAudio className="w-6 h-6 text-indigo-400" />
+                                             </div>
+                                             <span className="text-xs font-bold text-indigo-600 text-center px-1">Nhấp để tải lên Video / Audio</span>
+                                             <input type="file" className="hidden" accept="video/*,audio/*" onChange={(e) => handleManualVideoChange(q.tempId, e)} />
+                                          </label>
+                                       </div>
+                                   )}
+                                </div>
                               </div>
                               <div className="w-full md:w-36 shrink-0 h-[120px] sm:h-[120px]">
                                 {q.previewUrl ? (
-                                  <div className="relative w-full h-full rounded-xl border border-sky-200 overflow-hidden shadow-sm group/img"><img src={q.previewUrl} alt="Preview" className="absolute inset-0 w-full h-full object-cover" /><div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center"><button type="button" onClick={() => handleRemoveManualImage(q.tempId)} className="bg-rose-500 text-white rounded-full p-2 hover:scale-110 transition-transform"><Trash2 className="w-4 h-4"/></button></div></div>
+                                  <div className="relative w-full h-full rounded-xl border border-sky-200 overflow-hidden shadow-sm group/img"><img src={q.previewUrl} alt="Preview" className="absolute inset-0 w-full h-full object-cover bg-white" /><div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center"><button type="button" onClick={() => handleRemoveManualImage(q.tempId)} className="bg-rose-500 text-white rounded-full p-2 hover:scale-110 transition-transform"><Trash2 className="w-4 h-4"/></button></div></div>
                                 ) : (
                                   <label className="flex flex-col items-center justify-center w-full h-full rounded-xl border-2 border-dashed border-sky-200 hover:border-sky-400 bg-sky-50 cursor-pointer transition-all"><ImageIcon className="w-6 h-6 text-sky-400 mb-1" /><span className="text-xs font-bold text-sky-600 text-center px-1">Ảnh Phụ (Đề bài)</span><input type="file" className="hidden" accept="image/*" onChange={(e) => handleManualImageChange(q.tempId, e)} /></label>
                                 )}
@@ -1306,7 +1473,7 @@ const CreateAssignment = () => {
                                    <div className="flex-1"><RichTextEditor placeholder="Gõ lời giải hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={q.essayAnswerText} onChange={(val) => handleManualChange(q.tempId, 'essayAnswerText', val)} /></div>
                                    <div className="w-full md:w-36 shrink-0 h-[100px] sm:h-[100px]">
                                      {q.essayAnswerPreviewUrl ? (
-                                       <div className="relative w-full h-full rounded-xl border border-emerald-200 overflow-hidden shadow-sm group/img2"><img src={q.essayAnswerPreviewUrl} alt="Preview Answer" className="absolute inset-0 w-full h-full object-cover" /><div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img2:opacity-100 transition-opacity flex items-center justify-center"><button type="button" onClick={() => handleRemoveManualEssayImage(q.tempId)} className="bg-rose-500 text-white rounded-full p-2 hover:scale-110 transition-transform"><Trash2 className="w-4 h-4"/></button></div></div>
+                                       <div className="relative w-full h-full rounded-xl border border-emerald-200 overflow-hidden shadow-sm group/img2"><img src={q.essayAnswerPreviewUrl} alt="Preview Answer" className="absolute inset-0 w-full h-full object-cover bg-white" /><div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img2:opacity-100 transition-opacity flex items-center justify-center"><button type="button" onClick={() => handleRemoveManualEssayImage(q.tempId)} className="bg-rose-500 text-white rounded-full p-2 hover:scale-110 transition-transform"><Trash2 className="w-4 h-4"/></button></div></div>
                                      ) : (
                                        <label className="flex flex-col items-center justify-center w-full h-full rounded-xl border-2 border-dashed border-emerald-300 hover:border-emerald-500 bg-white cursor-pointer transition-all"><ImageIcon className="w-6 h-6 text-emerald-400 mb-1" /><span className="text-xs font-bold text-emerald-600 text-center px-1">Ảnh Phụ (Lời giải)</span><input type="file" className="hidden" accept="image/*" onChange={(e) => handleManualEssayImageChange(q.tempId, e)} /></label>
                                      )}
@@ -1358,7 +1525,7 @@ const CreateAssignment = () => {
                 </div>
               )}
 
-              {/* Nút Submit lưu ý chỉ hiện khi manualQuestions.length > 0 */}
+              {/* Nút Submit */}
               {manualQuestions.length > 0 && (
                 <div className="pt-6 sm:pt-8 border-t border-slate-200">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1371,7 +1538,7 @@ const CreateAssignment = () => {
           </CardContent>
         </Card>
         
-        {/* MODAL VIEW QUESTION */}
+        {/* MODAL VIEW QUESTION CÓ THÊM LỚP BẢO VỆ XEM VIDEO VÀ XEM AUDIO/VIDEO NATIVE */}
         <Dialog open={!!viewQuestion} onOpenChange={(open) => { if(!open) setViewQuestion(null) }}>
           <DialogContent className="sm:max-w-[800px] w-[95%] rounded-[2rem] border-none p-0 bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader className="bg-slate-50 px-8 py-6 border-b border-slate-100"><DialogTitle className="text-2xl font-black text-sky-950 flex items-center gap-3"><Eye className="w-6 h-6 text-sky-500" /> Xem trước Nội dung</DialogTitle></DialogHeader>
@@ -1380,6 +1547,46 @@ const CreateAssignment = () => {
                 <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-200 shadow-sm">
                     <div className="font-bold text-slate-800 text-lg leading-relaxed q-content-view" dangerouslySetInnerHTML={{ __html: viewQuestion.content }} />
                     {viewQuestion.imageUrl && <img src={getImageUrl(viewQuestion.imageUrl)} className="max-w-full max-h-72 mt-4 rounded-xl border border-slate-200 shadow-sm mx-auto" />}
+                    
+                    {/* 👉 HIỂN THỊ TRÌNH PHÁT VIDEO / AUDIO */}
+                    {viewQuestion.videoUrl && (
+                      <div className="w-full mt-4 flex justify-center">
+                         {(viewQuestion.videoUrl.includes("youtube.com") || viewQuestion.videoUrl.includes("youtu.be")) ? (
+                             <div className="h-[250px] sm:h-[400px] w-full max-w-3xl rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                                 <iframe className="w-full h-full" src={getYoutubeEmbedUrl(viewQuestion.videoUrl)} allow="autoplay; fullscreen" allowFullScreen></iframe>
+                             </div>
+                         ) : viewQuestion.videoUrl.includes("drive.google.com") ? (
+                             <div className="flex flex-col items-center w-full">
+                                 <div className="h-[200px] sm:h-[350px] w-full max-w-2xl rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-slate-100 flex items-center justify-center relative">
+                                     <iframe 
+                                        className="w-full h-full relative z-10" 
+                                        src={getDriveEmbedUrl(viewQuestion.videoUrl)} 
+                                        allow="autoplay; fullscreen; encrypted-media" 
+                                        allowFullScreen
+                                        referrerPolicy="no-referrer"
+                                        sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                                     ></iframe>
+                                     <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center z-0">
+                                         <Video className="w-8 h-8 text-slate-300 mb-2" />
+                                         <p className="text-slate-500 font-medium text-xs">Video đang bị Google Drive chặn hiển thị trực tiếp do cài đặt trình duyệt.</p>
+                                     </div>
+                                 </div>
+                                 <a href={viewQuestion.videoUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center justify-center h-10 px-6 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-sm transition-colors border border-indigo-200 shadow-sm">
+                                    <Video className="w-4 h-4 mr-2" /> Click mở Video sang Tab mới
+                                 </a>
+                             </div>
+                         ) : isAudioFile(viewQuestion.videoUrl) ? (
+                             <div className="w-full max-w-md bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center">
+                                <FileAudio className="w-12 h-12 text-indigo-400 mb-4" />
+                                <audio controls className="w-full rounded-full" src={viewQuestion.videoUrl} preload="metadata" />
+                             </div>
+                         ) : (
+                             <div className="w-full max-w-3xl rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-black flex justify-center">
+                                <video controls className="w-full max-h-[450px]" src={viewQuestion.videoUrl} preload="metadata" playsInline />
+                             </div>
+                         )}
+                      </div>
+                    )}
                 </div>
                 {(viewQuestion.essayAnswerText || viewQuestion.essayAnswerImageUrl) && (
                     <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-200 shadow-sm">

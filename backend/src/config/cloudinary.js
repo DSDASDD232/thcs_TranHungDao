@@ -16,9 +16,9 @@ cloudinary.config({
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
-    folder: 'thcs_tranhungdao/uploads', // Tên thư mục trên Cloudinary
-    allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
-    // Bạn có thể thêm transformation ở đây nếu muốn nén ảnh, vd: transformation: [{ width: 1000, crop: 'limit' }]
+    folder: 'thcs_tranhungdao/uploads', 
+    allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'mov', 'avi', 'mp3', 'wav'], // 👉 THÊM FORMAT VIDEO/AUDIO
+    resource_type: "auto", // 👉 QUAN TRỌNG: Cho phép Cloudinary tự nhận dạng cả Image và Video
   },
 });
 

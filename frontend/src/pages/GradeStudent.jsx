@@ -6,7 +6,36 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea"; 
-import { ArrowLeft, CheckCircle2, AlertCircle, Save, Loader2, UserCircle2, MessageSquareText } from "lucide-react"; 
+import { ArrowLeft, CheckCircle2, AlertCircle, Save, Loader2, UserCircle2, MessageSquareText, Video, FileAudio, PlayCircle } from "lucide-react"; 
+
+// ==========================================
+// HÀM XỬ LÝ LINK YOUTUBE VÀ GOOGLE DRIVE & KIỂM TRA AUDIO
+// ==========================================
+const getYoutubeEmbedUrl = (url) => {
+  if (!url) return "";
+  if (url.includes("youtube.com/watch?v=")) return url.replace("watch?v=", "embed/").split("&")[0];
+  if (url.includes("youtu.be/")) return url.replace("youtu.be/", "youtube.com/embed/").split("?")[0];
+  return url;
+};
+
+const getDriveEmbedUrl = (url) => {
+  if (!url) return "";
+  let fileId = null;
+  if (url.includes("/file/d/")) {
+    const matches = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (matches && matches[1]) fileId = matches[1];
+  } else if (url.includes("?id=")) {
+    const matches = url.match(/\?id=([a-zA-Z0-9_-]+)/);
+    if (matches && matches[1]) fileId = matches[1];
+  }
+  if (fileId) return `https://drive.google.com/file/d/${fileId}/preview`;
+  return url;
+};
+
+const isAudioFile = (url) => {
+  if (!url) return false;
+  return url.toLowerCase().match(/\.(mp3|wav|m4a|ogg)$/) != null;
+};
 
 const GradeStudent = () => {
   const { id } = useParams();
@@ -22,9 +51,9 @@ const GradeStudent = () => {
   
   const serverUrl = axios.defaults.baseURL.replace('/api', '');
 
-  // 👉 ĐÃ SỬA: Hàm này nhận biết hoàn hảo cả link API, ảnh thường và ảnh Base64 GeoGebra
   const getImageUrl = (url) => {
       if (!url) return "";
+      // Xử lý tốt Cloudinary, Base64 và Local path
       if (url.startsWith("http") || url.startsWith("data:image")) return url;
       let cleanUrl = url.replace(/\\/g, '/'); 
       return `${serverUrl}${cleanUrl.startsWith("/") ? "" : "/"}${cleanUrl}`;
@@ -124,8 +153,6 @@ const GradeStudent = () => {
           const q = ans.question;
           const isEssay = q.type === 'essay';
           
-          // 👉 ĐÃ SỬA: Gom tất cả các trường có khả năng chứa ảnh vào 1 mảng để kiểm tra
-          // Nếu Backend lưu Base64 vào thẳng studentImage thì vẫn lên ảnh!
           const submittedImages = [ans.studentImage, ans.studentBase64Image].filter(Boolean);
           
           return (
@@ -146,9 +173,51 @@ const GradeStudent = () => {
                       className="font-medium text-slate-800 text-lg leading-relaxed q-content-view"
                       dangerouslySetInnerHTML={{ __html: q.content }}
                   />
+                  {/* 👉 HÌNH ẢNH MINH HỌA */}
                   {q.imageUrl && (
                     <img src={getImageUrl(q.imageUrl)} className="max-w-full sm:max-w-md max-h-64 rounded-xl border border-slate-200 shadow-sm" alt="Đề bài" />
                   )}
+
+                  {/* 👉 HIỂN THỊ TRÌNH PHÁT VIDEO / AUDIO */}
+                  {q.videoUrl && (
+                    <div className="w-full mt-4 flex justify-center">
+                        {(q.videoUrl.includes("youtube.com") || q.videoUrl.includes("youtu.be")) ? (
+                            <div className="h-[250px] sm:h-[400px] w-full max-w-3xl rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                                <iframe className="w-full h-full" src={getYoutubeEmbedUrl(q.videoUrl)} allow="autoplay; fullscreen" allowFullScreen></iframe>
+                            </div>
+                        ) : q.videoUrl.includes("drive.google.com") ? (
+                            <div className="flex flex-col items-center w-full">
+                                <div className="h-[200px] sm:h-[350px] w-full max-w-2xl rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-slate-100 flex items-center justify-center relative">
+                                    <iframe 
+                                      className="w-full h-full relative z-10" 
+                                      src={getDriveEmbedUrl(q.videoUrl)} 
+                                      allow="autoplay; fullscreen; encrypted-media" 
+                                      allowFullScreen
+                                      referrerPolicy="no-referrer"
+                                      sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                                    ></iframe>
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center z-0">
+                                        <Video className="w-8 h-8 text-slate-300 mb-2" />
+                                        <p className="text-slate-500 font-medium text-xs">Video đang bị trình duyệt chặn hiển thị trực tiếp.</p>
+                                    </div>
+                                </div>
+                                <a href={q.videoUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center justify-center h-10 px-6 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-sm transition-colors border border-indigo-200 shadow-sm">
+                                  <Video className="w-4 h-4 mr-2" /> Click mở Video sang Tab mới
+                                </a>
+                            </div>
+                        ) : isAudioFile(q.videoUrl) ? (
+                            <div className="w-full max-w-md bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center">
+                              <FileAudio className="w-12 h-12 text-indigo-400 mb-4" />
+                              <audio controls className="w-full rounded-full" src={q.videoUrl} preload="metadata" />
+                            </div>
+                        ) : (
+                            <div className="w-full max-w-3xl rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-black flex justify-center">
+                              <video controls className="w-full max-h-[450px]" src={q.videoUrl} preload="metadata" playsInline />
+                            </div>
+                        )}
+                    </div>
+                  )}
+
                 </div>
 
                 {(q.essayAnswerText || q.essayAnswerImageUrl) && (
@@ -177,7 +246,7 @@ const GradeStudent = () => {
                         )}
                       </div>
                       
-                      {/* Hiển thị tất cả ảnh nộp (nếu có up tay và vẽ GeoGebra thì hiện cả 2) */}
+                      {/* Hiển thị tất cả ảnh nộp */}
                       {submittedImages.length > 0 && (
                         <div className="space-y-3">
                           <p className="text-xs font-bold text-slate-400 uppercase mb-2">Ảnh bài làm đính kèm:</p>

@@ -59,6 +59,7 @@ import {
   Eye,
   FileX,
   Lock,
+  Printer,
 } from "lucide-react";
 
 const CustomDateInput = ({ label, value, onChange }) => {
@@ -123,7 +124,7 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
   const sheet = workbook.addWorksheet("Lịch Sử Học Tập", { views: [{ showGridLines: false }] });
   
   sheet.pageSetup = {
-    paperSize: 9, // A4
+    paperSize: 9, 
     orientation: "portrait",
     fitToPage: true,
     fitToWidth: 1,
@@ -132,16 +133,14 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
     horizontalCentered: true,
   };
 
-  // ĐÃ FIX: Tăng độ rộng cột D và E để chữ CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM không bị che lấp
   sheet.columns = [
-    { width: 8 },  // A (Logo, STT)
-    { width: 45 }, // B (Tên Bài tập)
-    { width: 15 }, // C (Môn học)
-    { width: 25 }, // D (Thời gian nộp) -> Nới rộng
-    { width: 25 }, // E (Điểm số) -> Nới rộng
+    { width: 8 },  
+    { width: 45 }, 
+    { width: 15 }, 
+    { width: 25 }, 
+    { width: 25 }, 
   ];
 
-  // Dòng 1 & 2: Set khung cho Logo (A), Cơ quan (B-C), Quốc hiệu (D-E)
   sheet.addRow(["", "UBND HUYỆN THỦY NGUYÊN", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"]);
   sheet.addRow(["", "TRƯỜNG THCS TRẦN HƯNG ĐẠO", "", "ĐỘC LẬP - TỰ DO - HẠNH PHÚC"]);
 
@@ -150,7 +149,6 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
   sheet.mergeCells("D1:E1");
   sheet.mergeCells("D2:E2");
 
-  // Chèn Logo gọn vào góc cột A
   try {
     const logoResponse = await fetch(schoolLogo);
     const logoBuffer = await logoResponse.arrayBuffer();
@@ -167,7 +165,7 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
     const row = sheet.getRow(rowNum);
     row.height = 25;
     row.eachCell((cell, colNum) => {
-      if (colNum > 1) { // Bỏ qua cột A của Logo
+      if (colNum > 1) { 
         cell.font = { name: "Times New Roman", size: 12, bold: true };
         cell.alignment = { vertical: "middle", horizontal: "center" };
       }
@@ -177,7 +175,6 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
   formatGovHeader(2);
   sheet.getCell("D2").font = { name: "Times New Roman", size: 13, bold: true, underline: true };
 
-  // Dòng Tiêu đề
   sheet.addRow([]);
   const titleRow = sheet.addRow([reportTitle.toUpperCase()]);
   sheet.mergeCells("A4:E4");
@@ -185,7 +182,6 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
   sheet.getCell("A4").font = { name: "Times New Roman", size: 16, bold: true, color: { argb: "FF0070C0" } };
   sheet.getCell("A4").alignment = { vertical: "middle", horizontal: "center" };
 
-  // Header Bảng
   sheet.addRow([]);
   const tableHeaders = Object.keys(dataList[0]);
   const headerRow = sheet.addRow(tableHeaders);
@@ -197,7 +193,6 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
     cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
   });
 
-  // Dữ liệu bảng
   dataList.forEach((obj) => {
     const row = sheet.addRow(Object.values(obj));
     row.height = 25;
@@ -209,7 +204,6 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
     });
   });
 
-  // Footer ký tên
   sheet.addRow([]);
   sheet.addRow([]);
   const dateRowNum = sheet.rowCount + 1;
@@ -224,7 +218,7 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
   sheet.getCell(`D${signRowNum}`).font = { name: "Times New Roman", size: 12, bold: true };
   sheet.getCell(`D${signRowNum}`).alignment = { horizontal: "center" };
 
-  const nameRowNum = sheet.rowCount + 4; // chừa dòng trống để ký tên
+  const nameRowNum = sheet.rowCount + 4; 
   sheet.addRow(["", "", "", studentName]);
   sheet.mergeCells(`D${nameRowNum}:E${nameRowNum}`);
   sheet.getCell(`D${nameRowNum}`).font = { name: "Times New Roman", size: 12, bold: true };
@@ -237,13 +231,11 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
   saveAs(blob, `${fileName}.xlsx`);
 };
 
-// ĐÃ FIX: Biến thành async function để tải font Tiếng Việt từ Internet vào lúc xuất
 const exportPDF = async (dataList, reportTitle, studentName) => {
   if (!dataList || dataList.length === 0) return alert("Không có dữ liệu!");
 
   const doc = new jsPDF("p", "mm", "a4");
 
-  // Tải Font Roboto hỗ trợ Tiếng Việt
   try {
     const [regularFontRes, boldFontRes] = await Promise.all([
       fetch("https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Regular.ttf"),
@@ -269,40 +261,34 @@ const exportPDF = async (dataList, reportTitle, studentName) => {
   const today = new Date();
   const dateStr = `Ngày ${today.getDate().toString().padStart(2, '0')} tháng ${(today.getMonth() + 1).toString().padStart(2, '0')} năm ${today.getFullYear()}`;
 
-  // Logo nằm bên trái
   try {
      doc.addImage(schoolLogo, "JPEG", 15, 10, 22, 22);
   } catch (e) { console.log(e) }
 
-  // Cụm Cơ quan (Trung tâm - Trái)
   doc.setFontSize(12);
   doc.setFont("Roboto", "bold");
   doc.text("UBND HUYỆN THỦY NGUYÊN", 65, 16, { align: "center" });
   doc.text("TRƯỜNG THCS TRẦN HƯNG ĐẠO", 65, 22, { align: "center" });
 
-  // Cụm Quốc hiệu (Trung tâm - Phải)
   doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", 150, 16, { align: "center" });
   doc.text("ĐỘC LẬP - TỰ DO - HẠNH PHÚC", 150, 22, { align: "center" });
 
-  // Gạch chân chuẩn chỉ cho Slogan
   const sloganWidth = doc.getTextWidth("ĐỘC LẬP - TỰ DO - HẠNH PHÚC");
   doc.setDrawColor(0, 0, 0);
   doc.setLineWidth(0.5);
   doc.line(150 - sloganWidth / 2, 23.5, 150 + sloganWidth / 2, 23.5);
 
-  // Tiêu đề báo cáo
   doc.setFontSize(16);
-  doc.setTextColor(0, 112, 192); // Màu xanh dương đậm giống Word
+  doc.setTextColor(0, 112, 192); 
   doc.text(reportTitle.toUpperCase(), 105, 38, { align: "center" });
-  doc.setTextColor(0, 0, 0); // Trả lại màu đen cho bảng
+  doc.setTextColor(0, 0, 0); 
 
-  // Dựng bảng với font Tiếng Việt
   autoTable(doc, {
     startY: 45,
     head: [Object.keys(dataList[0])],
     body: dataList.map((obj) => Object.values(obj)),
     styles: {
-      font: "Roboto", // Sử dụng font đã tải
+      font: "Roboto", 
       fontSize: 10,
       halign: "center",
       valign: "middle",
@@ -315,14 +301,13 @@ const exportPDF = async (dataList, reportTitle, studentName) => {
       fontStyle: "bold",
     },
     columnStyles: {
-      1: { halign: "left" }, // Tên bài tập
-      2: { halign: "center" }, // Môn học
+      1: { halign: "left" }, 
+      2: { halign: "center" }, 
     },
   });
 
   const finalY = doc.lastAutoTable.finalY + 12;
 
-  // Footer - Ngày tháng và Ký tên
   doc.setFontSize(12);
   doc.setFont("Roboto", "normal");
   doc.text(dateStr, 155, finalY, { align: "center" });
@@ -331,12 +316,116 @@ const exportPDF = async (dataList, reportTitle, studentName) => {
   doc.text("Học sinh", 155, finalY + 6, { align: "center" });
   doc.text(studentName, 155, finalY + 25, { align: "center" });
 
-  // Watermark dưới góc
   doc.setFontSize(10);
   doc.setFont("Roboto", "normal");
   doc.text(`Người xuất file: ${studentName}`, 200, 287, { align: "right" });
 
   doc.save(`${reportTitle.replace(/\s+/g, '_')}.pdf`);
+};
+
+// =====================================================================
+// HÀM MỚI: TẠO VÀ IN BẢNG ĐIỂM TRỰC TIẾP QUA IFRAME ẨN
+// =====================================================================
+const printPDF = async (dataList, reportTitle, studentName) => {
+  if (!dataList || dataList.length === 0) return alert("Không có dữ liệu!");
+
+  const doc = new jsPDF("p", "mm", "a4");
+
+  try {
+    const [regularFontRes, boldFontRes] = await Promise.all([
+      fetch("https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Regular.ttf"),
+      fetch("https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Medium.ttf")
+    ]);
+
+    const regularFontBuffer = await regularFontRes.arrayBuffer();
+    const boldFontBuffer = await boldFontRes.arrayBuffer();
+
+    const regularBase64 = btoa(new Uint8Array(regularFontBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+    const boldBase64 = btoa(new Uint8Array(boldFontBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+
+    doc.addFileToVFS("Roboto-Regular.ttf", regularBase64);
+    doc.addFileToVFS("Roboto-Medium.ttf", boldBase64);
+    doc.addFont("Roboto-Regular.ttf", "Roboto", "normal");
+    doc.addFont("Roboto-Medium.ttf", "Roboto", "bold");
+    
+    doc.setFont("Roboto", "normal");
+  } catch (error) {
+    console.error("Lỗi tải font Tiếng Việt:", error);
+  }
+
+  const today = new Date();
+  const dateStr = `Ngày ${today.getDate().toString().padStart(2, '0')} tháng ${(today.getMonth() + 1).toString().padStart(2, '0')} năm ${today.getFullYear()}`;
+
+  try {
+     doc.addImage(schoolLogo, "JPEG", 15, 10, 22, 22);
+  } catch (e) { console.log(e) }
+
+  doc.setFontSize(12);
+  doc.setFont("Roboto", "bold");
+  doc.text("UBND HUYỆN THỦY NGUYÊN", 65, 16, { align: "center" });
+  doc.text("TRƯỜNG THCS TRẦN HƯNG ĐẠO", 65, 22, { align: "center" });
+
+  doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", 150, 16, { align: "center" });
+  doc.text("ĐỘC LẬP - TỰ DO - HẠNH PHÚC", 150, 22, { align: "center" });
+
+  const sloganWidth = doc.getTextWidth("ĐỘC LẬP - TỰ DO - HẠNH PHÚC");
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.5);
+  doc.line(150 - sloganWidth / 2, 23.5, 150 + sloganWidth / 2, 23.5);
+
+  doc.setFontSize(16);
+  doc.setTextColor(0, 112, 192);
+  doc.text(reportTitle.toUpperCase(), 105, 38, { align: "center" });
+  doc.setTextColor(0, 0, 0);
+
+  autoTable(doc, {
+    startY: 45,
+    head: [Object.keys(dataList[0])],
+    body: dataList.map((obj) => Object.values(obj)),
+    styles: {
+      font: "Roboto",
+      fontSize: 10,
+      halign: "center",
+      valign: "middle",
+      lineColor: [0, 0, 0],
+      lineWidth: 0.1,
+    },
+    headStyles: {
+      fillColor: [0, 112, 192],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+    },
+    columnStyles: {
+      1: { halign: "left" }, 
+      2: { halign: "center" },
+    },
+  });
+
+  const finalY = doc.lastAutoTable.finalY + 12;
+
+  doc.setFontSize(12);
+  doc.setFont("Roboto", "normal");
+  doc.text(dateStr, 155, finalY, { align: "center" });
+  
+  doc.setFont("Roboto", "bold");
+  doc.text("Học sinh", 155, finalY + 6, { align: "center" });
+  doc.text(studentName, 155, finalY + 25, { align: "center" });
+
+  doc.setFontSize(10);
+  doc.setFont("Roboto", "normal");
+  doc.text(`Người xuất file: ${studentName}`, 200, 287, { align: "right" });
+
+  // Kích hoạt tính năng gọi lệnh in của trình duyệt
+  doc.autoPrint();
+  const blob = doc.output("blob");
+  const blobUrl = URL.createObjectURL(blob);
+  
+  const iframe = document.createElement("iframe");
+  iframe.style.display = "none";
+  iframe.src = blobUrl;
+  document.body.appendChild(iframe);
+  iframe.contentWindow.focus();
+  iframe.contentWindow.print();
 };
 
 const exportWord = async (dataList, reportTitle, studentName) => {
@@ -451,7 +540,6 @@ const exportWord = async (dataList, reportTitle, studentName) => {
             rows: [
               new DocxTableRow({
                 children: [
-                  // Cột logo
                   new DocxTableCell({
                     width: {
                       size: 12,
@@ -482,7 +570,6 @@ const exportWord = async (dataList, reportTitle, studentName) => {
                     ],
                   }),
 
-                  // Cột header
                   new DocxTableCell({
                     width: {
                       size: 85,
@@ -663,7 +750,6 @@ const exportWord = async (dataList, reportTitle, studentName) => {
             rows: [
               new DocxTableRow({
                 children: [
-                  // cột trái trống
                   new DocxTableCell({
                     width: {
                       size: 65,
@@ -680,7 +766,6 @@ const exportWord = async (dataList, reportTitle, studentName) => {
                     children: [new Paragraph("")],
                   }),
 
-                  // cột phải
                   new DocxTableCell({
                     width: {
                       size: 35,
@@ -775,6 +860,7 @@ const StudentDashboard = () => {
   );
 
   const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -823,6 +909,7 @@ const StudentDashboard = () => {
                 createdAt: a.dueDate,
                 status: "overdue",
                 score: 0,
+                isOverdueMock: true,
                 isOverdueMock: true,
               });
             } else {
@@ -1015,6 +1102,34 @@ const StudentDashboard = () => {
     setIsExportingPDF(false);
   };
 
+  const handlePrint = async () => {
+    if (filteredHistory.length === 0) return alert("Không có dữ liệu để in!");
+    setIsPrinting(true);
+
+    const dataToExport = filteredHistory.map((sub, idx) => ({
+      STT: idx + 1,
+      "Tên Bài Tập": sub.assignment?.title || "Bài tập đã xóa",
+      "Môn Học": getSubject(sub),
+      "Thời Gian Nộp": sub.isOverdueMock
+        ? "Không nộp"
+        : formatDateVN(sub.createdAt),
+      "Điểm Số": sub.isOverdueMock
+        ? "0 (Bỏ lỡ)"
+        : sub.status === "pending"
+          ? "Chờ chấm"
+          : sub.score,
+    }));
+
+    await printPDF(
+      dataToExport,
+      `BẢNG ĐIỂM CÁ NHÂN: LỚP ${
+        profile?.classId?.name || profile?.className || ""
+      }`,
+      fullName,
+    );
+    setIsPrinting(false);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50/50 font-sans text-slate-800">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
@@ -1197,7 +1312,16 @@ const StudentDashboard = () => {
                     </p>
                   </div>
                   <div className="flex gap-2 flex-wrap sm:flex-nowrap">
-                    {/* Excel */}
+                    {/* Nút In Mới */}
+                    <Button
+                      onClick={handlePrint}
+                      disabled={isPrinting}
+                      className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl h-11 shadow-sm flex-1 sm:flex-none"
+                    >
+                      {isPrinting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Printer className="w-4 h-4 mr-2" />} 
+                      In bảng điểm
+                    </Button>
+
                     <Button
                       onClick={handleExportClick}
                       variant="outline"
@@ -1206,7 +1330,6 @@ const StudentDashboard = () => {
                       <Download className="w-4 h-4 mr-2" /> Excel
                     </Button>
 
-                    {/* PDF */}
                     <Button
                       onClick={handleExportPDF}
                       disabled={isExportingPDF}
@@ -1217,7 +1340,6 @@ const StudentDashboard = () => {
                       PDF
                     </Button>
 
-                    {/* Word */}
                     <Button
                       onClick={handleExportWord}
                       variant="outline"
@@ -1230,7 +1352,6 @@ const StudentDashboard = () => {
 
                 <div className="p-4 sm:p-6 bg-white border-b border-slate-100 flex flex-col md:flex-row gap-4">
                   <div className="flex gap-3 flex-1">
-                    {/* Tìm tên bài tập */}
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-[14px] w-4 h-4 text-slate-400" />
                       <Input
@@ -1241,7 +1362,6 @@ const StudentDashboard = () => {
                       />
                     </div>
 
-                    {/* Tìm môn học */}
                     <div className="relative w-[200px]">
                       <Search className="absolute left-3 top-[14px] w-4 h-4 text-slate-400" />
                       <Input
@@ -1256,7 +1376,6 @@ const StudentDashboard = () => {
                   </div>
                   <div className="flex gap-2 sm:gap-4 overflow-x-auto pb-2 sm:pb-0">
                     <div className="flex flex-col gap-2 shrink-0">
-                      {/* Hàng 1: Select môn + Select điểm */}
                       <div className="flex items-center gap-2">
                         <Select
                           value={historySubject}
@@ -1312,7 +1431,6 @@ const StudentDashboard = () => {
                         </Select>
                       </div>
 
-                      {/* Hàng 2: Từ / Đến */}
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-slate-600">
                           Từ
@@ -1332,11 +1450,8 @@ const StudentDashboard = () => {
                             }
 
                             const num = Number(value);
-
-                            // Chặn âm và > 10
                             if (num < 0 || num > 10) return;
 
-                            // Không cho điểm Từ lớn hơn điểm Đến
                             if (scoreTo !== "" && num > Number(scoreTo)) {
                               alert('Điểm "Từ" phải nhỏ hơn hoặc bằng điểm "Đến"');
                               return;
@@ -1369,7 +1484,6 @@ const StudentDashboard = () => {
                             }
 
                             const num = Number(value);
-
                             if (num < 0 || num > 10) return;
 
                             if (scoreFrom !== "" && num < Number(scoreFrom)) {
@@ -1437,7 +1551,7 @@ const StudentDashboard = () => {
                       ) : (
                         filteredHistory.map((sub, idx) => {
                           const isPending = sub.status === "pending";
-                          const isOverdueMock = sub.isOverdueMock; // Bài quá hạn
+                          const isOverdueMock = sub.isOverdueMock;
 
                           let isTimeOver = false;
                           if (sub.assignment?.dueDate) {

@@ -14,26 +14,119 @@ import {
   Clock, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight, Send, 
   Loader2, Image as ImageIcon, LayoutGrid, X, Trash2, Clock4, 
   GalleryVerticalEnd, SquareMousePointer, Map, Sparkles, PenTool, Lock, ArrowLeft,
-  Flag
+  Flag, Video, FileAudio
 } from "lucide-react"; 
 
 import GeometryDrawing from "@/components/ui/GeometryDrawing";
 
-// 👉 CÁC HÀM XỬ LÝ COOKIE (Miễn nhiễm với lệnh localStorage.clear() khi đăng xuất)
-const setQuizCookie = (id, time) => {
-    document.cookie = `quiz_start_time_${id}=${time}; path=/; max-age=86400`; // Lưu sống trong 24h
+// ==========================================
+// HÀM GIẢI MÃ TOKEN ĐỂ LẤY ID HỌC SINH
+// ==========================================
+const getUserIdFromToken = () => {
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) return "guest";
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    const payload = JSON.parse(jsonPayload);
+    return payload.id || payload._id || "guest";
+  } catch (e) {
+    return "guest";
+  }
 };
-const getQuizCookie = (id) => {
-    const match = document.cookie.match(new RegExp('(^| )' + `quiz_start_time_${id}` + '=([^;]+)'));
-    return match ? match[2] : null;
+
+// ==========================================
+// KHO LƯU TRỮ INDEXED-DB
+// ==========================================
+const DB_NAME = "EduQuizDB";
+const STORE_NAME = "student_progress";
+
+const initDB = () => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = (e) => { e.target.result.createObjectStore(STORE_NAME); };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
 };
-const removeQuizCookie = (id) => {
-    document.cookie = `quiz_start_time_${id}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+
+const saveProgressToDB = async (key, data) => {
+  try {
+    const db = await initDB();
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).put(data, key);
+  } catch (e) { console.error("Lỗi lưu IndexedDB", e); }
+};
+
+const loadProgressFromDB = async (key) => {
+  try {
+    const db = await initDB();
+    return new Promise((resolve) => {
+      if (!db.objectStoreNames.contains(STORE_NAME)) return resolve(null);
+      const tx = db.transaction(STORE_NAME, "readonly");
+      const req = tx.objectStore(STORE_NAME).get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    });
+  } catch (e) { return null; }
+};
+
+const removeProgressFromDB = async (key) => {
+  try {
+    const db = await initDB();
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).delete(key);
+  } catch (e) {}
+};
+
+// ==========================================
+// HÀM XỬ LÝ LINK YOUTUBE VÀ GOOGLE DRIVE
+// ==========================================
+const getYoutubeEmbedUrl = (url) => {
+  if (!url) return "";
+  if (url.includes("youtube.com/watch?v=")) return url.replace("watch?v=", "embed/").split("&")[0];
+  if (url.includes("youtu.be/")) return url.replace("youtu.be/", "youtube.com/embed/").split("?")[0];
+  return url;
+};
+
+const getDriveEmbedUrl = (url) => {
+  if (!url) return "";
+  let fileId = null;
+  if (url.includes("/file/d/")) {
+    const matches = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (matches && matches[1]) fileId = matches[1];
+  } else if (url.includes("?id=")) {
+    const matches = url.match(/\?id=([a-zA-Z0-9_-]+)/);
+    if (matches && matches[1]) fileId = matches[1];
+  }
+  if (fileId) return `https://drive.google.com/file/d/${fileId}/preview`;
+  return url;
+};
+
+const isAudioFile = (url) => {
+  if (!url) return false;
+  return url.toLowerCase().match(/\.(mp3|wav|m4a|ogg)$/) != null;
+};
+
+// 👉 COOKIE LƯU THỜI GIAN THEO ID HỌC SINH
+const setQuizCookie = (id, userId, time) => {
+  document.cookie = `quiz_start_time_${id}_${userId}=${time}; path=/; max-age=86400`; 
+};
+const getQuizCookie = (id, userId) => {
+  const match = document.cookie.match(new RegExp('(^| )' + `quiz_start_time_${id}_${userId}` + '=([^;]+)'));
+  return match ? match[2] : null;
+};
+const removeQuizCookie = (id, userId) => {
+  document.cookie = `quiz_start_time_${id}_${userId}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
 };
 
 const TakeQuiz = () => {
   const { id } = useParams(); 
   const navigate = useNavigate();
+  const userId = getUserIdFromToken(); 
   
   const [assignment, setAssignment] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -82,27 +175,21 @@ const TakeQuiz = () => {
       return () => window.removeEventListener('popstate', handlePopState);
   }, [id]);
 
-  const startQuiz = (assigData) => {
+  const startQuiz = async (assigData) => {
       setAssignment(assigData);
       
       const initialAnswers = {};
       assigData.questions.forEach(item => {
         const qId = item.questionId._id || item.questionId;
-        // Thêm trường isFlagged để quản lý cắm cờ
         initialAnswers[qId] = { text: "", imageFile: null, previewUrl: "", base64Drawing: "", isFlagged: false };
       });
 
       const now = new Date().getTime();
-      
-      let startTime = getQuizCookie(id) || localStorage.getItem(`quiz_start_time_${id}`);
+      let startTime = getQuizCookie(id, userId);
       
       if (!startTime) {
           startTime = now;
-          setQuizCookie(id, now);
-          localStorage.setItem(`quiz_start_time_${id}`, now); 
-      } else {
-          localStorage.setItem(`quiz_start_time_${id}`, startTime);
-          setQuizCookie(id, startTime); 
+          setQuizCookie(id, userId, now);
       }
 
       const durationSeconds = assigData.duration ? assigData.duration * 60 : 2700;
@@ -119,19 +206,19 @@ const TakeQuiz = () => {
           calculatedTimeLeft = Math.min(calculatedTimeLeft, timeUntilDueInSeconds);
       }
 
-      const savedProgress = localStorage.getItem(`quiz_progress_${id}`);
-      if (savedProgress) {
-          try {
-              const parsedProgress = JSON.parse(savedProgress);
-              if (parsedProgress.answers) {
-                  Object.keys(parsedProgress.answers).forEach(qId => {
-                      if (initialAnswers[qId]) {
-                          initialAnswers[qId].text = parsedProgress.answers[qId].text || "";
-                          initialAnswers[qId].isFlagged = parsedProgress.answers[qId].isFlagged || false; // Khôi phục trạng thái cắm cờ
-                      }
-                  });
+      const savedProgress = await loadProgressFromDB(`quiz_${id}_${userId}`);
+      if (savedProgress && savedProgress.answers) {
+          Object.keys(savedProgress.answers).forEach(qId => {
+              if (initialAnswers[qId]) {
+                  initialAnswers[qId].text = savedProgress.answers[qId].text || "";
+                  initialAnswers[qId].isFlagged = savedProgress.answers[qId].isFlagged || false; 
+                  
+                  if (savedProgress.answers[qId].base64Drawing) {
+                      initialAnswers[qId].base64Drawing = savedProgress.answers[qId].base64Drawing;
+                      initialAnswers[qId].previewUrl = savedProgress.answers[qId].base64Drawing;
+                  }
               }
-          } catch(e) {}
+          });
       }
 
       if (calculatedTimeLeft <= 0) {
@@ -166,7 +253,7 @@ const TakeQuiz = () => {
               }
           }
           
-          startQuiz(assigData);
+          await startQuiz(assigData);
         }
       } catch (err) {
         console.error("Lỗi lấy bài tập:", err);
@@ -175,7 +262,7 @@ const TakeQuiz = () => {
       }
     };
     fetchAssignment();
-  }, [id]);
+  }, [id, navigate]);
 
   useEffect(() => {
     if (loading || !assignment || result || isLocked || isTimeUp) return;
@@ -184,7 +271,7 @@ const TakeQuiz = () => {
 
     const timer = setInterval(() => {
         const now = new Date().getTime();
-        const startTimeStr = getQuizCookie(id) || localStorage.getItem(`quiz_start_time_${id}`);
+        const startTimeStr = getQuizCookie(id, userId);
         if (!startTimeStr) return; 
 
         const elapsed = Math.floor((now - parseInt(startTimeStr)) / 1000);
@@ -206,7 +293,7 @@ const TakeQuiz = () => {
     }, 1000); 
 
     return () => clearInterval(timer);
-  }, [loading, assignment, result, isLocked, isTimeUp, id]);
+  }, [loading, assignment, result, isLocked, isTimeUp, id, userId]);
 
   useEffect(() => {
     if (isTimeUp && !isSubmitting && !result) {
@@ -217,17 +304,17 @@ const TakeQuiz = () => {
 
   useEffect(() => {
     if (Object.keys(answers).length > 0 && !isLocked) {
-        const textAnswersOnly = {};
-        // Lưu kèm trạng thái cắm cờ vào bộ nhớ tạm
+        const answersToSave = {};
         Object.keys(answers).forEach(qId => { 
-            textAnswersOnly[qId] = { 
+            answersToSave[qId] = { 
                 text: answers[qId].text,
-                isFlagged: answers[qId].isFlagged 
+                isFlagged: answers[qId].isFlagged, 
+                base64Drawing: answers[qId].base64Drawing 
             }; 
         });
-        localStorage.setItem(`quiz_progress_${id}`, JSON.stringify({ answers: textAnswersOnly }));
+        saveProgressToDB(`quiz_${id}_${userId}`, { answers: answersToSave });
     }
-  }, [answers, isLocked, id]);
+  }, [answers, isLocked, id, userId]);
 
   const handleUnlockQuiz = () => {
      if (passwordInput === assignment.password) {
@@ -244,7 +331,6 @@ const TakeQuiz = () => {
     setAnswers(prev => ({ ...prev, [qId]: { ...prev[qId], text: value } }));
   };
 
-  // Hàm kích hoạt/bỏ cắm cờ
   const handleToggleFlag = (qId) => {
     setAnswers(prev => ({ ...prev, [qId]: { ...prev[qId], isFlagged: !prev[qId].isFlagged } }));
   };
@@ -311,9 +397,8 @@ const TakeQuiz = () => {
       
       setResult(res.data);
       
-      localStorage.removeItem(`quiz_progress_${id}`);
-      localStorage.removeItem(`quiz_start_time_${id}`);
-      removeQuizCookie(id);
+      removeProgressFromDB(`quiz_${id}_${userId}`);
+      removeQuizCookie(id, userId);
       sessionStorage.removeItem(`unlocked_${id}`);
 
     } catch (err) {
@@ -424,10 +509,10 @@ const TakeQuiz = () => {
     const finalOptions = parsedOptions.slice(0, 4);
 
     return (
-      <Card key={qId} id={`question-card-${idx}`} className={`rounded-3xl shadow-sm border overflow-hidden mb-8 transition-shadow ${currentAnswer.isFlagged ? 'border-rose-200 shadow-rose-100' : 'border-sky-100/60 hover:shadow-md bg-white'}`}>
-        <CardHeader className={`p-5 sm:p-7 flex flex-row justify-between items-start border-b ${currentAnswer.isFlagged ? 'bg-rose-50/50 border-rose-100' : 'bg-sky-50/30 border-sky-50/80'}`}>
+      <Card key={qId} id={`question-card-${idx}`} className={`rounded-3xl shadow-sm border overflow-hidden mb-8 transition-shadow ${currentAnswer.isFlagged ? 'border-amber-200 shadow-amber-100' : 'border-sky-100/60 hover:shadow-md bg-white'}`}>
+        <CardHeader className={`p-5 sm:p-7 flex flex-row justify-between items-start border-b ${currentAnswer.isFlagged ? 'bg-amber-50/50 border-amber-100' : 'bg-sky-50/30 border-sky-50/80'}`}>
           <div className="w-full">
-              <Badge className={`mb-3 font-black border-0 px-3 sm:px-4 py-1.5 text-xs sm:text-sm uppercase tracking-wider shadow-sm ${currentAnswer.isFlagged ? 'bg-rose-100 text-rose-700' : 'bg-sky-100 text-sky-700'}`}>
+              <Badge className={`mb-3 font-black border-0 px-3 sm:px-4 py-1.5 text-xs sm:text-sm uppercase tracking-wider shadow-sm ${currentAnswer.isFlagged ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'}`}>
                 Câu {idx + 1}
               </Badge>
               <div 
@@ -436,28 +521,68 @@ const TakeQuiz = () => {
               />
           </div>
           <div className="flex items-center gap-2 ml-4">
-              <Button
-                variant={currentAnswer.isFlagged ? "default" : "outline"}
-                size="sm"
-                onClick={() => handleToggleFlag(qId)}
-                className={`h-7 px-2.5 text-xs font-bold shadow-sm transition-all ${
-                  currentAnswer.isFlagged
-                    ? "bg-rose-500 hover:bg-rose-600 text-white border-transparent"
-                    : "bg-white text-slate-500 border-slate-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200"
-                }`}
-              >
-                <Flag className={`w-3.5 h-3.5 mr-1 ${currentAnswer.isFlagged ? "fill-white" : ""}`} />
-                <span className="hidden sm:inline">{currentAnswer.isFlagged ? "" : ""}</span>
-              </Button>
               <Badge variant="outline" className="text-slate-500 bg-white border-slate-200 font-bold text-sm shrink-0 whitespace-nowrap shadow-sm hidden md:flex">
                   {item.points} Điểm
               </Badge>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => handleToggleFlag(qId)}
+                className={`ml-2 rounded-xl font-bold shadow-sm transition-all ${
+                  currentAnswer.isFlagged
+                    ? "bg-amber-100 text-amber-700 border-amber-300 hover:bg-amber-200"
+                    : "bg-white text-slate-500 border-slate-200 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200"
+                }`}
+              >
+                <Flag className={`w-4 h-4 mr-1 ${currentAnswer.isFlagged ? "fill-amber-500 text-amber-500" : ""}`} />
+                <span className="hidden sm:inline">{currentAnswer.isFlagged ? "" : ""}</span>
+              </Button>
           </div>
         </CardHeader>
         
         {q?.imageUrl && (
           <div className="w-full bg-slate-50/50 border-b border-slate-100 p-4">
             <img src={getImageUrl(q.imageUrl)} alt="Hình minh họa" className="w-auto max-h-[300px] object-contain mx-auto rounded-xl border border-slate-200 shadow-sm bg-white" />
+          </div>
+        )}
+
+        {q?.videoUrl && (
+          <div className="w-full bg-slate-50/50 border-b border-slate-100 p-4 flex justify-center">
+             {(q.videoUrl.includes("youtube.com") || q.videoUrl.includes("youtu.be")) ? (
+                 <div className="h-[250px] sm:h-[400px] w-full max-w-3xl rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                     <iframe className="w-full h-full" src={getYoutubeEmbedUrl(q.videoUrl)} allow="autoplay; fullscreen" allowFullScreen></iframe>
+                 </div>
+             ) : q.videoUrl.includes("drive.google.com") ? (
+                 <div className="flex flex-col items-center w-full">
+                     <div className="h-[200px] sm:h-[350px] w-full max-w-2xl rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-slate-100 flex items-center justify-center relative">
+                         <iframe 
+                            className="w-full h-full relative z-10" 
+                            src={getDriveEmbedUrl(q.videoUrl)} 
+                            allow="autoplay; fullscreen; encrypted-media" 
+                            allowFullScreen
+                            referrerPolicy="no-referrer"
+                            sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                         ></iframe>
+                         <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center z-0">
+                             <Video className="w-8 h-8 text-slate-300 mb-2" />
+                             <p className="text-slate-500 font-medium text-xs">Video đang bị Google Drive chặn hiển thị trực tiếp.</p>
+                         </div>
+                     </div>
+                     <a href={q.videoUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center justify-center h-10 px-6 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-sm transition-colors border border-indigo-200 shadow-sm">
+                        <Video className="w-4 h-4 mr-2" /> Click mở Video sang Tab mới
+                     </a>
+                 </div>
+             ) : isAudioFile(q.videoUrl) ? (
+                 <div className="w-full max-w-md bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center">
+                    <FileAudio className="w-12 h-12 text-indigo-400 mb-4" />
+                    <audio controls className="w-full rounded-full" src={q.videoUrl} preload="metadata" />
+                 </div>
+             ) : (
+                 <div className="w-full max-w-3xl rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-black flex justify-center">
+                    <video controls className="w-full max-h-[450px]" src={q.videoUrl} preload="metadata" playsInline />
+                 </div>
+             )}
           </div>
         )}
 
@@ -515,6 +640,7 @@ const TakeQuiz = () => {
                           </label>
                           
                           <Button 
+                             type="button"
                              variant="outline"
                              className="flex-1 h-auto py-4 px-6 rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-500 font-bold transition-all"
                              onClick={() => { setActiveDrawingQId(qId); setIsDrawingModalOpen(true); }}
@@ -573,22 +699,33 @@ const TakeQuiz = () => {
                </button>
             </div>
 
-            <div className={`flex items-center gap-1.5 px-2 sm:px-4 py-1.5 sm:py-2 rounded-xl font-black text-sm sm:text-lg border-2 shadow-sm bg-white shrink-0 ${timeLeft < 60 ? 'border-rose-200 text-rose-600 animate-pulse' : 'border-sky-100 text-sky-700'}`}>
-              <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-sky-500" />
-              {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, "0")}
+            <div className={`relative overflow-hidden flex items-center gap-1.5 px-2 sm:px-4 py-1.5 sm:py-2 rounded-xl font-black text-sm sm:text-lg border-2 shadow-sm bg-white shrink-0 ${timeLeft <= (assignment?.duration || 45) * 60 * 0.15 ? 'border-rose-300' : timeLeft <= (assignment?.duration || 45) * 60 * 0.5 ? 'border-yellow-300' : 'border-sky-200'}`}>
+              <div className={`absolute left-0 top-0 h-full transition-all duration-1000 ${timeLeft <= (assignment?.duration || 45) * 60 * 0.15 ? "bg-rose-400/25" : timeLeft <= (assignment?.duration || 45) * 60 * 0.5 ? "bg-yellow-300/30" : "bg-sky-300/30"}`} style={{ width: `${(timeLeft / ((assignment?.duration || 45) * 60)) * 100}%` }} />
+              <div className="relative z-10 flex items-center gap-1.5">
+                <Clock className={`w-4 h-4 sm:w-5 sm:h-5 ${timeLeft <= (assignment?.duration || 45) * 60 * 0.15 ? "text-rose-500" : timeLeft <= (assignment?.duration || 45) * 60 * 0.5 ? "text-yellow-500" : "text-sky-500"}`} />
+                <span className={`${timeLeft <= (assignment?.duration || 45) * 60 * 0.15 ? "text-rose-600" : timeLeft <= (assignment?.duration || 45) * 60 * 0.5 ? "text-yellow-600" : "text-sky-700"}`}>
+                  {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, "0")}
+                </span>
+              </div>
             </div>
 
             <Button onClick={() => setIsMobileMapOpen(true)} variant="outline" size="icon" className="lg:hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl border-sky-200 text-sky-700 bg-sky-50 shrink-0">
               <LayoutGrid className="w-4 h-4 sm:w-5 sm:h-5" />
             </Button>
 
-            {/* Nút Hủy / Thoát bài */}
             <Button onClick={handleExit} variant="outline" className="hidden sm:flex rounded-xl font-bold border-rose-200 text-rose-600 hover:bg-rose-50 ml-2">
               Thoát
             </Button>
           </div>
         </div>
-        <Progress value={progressPercent} className="h-1.5 rounded-none bg-sky-100 [&>div]:bg-sky-500 transition-all" />
+        
+        {/* 👉 THANH TIẾN TRÌNH: TỰ BUILD BẰNG DIV ĐỂ KHÔNG BỊ COMPONENT CỦA THƯ VIỆN LÀM ĐEN NỀN CHỜ */}
+        <div className="w-full h-2 bg-sky-100 border-none">
+           <div 
+             className="h-full bg-sky-500 transition-all duration-500 ease-out" 
+             style={{ width: `${progressPercent}%` }}
+           />
+        </div>
       </header>
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col lg:flex-row gap-6 relative">
@@ -637,7 +774,9 @@ const TakeQuiz = () => {
 
              <div className="flex-1 lg:flex-none overflow-y-auto pr-1 custom-scrollbar">
                 <div className="border-2 border-sky-50 bg-slate-50/50 rounded-2xl p-4">
-                  <div className="grid grid-cols-5 gap-2.5">
+                  
+                  {/* 👉 BẢN ĐỒ CÂU HỎI: KÍ HIỆU TRÀN RA NGOÀI, KHÔNG CÓ VIỀN TRẮNG */}
+                  <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 pt-3 pl-1">
                     {assignment.questions.map((item, idx) => {
                       const qId = item.questionId._id;
                       const isAnswered = answers[qId]?.text.trim() !== "" || answers[qId]?.imageFile !== null || answers[qId]?.base64Drawing !== "";
@@ -656,28 +795,37 @@ const TakeQuiz = () => {
                       } else if (isCurrent && !isAnswered) {
                          btnClass = "bg-white text-sky-700 border-sky-400 ring-2 ring-offset-2 ring-sky-200 scale-105 shadow-md z-10";
                       } else if (!isCurrent && isAnswered) {
-                         btnClass = "bg-sky-500 border-sky-600 text-white shadow-sm";
+                         btnClass = "bg-sky-500 border-sky-600 text-white shadow-sm hover:bg-sky-600 hover:-translate-y-1";
                       } else {
-                         btnClass = "bg-white text-slate-400 border-slate-200 hover:border-sky-300 hover:bg-sky-50";
+                         btnClass = "bg-white text-slate-400 border-slate-200 hover:border-sky-300 hover:bg-sky-50 hover:-translate-y-1";
                       }
                       
                       return (
                         <button 
                           key={qId} 
+                          type="button"
                           onClick={() => handleMapClick(idx)}
-                          className={`aspect-square w-full rounded-lg font-black text-sm transition-all duration-200 flex flex-col items-center justify-center relative border-2 ${btnClass}`}
+                          className={`aspect-square w-full rounded-xl font-black text-sm transition-all duration-200 flex items-center justify-center relative border-2 ${btnClass}`}
                         >
-                          {idx + 1}
-                          {isAnswered && <div className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-emerald-400 rounded-full border-2 border-white shadow-sm"></div>}
+                          {/* 👉 SỐ CÂU HỎI */}
+                          <span>{idx + 1}</span>
+                          
+                          {/* 👉 ĐÃ TRẢ LỜI - CHẤM XANH LÁ (Đưa ra mép ngoài góc trái trên, không viền) */}
+                          {isAnswered && (
+                            <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-emerald-500 rounded-full shadow-sm z-10"></div>
+                          )}
+                          
+                          {/* 👉 ĐÃ CẮM CỜ - CỜ VÀNG (Đưa ra mép ngoài góc phải trên, không nền trắng, không viền) */}
                           {isFlagged && (
-                            <div className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-rose-500 rounded-full border-2 border-white shadow-sm flex items-center justify-center">
-                              <Flag className="w-2.5 h-2.5 text-white fill-white" />
+                            <div className="absolute -top-2.5 -right-2 z-10 animate-in zoom-in drop-shadow-md">
+                              <Flag className="w-4 h-4 text-amber-500 fill-amber-500" />
                             </div>
                           )}
                         </button>
                       )
                     })}
                   </div>
+
                 </div>
              </div>
              
@@ -685,7 +833,7 @@ const TakeQuiz = () => {
                <Button onClick={handleSubmit} disabled={isSubmitting} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white h-14 rounded-2xl font-black text-xl shadow-lg shadow-emerald-200 transition-all active:scale-95">
                  {isSubmitting ? <><Loader2 className="w-6 h-6 mr-2 animate-spin" /> Đang nộp...</> : <><Send className="w-6 h-6 mr-2" /> NỘP BÀI</>}
                </Button>
-               <Button onClick={handleExit} variant="ghost" className="w-full h-12 mt-2 font-bold text-slate-500 hover:text-slate-800 lg:hidden">
+               <Button onClick={handleExit} variant="ghost" className="w-full h-12 mt-2 font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 lg:hidden">
                  Thoát bài thi
                </Button>
              </div>

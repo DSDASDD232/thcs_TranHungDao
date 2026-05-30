@@ -132,7 +132,7 @@ router.post("/submit", verifyToken, uploadSubmission.any(), async (req, res) => 
                 studentAnswer: ans.studentAnswer || "", // Text trả lời trắc nghiệm hoặc gõ tự luận
                 studentImage: finalImageUrl, // Link ảnh học sinh chụp lên (tự luận)
                 
-                // 👉 ĐÃ THÊM: Hứng chuỗi Base64 từ GeoGebra và lưu thẳng vào Database
+                // Hứng chuỗi Base64 từ GeoGebra và lưu thẳng vào Database
                 studentBase64Image: ans.studentBase64Image || "",
                 
                 isCorrect: isCorrect,
@@ -259,12 +259,12 @@ router.get("/my-submissions", verifyToken, async (req, res) => {
 });
 
 // ======================================================================
-// 4. [GET] API LẤY BẢNG XẾP HẠNG THI ĐUA CỦA 1 LỚP (CÓ BỘ LỌC THỜI GIAN VÀ MÔN)
+// 4. [GET] API LẤY BẢNG XẾP HẠNG THI ĐUA CỦA 1 LỚP (CÓ BỘ LỌC THỜI GIAN, MÔN, LOẠI BÀI)
 // ======================================================================
 router.get("/class/:classId/leaderboard", verifyToken, isTeacherOrAdmin, async (req, res) => {
     try {
         const classId = req.params.classId;
-        const { timeframe, subject } = req.query;
+        const { timeframe, subject, type } = req.query; // 👉 Đã thêm type (loại bài: homework / exam)
 
         const students = await User.find({ classId: classId, role: "student" }).select("fullName username");
         if (students.length === 0) return res.status(200).json({ leaderboard: [] });
@@ -287,18 +287,29 @@ router.get("/class/:classId/leaderboard", verifyToken, isTeacherOrAdmin, async (
             dateFilter = { createdAt: { $gte: firstDayOfYear } };
         }
 
-        let assignmentFilter = {};
+        // 👉 TẠO BỘ LỌC CHO ASSIGNMENT (THEO MÔN HỌC HOẶC LOẠI BÀI)
+        let assignmentQuery = {};
         if (subject && subject !== "all") {
-            const assignmentsOfSubject = await Assignment.find({ subject: subject }).select("_id");
-            const assignmentIds = assignmentsOfSubject.map(a => a._id);
-            assignmentFilter = { assignment: { $in: assignmentIds } };
+            assignmentQuery.subject = subject;
+        }
+        if (type && type !== "all") {
+            assignmentQuery.assignmentType = type;
         }
 
+        let submissionAssignmentFilter = {};
+        // Nếu có truyền subject hoặc type thì ta mới cần phải lọc ID của Assignment
+        if (Object.keys(assignmentQuery).length > 0) {
+            const matchedAssignments = await Assignment.find(assignmentQuery).select("_id");
+            const assignmentIds = matchedAssignments.map(a => a._id);
+            submissionAssignmentFilter = { assignment: { $in: assignmentIds } };
+        }
+
+        // Tìm tất cả các bài nộp của học sinh, đã chấm điểm và thỏa mãn bộ lọc
         const submissions = await Submission.find({ 
             student: { $in: studentIds },
             status: "graded", 
             ...dateFilter,
-            ...assignmentFilter 
+            ...submissionAssignmentFilter // 👉 Áp dụng bộ lọc bài tập/đề thi
         }).sort({ createdAt: -1 }); 
 
         let leaderboard = students.map(student => {

@@ -98,7 +98,8 @@ router.post("/extract-word", verifyToken, isTeacherOrAdmin, uploadWord.single("f
 // ==========================================================
 router.post("/create-manual", verifyToken, isTeacherOrAdmin, uploadCloud.any(), async (req, res) => {
     try {
-        const { title, targetClass, subject, duration, dueDate, status, action, saveToBank, questionsData, password } = req.body;
+        // 👉 ĐÃ THÊM LẤY BIẾN assignmentType TỪ REQ.BODY
+        const { title, targetClass, subject, duration, dueDate, status, action, saveToBank, questionsData, password, semester, assignmentType } = req.body;
         
         const parsedQuestions = typeof questionsData === 'string' ? JSON.parse(questionsData) : questionsData;
         
@@ -111,10 +112,9 @@ router.post("/create-manual", verifyToken, isTeacherOrAdmin, uploadCloud.any(), 
         const questionsWithPoints = [];
 
         for (const q of parsedQuestions) {
-            // 👉 Lấy link Ảnh và Video từ Cloudinary (qua Multer req.files)
             let imageUrl = q.existingImageUrl || "";
             let essayImageUrl = q.existingEssayAnswerImageUrl || "";
-            let videoUrl = q.videoUrl || ""; // Dùng link GG drive/Youtube nếu có
+            let videoUrl = q.videoUrl || ""; 
 
             if (req.files && req.files.length > 0) {
                 const imageFile = req.files.find(f => f.fieldname === `image_${q.tempId}`);
@@ -123,7 +123,6 @@ router.post("/create-manual", verifyToken, isTeacherOrAdmin, uploadCloud.any(), 
                 const essayImageFile = req.files.find(f => f.fieldname === `essayImage_${q.tempId}`);
                 if (essayImageFile) essayImageUrl = essayImageFile.path;
 
-                // Bắt file Video / MP3
                 const videoFile = req.files.find(f => f.fieldname === `video_${q.tempId}`);
                 if (videoFile) videoUrl = videoFile.path;
             }
@@ -140,12 +139,13 @@ router.post("/create-manual", verifyToken, isTeacherOrAdmin, uploadCloud.any(), 
                 content: q.content,
                 subject: q.subject || subject,
                 grade: grade,
+                semester: q.semester || semester || "1",
                 difficulty: q.difficulty,
                 type: q.type, 
                 options: q.type === "multiple_choice" ? q.options : [], 
                 correctAnswer: actualCorrectAnswer, 
                 imageUrl: imageUrl, 
-                videoUrl: videoUrl, // Lưu URL video/audio vào MongoDB
+                videoUrl: videoUrl, 
                 essayAnswerText: q.essayAnswerText || "",
                 essayAnswerImageUrl: essayImageUrl, 
                 teacher: req.user.id,
@@ -169,6 +169,8 @@ router.post("/create-manual", verifyToken, isTeacherOrAdmin, uploadCloud.any(), 
             title, 
             targetClass, 
             subject, 
+            semester: semester || "1",
+            assignmentType: assignmentType || "homework", // 👉 LƯU LOẠI BÀI VÀO DB
             questions: questionsWithPoints, 
             duration: duration || 45, 
             dueDate, 
@@ -191,7 +193,7 @@ router.post("/create-manual", verifyToken, isTeacherOrAdmin, uploadCloud.any(), 
 // ==========================================================
 router.post("/create", verifyToken, isTeacherOrAdmin, async (req, res) => {
     try {
-        const { title, description, targetClass, questions, status, startTime, dueDate, duration } = req.body;
+        const { title, description, targetClass, questions, status, startTime, dueDate, duration, semester, assignmentType } = req.body;
         
         const formattedQuestions = typeof questions === 'string' ? JSON.parse(questions) : questions;
 
@@ -199,6 +201,9 @@ router.post("/create", verifyToken, isTeacherOrAdmin, async (req, res) => {
             title, 
             description, 
             targetClass, 
+            subject: req.body.subject,
+            semester: semester || "1",
+            assignmentType: assignmentType || "homework", // 👉 LƯU LOẠI BÀI VÀO DB
             questions: formattedQuestions, 
             status: status || "published", 
             startTime, 
@@ -300,25 +305,21 @@ router.delete("/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
             const question = item.questionId;
             
             if (question && question.isBank === false) {
-                // Xóa ảnh đề bài
                 if (question.imageUrl && question.imageUrl.includes('cloudinary.com')) {
                     const publicId = getCloudinaryPublicId(question.imageUrl);
                     if (publicId) await cloudinary.uploader.destroy(publicId, { resource_type: getCloudinaryResourceType(question.imageUrl) });
                 }
 
-                // Xóa ảnh tự luận
                 if (question.essayAnswerImageUrl && question.essayAnswerImageUrl.includes('cloudinary.com')) {
                     const essayPublicId = getCloudinaryPublicId(question.essayAnswerImageUrl);
                     if (essayPublicId) await cloudinary.uploader.destroy(essayPublicId, { resource_type: getCloudinaryResourceType(question.essayAnswerImageUrl) });
                 }
                 
-                // 👉 Xóa Video / MP3 đề bài
                 if (question.videoUrl && question.videoUrl.includes('cloudinary.com')) {
                     const videoPublicId = getCloudinaryPublicId(question.videoUrl);
                     if (videoPublicId) await cloudinary.uploader.destroy(videoPublicId, { resource_type: getCloudinaryResourceType(question.videoUrl) });
                 }
 
-                // Xóa ảnh bị ẩn trong khung Rich Text
                 const hiddenUrls = [
                     ...extractCloudinaryUrlsFromHtml(question.content),
                     ...extractCloudinaryUrlsFromHtml(question.essayAnswerText)
@@ -350,7 +351,8 @@ router.delete("/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
 router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), async (req, res) => {
     try {
         const assignmentId = req.params.id;
-        const { title, targetClass, subject, duration, dueDate, status, saveToBank, questionsData, password } = req.body;
+        // 👉 ĐÃ THÊM BIẾN assignmentType
+        const { title, targetClass, subject, duration, dueDate, status, saveToBank, questionsData, password, semester, assignmentType } = req.body;
 
         const existingAssignment = await Assignment.findById(assignmentId);
         if (!existingAssignment) return res.status(404).json({ message: "Không tìm thấy bài tập!" });
@@ -373,7 +375,6 @@ router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asyn
             let essayImageUrl = q.existingEssayAnswerImageUrl || "";
             let videoUrl = q.videoUrl || "";
 
-            // Check files từ formData lên
             if (req.files && req.files.length > 0) {
                 const imageFile = req.files.find(f => f.fieldname === `image_${q.tempId}` || f.fieldname === `image_${q._id}`);
                 if (imageFile) imageUrl = imageFile.path;
@@ -381,7 +382,6 @@ router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asyn
                 const essayImageFile = req.files.find(f => f.fieldname === `essayImage_${q.tempId}` || f.fieldname === `essayImage_${q._id}`);
                 if (essayImageFile) essayImageUrl = essayImageFile.path;
                 
-                // Bắt video/mp3 update
                 const videoFile = req.files.find(f => f.fieldname === `video_${q.tempId}` || f.fieldname === `video_${q._id}`);
                 if (videoFile) videoUrl = videoFile.path;
             }
@@ -402,12 +402,13 @@ router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asyn
                     content: q.content,
                     subject: q.subject || subject,
                     grade: grade,
+                    semester: q.semester || semester || existingAssignment.semester || "1", 
                     difficulty: q.difficulty,
                     type: q.type,
                     options: q.type === "multiple_choice" ? q.options : [],
                     correctAnswer: actualCorrectAnswer,
                     imageUrl: imageUrl,
-                    videoUrl: videoUrl, // 👉 Cập nhật URL video
+                    videoUrl: videoUrl,
                     essayAnswerText: q.essayAnswerText || "",
                     essayAnswerImageUrl: essayImageUrl,
                     isBank: isBankFlag
@@ -418,12 +419,13 @@ router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asyn
                     content: q.content,
                     subject: q.subject || subject,
                     grade: grade,
+                    semester: q.semester || semester || "1",
                     difficulty: q.difficulty,
                     type: q.type,
                     options: q.type === "multiple_choice" ? q.options : [],
                     correctAnswer: actualCorrectAnswer,
                     imageUrl: imageUrl,
-                    videoUrl: videoUrl, // 👉 Thêm mới URL video
+                    videoUrl: videoUrl, 
                     essayAnswerText: q.essayAnswerText || "",
                     essayAnswerImageUrl: essayImageUrl,
                     teacher: req.user.id,
@@ -444,8 +446,15 @@ router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asyn
         existingAssignment.targetClass = targetClass || existingAssignment.targetClass;
         existingAssignment.subject = subject || existingAssignment.subject;
         existingAssignment.duration = duration || existingAssignment.duration;
+        existingAssignment.semester = semester || existingAssignment.semester || "1"; 
         existingAssignment.dueDate = dueDate || existingAssignment.dueDate;
-        existingAssignment.status = status || existingAssignment.status; 
+        existingAssignment.status = status || existingAssignment.status;
+        
+        // 👉 CẬP NHẬT LOẠI BÀI TẬP NẾU CÓ THAY ĐỔI
+        if (assignmentType) {
+            existingAssignment.assignmentType = assignmentType;
+        }
+
         if (password !== undefined) existingAssignment.password = password; 
         existingAssignment.questions = questionsWithPoints;
 

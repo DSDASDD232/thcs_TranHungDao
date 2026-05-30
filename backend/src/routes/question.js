@@ -82,26 +82,28 @@ router.post("/extract-word", verifyToken, isTeacherOrAdmin, uploadWord.single("f
 // ==========================================================
 // 2. [POST] Thêm 1 câu hỏi lẻ (THÊM VÀO KHO)
 // ==========================================================
-// 👉 Dùng uploadCloud.any()
 router.post("/add", verifyToken, isTeacherOrAdmin, uploadCloud.any(), async (req, res) => {
     try {
-        const { content, subject, difficulty, grade, type, options, correctAnswer, questionSet, essayAnswerText } = req.body;
+        // 👉 ĐÃ THÊM BIẾN folderName VÀ examName, LOẠI BỎ questionSet
+        const { content, subject, difficulty, grade, type, options, correctAnswer, folderName, examName, essayAnswerText, semester } = req.body;
 
         if (!content || !type) {
             return res.status(400).json({ message: "Thiếu nội dung hoặc loại câu hỏi!" });
         }
 
-        const finalSetName = questionSet ? questionSet.trim() : "Ngân hàng chung";
+        const finalFolderName = folderName ? folderName.trim() : "Thư mục chung";
+        const finalExamName = examName ? examName.trim() : "Đề chung";
         const normalizedContent = content.trim().toLowerCase();
 
         const isDuplicate = await Question.findOne({
             teacher: req.user.id,
-            questionSet: finalSetName,
+            folderName: finalFolderName,
+            examName: finalExamName,
             content: { $regex: new RegExp(`^${normalizedContent}$`, 'i') } 
         });
 
         if (isDuplicate) {
-            return res.status(400).json({ message: "Câu hỏi này đã tồn tại trong kho của bạn!" });
+            return res.status(400).json({ message: "Câu hỏi này đã tồn tại trong đề thi này!" });
         }
 
         let parsedOptions = [];
@@ -119,10 +121,9 @@ router.post("/add", verifyToken, isTeacherOrAdmin, uploadCloud.any(), async (req
             }
         }
 
-        // 👉 Nhận link Cloudinary trả về thay vì lưu ổ cứng
         let finalImageUrl = "";
         const imageFile = req.files?.find(f => f.fieldname === 'image');
-        if (imageFile) finalImageUrl = imageFile.path; // Lấy link Cloudinary
+        if (imageFile) finalImageUrl = imageFile.path; 
 
         let finalEssayAnswerImageUrl = "";
         const essayImageFile = req.files?.find(f => f.fieldname === 'essayAnswerImage');
@@ -133,19 +134,21 @@ router.post("/add", verifyToken, isTeacherOrAdmin, uploadCloud.any(), async (req
             subject,
             difficulty,
             grade: grade || "6",
+            semester: semester || "1",
             type: type,
             options: parsedOptions,
             correctAnswer: finalCorrectAnswer,
             imageUrl: finalImageUrl, 
             teacher: req.user.id,
             isBank: true,
-            questionSet: finalSetName,
+            folderName: finalFolderName, // 👉 CẬP NHẬT CẤU TRÚC MỚI
+            examName: finalExamName,     // 👉 CẬP NHẬT CẤU TRÚC MỚI
             essayAnswerText: essayAnswerText || "",
             essayAnswerImageUrl: finalEssayAnswerImageUrl
         });
 
         await newQuestion.save();
-        res.status(201).json({ message: "✅ Đã thêm câu hỏi vào Kho thành công!", question: newQuestion });
+        res.status(201).json({ message: "✅ Đã thêm câu hỏi vào Đề thi thành công!", question: newQuestion });
 
     } catch (error) {
         console.error("LỖI BACKEND CHI TIẾT:", error);
@@ -154,13 +157,15 @@ router.post("/add", verifyToken, isTeacherOrAdmin, uploadCloud.any(), async (req
 });
 
 // ======================================================================
-// 3. [POST] LƯU HÀNG LOẠT CÂU HỎI THÀNH "BỘ ĐỀ" / KHO
+// 3. [POST] LƯU HÀNG LOẠT CÂU HỎI THÀNH "ĐỀ THI" BÊN TRONG THƯ MỤC
 // ======================================================================
-router.post("/create-set", verifyToken, isTeacherOrAdmin, uploadCloud.any(), async (req, res) => {
+router.post("/create-exam-questions", verifyToken, isTeacherOrAdmin, uploadCloud.any(), async (req, res) => {
     try {
-        const { setName, subject, grade, questionsData } = req.body;
+        // 👉 ĐÃ THAY ĐỔI: Nhận folderName và examName từ Frontend gửi lên
+        const { folderName, examName, subject, grade, questionsData, semester } = req.body;
         
-        const finalSetName = setName ? setName.trim() : "Ngân hàng chung";
+        const finalFolderName = folderName ? folderName.trim() : "Thư mục chung";
+        const finalExamName = examName ? examName.trim() : "Đề chung";
         const finalSubject = subject ? subject.trim() : "Chung";
         const finalGrade = grade ? grade.trim() : "Chung";
         
@@ -177,7 +182,8 @@ router.post("/create-set", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asy
 
         const existingDbQuestions = await Question.find({
             teacher: req.user.id,
-            questionSet: finalSetName
+            folderName: finalFolderName, // 👉 Kiểm tra trùng lặp trong đúng Đề và Thư mục
+            examName: finalExamName
         }).select('content').lean();
 
         const existingContents = new Set(existingDbQuestions.map(q => q.content.trim().toLowerCase()));
@@ -188,21 +194,21 @@ router.post("/create-set", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asy
             const normalizedContent = q.content.trim().toLowerCase();
 
             if (existingContents.has(normalizedContent)) {
-                return res.status(400).json({ message: `Lỗi: Câu hỏi "${q.content.substring(0, 30)}..." đã có sẵn trong kho này!` });
+                return res.status(400).json({ message: `Lỗi: Câu hỏi "${q.content.substring(0, 30)}..." đã có sẵn trong đề thi này!` });
             }
             if (incomingContents.has(normalizedContent)) {
-                return res.status(400).json({ message: `Lỗi: Câu hỏi "${q.content.substring(0, 30)}..." bị trùng lặp trong danh sách!` });
+                return res.status(400).json({ message: `Lỗi: Câu hỏi "${q.content.substring(0, 30)}..." bị trùng lặp trong danh sách bạn đang soạn!` });
             }
 
             incomingContents.add(normalizedContent);
 
             let imageUrl = q.existingImageUrl || "";
             const imageFile = req.files?.find(f => f.fieldname === `image_${q.tempId}`);
-            if (imageFile) imageUrl = imageFile.path; // Lấy link Cloudinary
+            if (imageFile) imageUrl = imageFile.path; 
 
             let essayAnswerImageUrl = "";
             const essayImageFile = req.files?.find(f => f.fieldname === `essayImage_${q.tempId}`);
-            if (essayImageFile) essayAnswerImageUrl = essayImageFile.path; // Lấy link Cloudinary
+            if (essayImageFile) essayAnswerImageUrl = essayImageFile.path; 
 
             questionsToSave.push({
                 content: q.content.trim(),
@@ -212,7 +218,9 @@ router.post("/create-set", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asy
                 difficulty: q.difficulty || "medium",
                 subject: finalSubject,
                 grade: finalGrade,
-                questionSet: finalSetName,
+                semester: q.semester || semester || "1",
+                folderName: finalFolderName, // 👉 CẬP NHẬT
+                examName: finalExamName,     // 👉 CẬP NHẬT
                 teacher: req.user.id,
                 imageUrl: imageUrl,
                 points: q.points || 0,
@@ -223,11 +231,11 @@ router.post("/create-set", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asy
         }
 
         await Question.insertMany(questionsToSave);
-        res.status(201).json({ message: `✅ Đã lưu thành công ${questionsToSave.length} câu hỏi vào Bộ đề: ${finalSetName}` });
+        res.status(201).json({ message: `✅ Đã lưu thành công ${questionsToSave.length} câu hỏi vào Đề thi: ${finalExamName}` });
 
     } catch (error) {
-        console.error("Lỗi lưu Bộ đề:", error);
-        res.status(500).json({ message: "Lỗi server khi lưu bộ đề", error: error.message });
+        console.error("Lỗi lưu Đề thi:", error);
+        res.status(500).json({ message: "Lỗi server khi lưu câu hỏi vào đề thi", error: error.message });
     }
 });
 
@@ -262,12 +270,12 @@ router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asyn
     try {
         const updateData = { ...req.body };
         
-        // Cập nhật ảnh đề bài (Nếu up ảnh mới thì lấy link Cloudinary)
+        // Cập nhật ảnh đề bài
         const imageFile = req.files?.find(f => f.fieldname === 'image');
         if (imageFile) {
             updateData.imageUrl = imageFile.path;
         } else if (req.body.imageUrl === "") {
-            updateData.imageUrl = ""; // Xóa ảnh
+            updateData.imageUrl = ""; 
         }
 
         // Cập nhật ảnh đáp án
@@ -278,7 +286,6 @@ router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asyn
             updateData.essayAnswerImageUrl = "";
         }
 
-        // 👉 ĐÃ SỬA: Gỡ bỏ lệnh reset lời giải nếu là Trắc nghiệm! 
         if (updateData.type === 'multiple_choice') {
              if (updateData.options) {
                 try {
@@ -292,6 +299,7 @@ router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asyn
             updateData.correctAnswer = "";
         }
 
+        // Cấu trúc ...req.body đã tự động hứng biến `semester`, `folderName`, `examName` từ Frontend nếu có truyền lên
         const updatedQuestion = await Question.findByIdAndUpdate(
             req.params.id, 
             updateData, 
@@ -316,7 +324,7 @@ router.delete("/delete/:id", verifyToken, isTeacherOrAdmin, async (req, res) => 
 
         if (!question) return res.status(404).json({ message: "Không tìm thấy câu hỏi!" });
 
-        // 👉 DỌN DẸP TRÊN CLOUDINARY
+        // DỌN DẸP TRÊN CLOUDINARY
         if (question.imageUrl) {
             const publicId = getCloudinaryPublicId(question.imageUrl);
             if (publicId) await cloudinary.uploader.destroy(publicId);

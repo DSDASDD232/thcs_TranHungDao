@@ -9,7 +9,7 @@ const assignmentSchema = new mongoose.Schema(
             trim: true,
         },
 
-        // [BỔ SUNG] Môn học (Để hiển thị đúng môn trên giao diện)
+        // Môn học (Để hiển thị đúng môn trên giao diện)
         subject: {
             type: String,
             required: true,
@@ -71,17 +71,46 @@ const assignmentSchema = new mongoose.Schema(
             default: null,
         },
 
-        // [BỔ SUNG QUAN TRỌNG] Trạng thái bài tập
+        semester: {
+            type: String,
+            default: "1"
+        },
+
+        // Trạng thái bài tập
         status: {
             type: String,
             enum: ["draft", "published"], 
             default: "published" // Mặc định nếu không gửi gì thì là Đã giao
         },
 
-        // 👉 [THÊM MỚI] Mật khẩu bài thi
+        // Mật khẩu bài thi
         password: {
             type: String,
             default: "", // Rỗng nghĩa là không yêu cầu mật khẩu
+        },
+
+        // ==========================================
+        // 👉 [THÊM MỚI] PHÂN LOẠI BÀI TẬP VÀ BÀI THI
+        // ==========================================
+        assignmentType: {
+            type: String,
+            enum: ["homework", "exam"],
+            default: "homework", // Mặc định là Bài tập về nhà
+        },
+
+        // ==========================================
+        // CÁC TÍNH NĂNG MỞ RỘNG TRONG TƯƠNG LAI
+        // ==========================================
+        // 1. Cài đặt dành riêng cho Bài kiểm tra/Thi (exam)
+        examSettings: {
+            isAntiCheatEnabled: { type: Boolean, default: false }, // Bật chống gian lận (cấm chuyển tab)
+            isShuffleQuestions: { type: Boolean, default: false }, // Đảo mã đề/câu hỏi
+        },
+
+        // 2. Cài đặt dành riêng cho Bài tập về nhà (homework)
+        homeworkSettings: {
+            maxAttempts: { type: Number, default: 1 },        // Số lần cho phép làm lại
+            allowLateSubmit: { type: Boolean, default: true } // Có cho phép nộp muộn không
         }
     },
     { 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import axios from "../lib/axios"; 
 import mammoth from "mammoth"; 
 import { Button } from "@/components/ui/button";
@@ -14,11 +14,12 @@ import {
   ArrowLeft, UploadCloud, CheckCircle, CheckCircle2, AlertTriangle, Eraser,
   Sparkles, FileText, Loader2, Image as ImageIcon, ListChecks, Layers,
   PenTool, Database, Calculator, Save, Search, Eye, Trash2, PlusCircle, ArrowRight, FolderOpen, Lock,
-  Calendar, Video, FileAudio, PlayCircle
+  Calendar, Video, FileAudio, Sigma, X, BookOpen, FileCheck
 } from "lucide-react";
 
 import RichTextEditor from "@/components/ui/RichTextEditor";
 import 'katex/dist/katex.min.css';
+import 'mathlive';
 
 // ==========================================
 // HÀM XỬ LÝ LINK YOUTUBE VÀ GOOGLE DRIVE & KIỂM TRA AUDIO
@@ -124,6 +125,7 @@ const CustomDateInput = ({ label, value, onChange, min }) => {
 const CreateAssignment = () => {
   const navigate = useNavigate();
   const { id } = useParams(); 
+  const location = useLocation();
   const assignmentFileRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
@@ -136,6 +138,63 @@ const CreateAssignment = () => {
   const [isReviewingExtraction, setIsReviewingExtraction] = useState(false);
   const [rawExtractedText, setRawExtractedText] = useState("");
   const [extractedQuestions, setExtractedQuestions] = useState([]);
+
+  const mathFieldRef = useRef(null);
+  const [mathModal, setMathModal] = useState({ isOpen: false, targetTempId: null, targetOptionIndex: null, isExtracted: false });
+  
+  const [openMediaPanels, setOpenMediaPanels] = useState({});
+  const [openExtractedMediaPanels, setOpenExtractedMediaPanels] = useState({});
+
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = `
+      .ML__keyboard { z-index: 999999 !important; }
+      math-field::part(virtual-keyboard-toggle) { color: #0ea5e9; }
+      math-field:focus-within { outline: 2px solid #38bdf8 !important; }
+    `;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
+
+  useEffect(() => {
+    if (mathModal.isOpen && mathFieldRef.current) {
+      setTimeout(() => mathFieldRef.current.focus(), 150);
+    }
+  }, [mathModal.isOpen]);
+
+  const confirmMathInsertion = () => {
+    if (!mathFieldRef.current) return;
+    const latex = mathFieldRef.current.value;
+    if (!latex) {
+        setMathModal({ isOpen: false, targetTempId: null, targetOptionIndex: null, isExtracted: false });
+        return;
+    }
+
+    const formattedLatex = `$$ ${latex} $$`; 
+
+    if (mathModal.isExtracted) {
+        setExtractedQuestions(extractedQuestions.map(q => {
+            if (q.tempId === mathModal.targetTempId) {
+                const newOptions = [...q.options];
+                newOptions[mathModal.targetOptionIndex] = (newOptions[mathModal.targetOptionIndex] || '') + " " + formattedLatex;
+                return { ...q, options: newOptions };
+            }
+            return q;
+        }));
+    } else {
+        setManualQuestions(manualQuestions.map(q => {
+            if (q.tempId === mathModal.targetTempId) {
+                const newOptions = [...q.options];
+                newOptions[mathModal.targetOptionIndex] = (newOptions[mathModal.targetOptionIndex] || '') + " " + formattedLatex;
+                return { ...q, options: newOptions };
+            }
+            return q;
+        }));
+    }
+
+    mathFieldRef.current.value = '';
+    setMathModal({ isOpen: false, targetTempId: null, targetOptionIndex: null, isExtracted: false });
+  };
 
   const [templateConfig, setTemplateConfig] = useState({
     mcqCount: 0, essayCount: 0, essayPoints: []
@@ -162,8 +221,13 @@ const CreateAssignment = () => {
     return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`; 
   };
 
+  // 👉 TỰ ĐỘNG ĐỌC LOẠI BÀI TỪ URL
+  const queryParams = new URLSearchParams(location.search);
+  const currentAssignmentType = queryParams.get("type") === "exam" ? "exam" : "homework";
+
   const [newAssignment, setNewAssignment] = useState({ 
-    title: "", targetClass: "", subject: "", duration: "45", 
+    title: "", targetClass: "", subject: "", duration: "45", semester: "1", 
+    assignmentType: currentAssignmentType, // Gán loại bài tự động
     startDate_date: getCurrentDate(), 
     startDate_time: getCurrentTime(), 
     dueDate_date: getDefaultDate(), 
@@ -208,14 +272,12 @@ const CreateAssignment = () => {
   const [questionPoints, setQuestionPoints] = useState({});
 
   const [bankSearch, setBankSearch] = useState("");
-  const [bankGrade, setBankGrade] = useState("all");
-  const [bankSubject, setBankSubject] = useState("");
-  const [bankSetName, setBankSetName] = useState("all"); 
+  const [bankSubject, setBankSubject] = useState("all");
+  const [bankFolder, setBankFolder] = useState("all"); 
+  const [bankExam, setBankExam] = useState("all"); 
   const [bankType, setBankType] = useState("all"); 
   const [bankPoints, setBankPoints] = useState(""); 
   const [bankSelected, setBankSelected] = useState([]); 
-
-  const [isSetSelectionEnabled, setIsSetSelectionEnabled] = useState(true);
 
   const serverUrl = axios.defaults.baseURL?.replace('/api', '') || '';
 
@@ -261,7 +323,9 @@ const CreateAssignment = () => {
           startDate_time: `${s_hh}:${s_mins}`,
           dueDate_date: `${yyyy}-${mm}-${dd}`,
           dueDate_time: `${hh}:${mins}`,
-          password: data.password || "" 
+          password: data.password || "",
+          semester: data.semester || "1",
+          assignmentType: data.assignmentType || currentAssignmentType
         });
 
         if (data.password) setHasPassword(true);
@@ -340,7 +404,7 @@ const CreateAssignment = () => {
                 : teacherInfo.subject || "Chưa phân tổ";
                 
             setNewAssignment(prev => ({ ...prev, subject: defaultSub }));
-            setBankSubject(defaultSub); 
+            setBankSubject("all"); 
         }
         questionsRes.data && setQuestions(questionsRes.data.questions || []);
       } catch (error) {}
@@ -759,7 +823,6 @@ const CreateAssignment = () => {
   const handleManualImageChange = (tempId, e) => { const file = e.target.files[0]; if (file) setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, imageFile: file, previewUrl: URL.createObjectURL(file) } : q)); };
   const handleRemoveManualImage = (tempId) => { setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, imageFile: null, previewUrl: "", existingImageUrl: "" } : q)); };
   
-  // 👉 THÊM HÀM XỬ LÝ CHỌN VIDEO UPLOAD (Local -> Cloudinary)
   const handleManualVideoChange = (tempId, e) => {
     const file = e.target.files[0];
     if (file) {
@@ -768,6 +831,12 @@ const CreateAssignment = () => {
   };
   const handleRemoveManualVideo = (tempId) => {
     setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, videoFile: null, videoPreviewUrl: "", videoUrl: "" } : q));
+  };
+  const handleExtractedVideoChange = (tempId, e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setExtractedQuestions(extractedQuestions.map(q => q.tempId === tempId ? { ...q, videoFile: file, videoPreviewUrl: URL.createObjectURL(file) } : q));
+    }
   };
 
   const handleManualEssayImageChange = (tempId, e) => { const file = e.target.files[0]; if (file) setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, essayAnswerImageFile: file, essayAnswerPreviewUrl: URL.createObjectURL(file) } : q)); };
@@ -840,6 +909,8 @@ const CreateAssignment = () => {
       formData.append("targetClass", newAssignment.targetClass); 
       formData.append("subject", newAssignment.subject); 
       formData.append("duration", newAssignment.duration); 
+      formData.append("semester", newAssignment.semester); 
+      formData.append("assignmentType", newAssignment.assignmentType); 
       formData.append("startDate", finalStartDateISO);
       formData.append("dueDate", finalDueDateISO);
       formData.append("status", actionType); 
@@ -860,6 +931,7 @@ const CreateAssignment = () => {
           correctAnswer: q.correctAnswer, 
           difficulty: q.difficulty, 
           subject: newAssignment.subject,
+          semester: newAssignment.semester,
           points: questionPoints[q.tempId] || 0, 
           essayAnswerText: q.essayAnswerText || "",
           existingImageUrl: q.existingImageUrl || "",
@@ -870,7 +942,7 @@ const CreateAssignment = () => {
       updatedManualQuestions.forEach(q => { 
           if (q.imageFile) formData.append(`image_${q.tempId}`, q.imageFile); 
           if (q.essayAnswerImageFile) formData.append(`essayImage_${q.tempId}`, q.essayAnswerImageFile);
-          if (q.videoFile) formData.append(`video_${q.tempId}`, q.videoFile); // 👉 Đóng gói file video gửi lên server
+          if (q.videoFile) formData.append(`video_${q.tempId}`, q.videoFile); 
       });
       
       if (id) await axios.put(`/assignments/update/${id}`, formData, getHeader(true));
@@ -881,17 +953,32 @@ const CreateAssignment = () => {
     } catch (err) { alert("Lỗi xử lý! Vui lòng thử lại."); } finally { setLoading(false); }
   };
 
-  const availableSets = [...new Set(questions.filter(q => bankSubject === "all" || q.subject === bankSubject).map(q => q.questionSet).filter(Boolean))];
+  const availableFolders = [...new Set(questions.filter(q => bankSubject === "all" || q.subject === bankSubject).map(q => q.folderName).filter(Boolean))];
+  const availableExams = [...new Set(questions.filter(q => (bankSubject === "all" || q.subject === bankSubject) && (bankFolder === "all" || q.folderName === bankFolder)).map(q => q.examName).filter(Boolean))];
 
   const filteredBankQuestions = questions.filter(q => {
     const matchSearch = (q.content || "").toLowerCase().includes(bankSearch.toLowerCase());
-    const matchGrade = bankGrade === "all" || q.grade === bankGrade;
-    const matchSubject = !bankSubject || bankSubject === "all" || q.subject === bankSubject;
+    const matchSubject = bankSubject === "all" || q.subject === bankSubject;
     const matchType = bankType === "all" || q.type === bankType;
-    const matchSet = bankSetName === "all" || q.questionSet === bankSetName;
+    const matchFolder = bankFolder === "all" || q.folderName === bankFolder;
+    const matchExam = bankExam === "all" || q.examName === bankExam;
     const matchPoints = !bankPoints || Number(q.points) === Number(bankPoints);
-    return matchSearch && matchGrade && matchSubject && matchType && matchSet && matchPoints;
+    return matchSearch && matchSubject && matchType && matchFolder && matchExam && matchPoints;
   });
+
+  const handleSelectAllFiltered = () => {
+    const filteredIds = filteredBankQuestions.map(q => q._id);
+    const isAllSelected = filteredIds.length > 0 && filteredIds.every(id => bankSelected.includes(id));
+    
+    if (isAllSelected) {
+        setBankSelected(prev => prev.filter(id => !filteredIds.includes(id)));
+    } else {
+        const newSelected = [...new Set([...bankSelected, ...filteredIds])];
+        setBankSelected(newSelected);
+    }
+  };
+
+  const isAllFilteredSelected = filteredBankQuestions.length > 0 && filteredBankQuestions.every(q => bankSelected.includes(q._id));
 
   const toggleBankSelection = (qId) => {
     setBankSelected(prev => prev.includes(qId) ? prev.filter(id => id !== qId) : [...prev, qId]);
@@ -930,7 +1017,9 @@ const CreateAssignment = () => {
 
         <Card className="border-none shadow-xl rounded-3xl bg-white overflow-hidden mb-10">
           <CardHeader className="bg-sky-500 text-white p-6 sm:p-8 border-b border-sky-600">
-            <CardTitle className="text-2xl sm:text-3xl font-black">{id ? "Chỉnh sửa Bản nháp" : "Phát hành Bài tập mới"}</CardTitle>
+            <CardTitle className="text-2xl sm:text-3xl font-black">
+               {id ? "Chỉnh sửa Bản nháp" : currentAssignmentType === "exam" ? "Tạo Đề Kiểm Tra Mới" : "Giao Bài Tập Về Nhà Mới"}
+            </CardTitle>
             <p className="text-sky-100 font-medium mt-2 text-sm sm:text-base">Thiết lập thông số và cấu trúc để giao bài cho học sinh.</p>
           </CardHeader>
           
@@ -939,9 +1028,10 @@ const CreateAssignment = () => {
               
               <div className="space-y-4">
                 <h3 className="text-lg sm:text-xl font-black text-sky-900 border-b border-sky-100 pb-2">1. Thông tin chung</h3>
-                <Input placeholder="Nhập tên bài tập..." className="h-12 sm:h-14 rounded-xl bg-slate-50 font-bold text-base sm:text-lg border-sky-100 focus-visible:ring-sky-500" value={newAssignment.title} onChange={(e) => setNewAssignment({...newAssignment, title: e.target.value})} required />
+                <Input placeholder={currentAssignmentType === "exam" ? "Nhập tên đề kiểm tra..." : "Nhập tên bài tập..."} className="h-12 sm:h-14 rounded-xl bg-slate-50 font-bold text-base sm:text-lg border-sky-100 focus-visible:ring-sky-500" value={newAssignment.title} onChange={(e) => setNewAssignment({...newAssignment, title: e.target.value})} required />
                 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* 👉 [BỎ Ô CHỌN LOẠI BÀI - ĐƯA GRID VỀ LẠI 4 CỘT] */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Giao cho Lớp</label>
                     <Select value={newAssignment.targetClass || ""} onValueChange={(val) => setNewAssignment({...newAssignment, targetClass: val})} required>
@@ -969,6 +1059,20 @@ const CreateAssignment = () => {
                             <SelectItem key={sub} value={sub}>{sub}</SelectItem>
                           ))}
                           {teacherSubjects.length === 0 && <SelectItem value="none" disabled>Chưa phân môn</SelectItem>}
+                        </SelectContent>
+                      </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                      <label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Học kỳ</label>
+                      <Select value={newAssignment.semester} onValueChange={(val) => setNewAssignment({...newAssignment, semester: val})}>
+                        <SelectTrigger className="h-11 sm:h-12 px-4 rounded-xl bg-slate-50 font-bold border-sky-100 text-sky-700 w-full [&>span]:truncate">
+                          <SelectValue placeholder="Chọn Học kỳ" />
+                        </SelectTrigger>
+                        <SelectContent position="popper" sideOffset={4} className="bg-white">
+                          <SelectItem value="1">Học kỳ 1</SelectItem>
+                          <SelectItem value="2">Học kỳ 2</SelectItem>
+                          <SelectItem value="3">Học kỳ Hè</SelectItem>
                         </SelectContent>
                       </Select>
                   </div>
@@ -1047,7 +1151,7 @@ const CreateAssignment = () => {
 
               <div className="border-t border-sky-100 pt-6 mt-6">
                 <div className="flex items-center justify-between mb-4">
-                   <h3 className="text-lg sm:text-xl font-black text-sky-900">2. Cấu trúc Đề thi</h3>
+                   <h3 className="text-lg sm:text-xl font-black text-sky-900">2. Cấu trúc {currentAssignmentType === "exam" ? "Đề thi" : "Bài tập"}</h3>
                    {manualQuestions.length > 0 && !id && (
                      <Button variant="outline" className="border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-300 h-9 font-bold" onClick={() => {
                         if(window.confirm("Các câu hỏi đã điền sẽ bị xóa sạch. Bạn có chắc chắn muốn làm lại cấu trúc?")) {
@@ -1117,10 +1221,10 @@ const CreateAssignment = () => {
                 <div className="border-t border-sky-100 pt-6 mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                   <h3 className="text-lg sm:text-xl font-black text-sky-900 mb-4">3. Nội dung chi tiết</h3>
 
-                  <div className="flex bg-slate-100 rounded-xl w-full p-1 overflow-x-auto no-scrollbar mb-6">
+                  <div className="flex bg-slate-100 rounded-xl w-full p-1 overflow-x-auto no-scrollbar mb-6 gap-1">
                     <button type="button" onClick={() => setCreationMethod("manual")} className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${(creationMethod === 'manual' || creationMethod === 'smart_extract') ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-sky-600'}`}><PenTool className="w-4 h-4 shrink-0"/> Xem khung Trực tiếp</button>
                     <button type="button" onClick={() => setCreationMethod("upload")} className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${creationMethod === 'upload' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-sky-600'}`}><FileText className="w-4 h-4 shrink-0"/> Bóc tách từ Word</button>
-                    <button type="button" onClick={() => setCreationMethod("bank")} className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${creationMethod === 'bank' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-sky-600'}`}><Database className="w-4 h-4 shrink-0"/> Rót từ Kho Câu hỏi</button>
+                    <button type="button" onClick={() => setCreationMethod("bank")} className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${creationMethod === 'bank' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-sky-600'}`}><Database className="w-4 h-4 shrink-0"/> Rót từ Kho</button>
                   </div>
 
                   {creationMethod === "upload" && (
@@ -1178,49 +1282,80 @@ const CreateAssignment = () => {
                                       </CardHeader>
                                       <CardContent className="p-4 space-y-4 bg-white">
                                         <div className="flex flex-col">
-                                            <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁN ẢNH CÔNG THỨC..." value={q.content} onChange={(val) => handleExtractedChange(q.tempId, 'content', val)} />
-                                            <div className="mt-3 flex items-center gap-2">
-                                               <Video className="w-5 h-5 text-indigo-500 shrink-0" />
-                                               <Input placeholder="Nhập link YouTube / Google Drive đính kèm câu hỏi (Tùy chọn)" value={q.videoUrl || ""} onChange={(e) => handleExtractedChange(q.tempId, 'videoUrl', e.target.value)} className="bg-slate-50 border-sky-100 focus-visible:ring-indigo-400" />
-                                            </div>
-                                            {/* 👉 HIỂN THỊ TRÌNH PHÁT VIDEO / AUDIO */}
-                                            {q.videoUrl && (
-                                              <div className="w-full mt-3 flex justify-center">
-                                                 {(q.videoUrl.includes("youtube.com") || q.videoUrl.includes("youtu.be")) ? (
-                                                     <div className="h-[250px] sm:h-[400px] w-full max-w-3xl rounded-xl overflow-hidden border border-slate-200 shadow-sm">
-                                                         <iframe className="w-full h-full" src={getYoutubeEmbedUrl(q.videoUrl)} allow="autoplay; fullscreen" allowFullScreen></iframe>
-                                                     </div>
-                                                 ) : q.videoUrl.includes("drive.google.com") ? (
-                                                     <div className="flex flex-col items-center w-full">
-                                                         <div className="h-[200px] sm:h-[350px] w-full max-w-2xl rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-slate-100 flex items-center justify-center relative">
-                                                             <iframe 
-                                                                className="w-full h-full relative z-10" 
-                                                                src={getDriveEmbedUrl(q.videoUrl)} 
-                                                                allow="autoplay; fullscreen; encrypted-media" 
-                                                                allowFullScreen
-                                                                referrerPolicy="no-referrer"
-                                                                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-                                                             ></iframe>
-                                                             <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center z-0">
-                                                                 <Video className="w-8 h-8 text-slate-300 mb-2" />
-                                                                 <p className="text-slate-500 font-medium text-xs">Video đang bị Google Drive chặn hiển thị trực tiếp do cài đặt trình duyệt.</p>
+                                            <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁNẢNH  THỨC..." value={q.content} onChange={(val) => handleExtractedChange(q.tempId, 'content', val)} />
+                                            
+                                            {/* Nút bật/tắt Đính kèm */}
+                                            {!openExtractedMediaPanels[q.tempId] && !q.videoFile && !q.videoUrl && (
+                                               <Button type="button" variant="ghost" size="sm" onClick={() => setOpenExtractedMediaPanels(prev => ({...prev, [q.tempId]: true}))} className="mt-2 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 font-bold self-start w-max">
+                                                  <Video className="w-4 h-4 mr-2" /> Thêm Video / Audio / Link
+                                               </Button>
+                                            )}
+
+                                            {/* Vùng đính kèm mở rộng */}
+                                            {(openExtractedMediaPanels[q.tempId] || q.videoFile || q.videoUrl) && (
+                                               <div className="mt-3 p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl relative">
+                                                  <div className="flex justify-between items-center mb-3">
+                                                     <h4 className="text-sm font-bold text-indigo-700 flex items-center"><Video className="w-4 h-4 mr-2" /> Đính kèm Video / Audio / Link</h4>
+                                                     <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-rose-500 hover:bg-rose-100 rounded-full" title="Đóng và Xóa đính kèm" onClick={() => { setOpenExtractedMediaPanels(prev => ({...prev, [q.tempId]: false})); handleExtractedChange(q.tempId, 'videoUrl', ''); handleExtractedChange(q.tempId, 'videoFile', null); handleExtractedChange(q.tempId, 'videoPreviewUrl', ''); }}>
+                                                        <X className="w-4 h-4" />
+                                                     </Button>
+                                                  </div>
+                                                  
+                                                  {/* 👉 HIỂN THỊ TRÌNH PHÁT VIDEO / AUDIO */}
+                                                  {q.videoFile || (q.videoUrl && !q.videoUrl.includes("youtube") && !q.videoUrl.includes("drive.google.com")) ? (
+                                                      <div className="relative w-full max-w-[450px] mx-auto rounded-xl overflow-hidden border border-indigo-200 shadow-sm bg-black group flex flex-col items-center justify-center p-4">
+                                                          {isAudioFile(q.videoUrl) || (q.videoFile && q.videoFile.type.includes("audio")) ? (
+                                                             <div className="bg-white p-4 w-full rounded-xl flex flex-col items-center">
+                                                               <FileAudio className="w-12 h-12 text-indigo-400 mb-3" />
+                                                               <audio controls className="w-full" src={q.videoPreviewUrl || q.videoUrl} />
                                                              </div>
+                                                          ) : (
+                                                             <video className="w-full max-h-[300px] object-contain" controls src={q.videoPreviewUrl || q.videoUrl} />
+                                                          )}
+                                                      </div>
+                                                  ) : (q.videoUrl && (q.videoUrl.includes("youtube") || q.videoUrl.includes("youtu.be") || q.videoUrl.includes("drive.google.com"))) ? (
+                                                      <div className="relative w-full flex flex-col items-center group">
+                                                          {(q.videoUrl.includes("youtube.com") || q.videoUrl.includes("youtu.be")) ? (
+                                                              <div className="h-[200px] sm:h-[300px] w-full max-w-[400px] rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                                                                  <iframe className="w-full h-full" src={getYoutubeEmbedUrl(q.videoUrl)} allow="autoplay; fullscreen" allowFullScreen></iframe>
+                                                              </div>
+                                                          ) : (
+                                                              <div className="w-full flex flex-col items-center">
+                                                                  <div className="h-[200px] sm:h-[300px] w-full max-w-[400px] rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-slate-100 flex items-center justify-center relative">
+                                                                      <iframe 
+                                                                         className="w-full h-full relative z-10" 
+                                                                         src={getDriveEmbedUrl(q.videoUrl)} 
+                                                                         allow="autoplay; fullscreen; encrypted-media" 
+                                                                         allowFullScreen
+                                                                         referrerPolicy="no-referrer"
+                                                                         sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                                                                      ></iframe>
+                                                                      <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center z-0">
+                                                                         <Video className="w-8 h-8 text-slate-300 mb-2" />
+                                                                         <p className="text-slate-500 font-medium text-xs">Video đang bị Google Drive chặn hiển thị trực tiếp do cài đặt trình duyệt.</p>
+                                                                      </div>
+                                                                  </div>
+                                                              </div>
+                                                          )}
+                                                      </div>
+                                                  ) : (
+                                                      <div className="flex flex-col gap-3">
+                                                         <Input placeholder="Dán link YouTube / Google Drive vào đây..." value={q.videoUrl || ""} onChange={(e) => handleExtractedChange(q.tempId, 'videoUrl', e.target.value)} className="bg-white border-indigo-200 focus-visible:ring-indigo-400 font-medium" />
+                                                         <div className="flex items-center gap-4">
+                                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hoặc tải tệp lên</span>
+                                                            <hr className="flex-1 border-slate-200" />
                                                          </div>
-                                                         <a href={q.videoUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center justify-center h-10 px-6 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-sm transition-colors border border-indigo-200 shadow-sm">
-                                                            <Video className="w-4 h-4 mr-2" /> Click mở Video sang Tab mới
-                                                         </a>
-                                                     </div>
-                                                 ) : isAudioFile(q.videoUrl) ? (
-                                                     <div className="w-full max-w-md bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center">
-                                                        <FileAudio className="w-12 h-12 text-indigo-400 mb-4" />
-                                                        <audio controls className="w-full rounded-full" src={q.videoUrl} preload="metadata" />
-                                                     </div>
-                                                 ) : (
-                                                     <div className="w-full max-w-3xl rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-black flex justify-center">
-                                                        <video controls className="w-full max-h-[450px]" src={q.videoUrl} preload="metadata" playsInline />
-                                                     </div>
-                                                 )}
-                                              </div>
+                                                         <label className="flex flex-col items-center justify-center w-full h-28 rounded-xl border-2 border-dashed border-indigo-300 hover:border-indigo-500 hover:bg-indigo-100 bg-white cursor-pointer transition-all">
+                                                            <div className="flex gap-3 mb-2">
+                                                               <Video className="w-6 h-6 text-indigo-400" />
+                                                               <FileAudio className="w-6 h-6 text-indigo-400" />
+                                                            </div>
+                                                            <span className="text-xs font-bold text-indigo-600 text-center px-1">Nhấp để tải lên Video / Audio</span>
+                                                            <input type="file" className="hidden" accept="video/*,audio/*" onChange={(e) => handleExtractedVideoChange(q.tempId, e)} />
+                                                         </label>
+                                                      </div>
+                                                  )}
+                                               </div>
                                             )}
                                         </div>
                                         
@@ -1230,16 +1365,19 @@ const CreateAssignment = () => {
                                         </div>
 
                                         {q.type === 'multiple_choice' && (
-                                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3 mt-4">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                               {q.options.map((opt, i) => {
                                                 const letter = String.fromCharCode(65 + i);
                                                 return (
-                                                <div key={i} className="flex items-center gap-2">
-                                                  <span className="font-black text-slate-500 w-6">{letter}.</span>
-                                                  <Input className="h-10 rounded-xl bg-white border-slate-200 shadow-sm text-sm" value={opt} onChange={(e) => handleExtractedOptionChange(q.tempId, i, e.target.value)} />
+                                                <div key={i} className="flex items-start gap-2">
+                                                  <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base mt-2">{letter}.</span>
+                                                  <div className="flex-1 flex items-center gap-2">
+                                                    <Input className={`h-11 rounded-xl bg-white text-sm sm:text-base border-sky-100`} value={q.options[i]} onChange={(e) => handleExtractedOptionChange(q.tempId, i, e.target.value)} placeholder={`Gõ đáp án ${letter}...`} />
+                                                    <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: q.tempId, targetOptionIndex: i, isExtracted: true })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
+                                                  </div>
                                                   {q.options.length > 2 && (
-                                                     <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveExtractedOption(q.tempId, i)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 rounded-lg"><Trash2 className="w-4 h-4"/></Button>
+                                                      <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveExtractedOption(q.tempId, i)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 mt-1.5"><Trash2 className="w-4 h-4"/></Button>
                                                   )}
                                                 </div>
                                               )})}
@@ -1286,39 +1424,58 @@ const CreateAssignment = () => {
                         </div>
 
                         <div className="flex flex-wrap items-center gap-3">
-                          <Select value={bankType || ""} onValueChange={(val) => {setBankType(val); if(val !== 'essay') setBankPoints("");}}>
-                             <SelectTrigger className="h-10 w-[140px] bg-white border-sky-200 font-bold text-sky-700"><span className="truncate">{bankType === 'all' ? 'Tất cả loại' : bankType === 'multiple_choice' ? 'Trắc nghiệm' : 'Tự luận'}</span></SelectTrigger>
-                             <SelectContent><SelectItem value="all">Tất cả loại</SelectItem><SelectItem value="multiple_choice">Trắc nghiệm</SelectItem><SelectItem value="essay">Tự luận</SelectItem></SelectContent>
+                          <Select value={bankType || "all"} onValueChange={(val) => {setBankType(val); if(val !== 'essay') setBankPoints("");}}>
+                             <SelectTrigger className="h-10 w-[140px] bg-white border-sky-200 font-bold text-sky-700 [&>span]:truncate">
+                               <SelectValue>{bankType === 'all' ? 'Tất cả loại' : bankType === 'multiple_choice' ? 'Trắc nghiệm' : 'Tự luận'}</SelectValue>
+                             </SelectTrigger>
+                             <SelectContent>
+                               <SelectItem value="all">Tất cả loại</SelectItem>
+                               <SelectItem value="multiple_choice">Trắc nghiệm</SelectItem>
+                               <SelectItem value="essay">Tự luận</SelectItem>
+                             </SelectContent>
                           </Select>
                           
-                          <Select value={bankSubject || "all"} onValueChange={(val) => setBankSubject(val === "all" ? "" : val)}>
-                            <SelectTrigger className="h-10 w-auto min-w-[140px] max-w-[200px] bg-white border-sky-200 font-bold text-sky-700">
-                              <span className="truncate">
-                                {bankSubject ? `Môn: ${bankSubject}` : "Tất cả môn của tôi"}
-                              </span>
+                          <Select value={bankSubject || "all"} onValueChange={(val) => setBankSubject(val)}>
+                            <SelectTrigger className="h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700 [&>span]:truncate">
+                              <SelectValue>{bankSubject === 'all' ? 'Tất cả môn' : `Môn: ${bankSubject}`}</SelectValue>
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="all">Tất cả môn của tôi</SelectItem>
+                              <SelectItem value="all">Tất cả môn</SelectItem>
                               {teacherSubjects.map((sub, idx) => (
                                 <SelectItem key={idx} value={sub}>Môn: {sub}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
 
-                          <Select value={bankGrade || ""} onValueChange={setBankGrade}>
-                            <SelectTrigger className="h-10 w-[110px] bg-white border-sky-200 font-bold text-sky-700"><span className="truncate">{bankGrade === 'all' ? 'Tất cả khối' : `Khối ${bankGrade}`}</span></SelectTrigger>
-                            <SelectContent><SelectItem value="all">Tất cả khối</SelectItem><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent>
-                          </Select>
-                          
-                          <Select value={bankSetName || ""} onValueChange={setBankSetName} disabled={!isSetSelectionEnabled}>
-                            <SelectTrigger className={`h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700 ${!isSetSelectionEnabled ? 'opacity-50' : ''}`}><span className="truncate">{!isSetSelectionEnabled ? "Chọn Khối" : bankSetName === 'all' ? 'Tất cả bộ đề' : bankSetName}</span></SelectTrigger>
+                          <Select value={bankFolder || "all"} onValueChange={(val) => { setBankFolder(val); setBankExam("all"); }}>
+                            <SelectTrigger className="h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700 [&>span]:truncate">
+                              <SelectValue>{bankFolder === 'all' ? 'Tất cả Thư mục' : bankFolder}</SelectValue>
+                            </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="all">Tất cả</SelectItem>
-                              {availableSets.map((setName, idx) => (<SelectItem key={idx} value={setName}>{setName}</SelectItem>))}
+                              <SelectItem value="all">Tất cả Thư mục</SelectItem>
+                              {availableFolders.map((f, idx) => (<SelectItem key={idx} value={f}>{f}</SelectItem>))}
                             </SelectContent>
                           </Select>
+
+                          <Select value={bankExam || "all"} onValueChange={setBankExam}>
+                            <SelectTrigger className="h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700 [&>span]:truncate">
+                              <SelectValue>{bankExam === 'all' ? 'Tất cả Đề thi' : bankExam}</SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Tất cả Đề thi</SelectItem>
+                              {availableExams.map((e, idx) => (<SelectItem key={idx} value={e}>{e}</SelectItem>))}
+                            </SelectContent>
+                          </Select>
+
                           {bankType === 'essay' && (<Input type="number" step="0.25" placeholder="Lọc điểm..." className="h-10 w-[110px] bg-white border-sky-200 text-sky-700 font-bold" value={bankPoints} onChange={(e) => setBankPoints(e.target.value)} />)}
                           <div className="relative flex-1 min-w-[200px]"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><Input placeholder="Tìm nội dung..." className="pl-9 h-10 bg-white border-sky-200" value={bankSearch} onChange={e => setBankSearch(e.target.value)} /></div>
+                          
+                          {filteredBankQuestions.length > 0 && (
+                             <Button type="button" variant={isAllFilteredSelected ? "secondary" : "outline"} onClick={handleSelectAllFiltered} className={`h-10 font-bold ${isAllFilteredSelected ? 'bg-sky-100 text-sky-700' : 'border-sky-300 text-sky-600'}`}>
+                               <ListChecks className="w-4 h-4 mr-2" />
+                               {isAllFilteredSelected ? "Bỏ chọn tất cả" : "Chọn tất cả đang lọc"}
+                             </Button>
+                          )}
                         </div>
                       </div>
                       
@@ -1338,8 +1495,10 @@ const CreateAssignment = () => {
                                           <div className="line-clamp-2 leading-relaxed q-content-view" dangerouslySetInnerHTML={{ __html: q.content }} />
                                         </div>
                                         <div className="flex flex-wrap gap-2 mt-1">
-                                          <Badge variant="outline" className="bg-sky-50 border-sky-200 text-sky-700 text-[10px] font-bold">{q.questionSet || "Ngân hàng chung"}</Badge>
+                                          <Badge variant="outline" className="bg-sky-50 border-sky-200 text-sky-700 text-[10px] font-bold truncate max-w-[120px]" title={q.folderName || "Thư mục chung"}>📁 {q.folderName || "Thư mục chung"}</Badge>
+                                          <Badge variant="outline" className="bg-indigo-50 border-indigo-200 text-indigo-700 text-[10px] font-bold truncate max-w-[120px]" title={q.examName || "Đề chung"}>📄 {q.examName || "Đề chung"}</Badge>
                                           <Badge variant="outline" className="bg-white border-slate-200 text-slate-500 text-[10px]">Khối {q.grade}</Badge>
+                                          <Badge variant="outline" className="bg-amber-50 border-amber-200 text-amber-600 text-[10px]">HK {q.semester || "1"}</Badge>
                                           <Badge variant="outline" className="bg-sky-50 border-sky-100 text-sky-600 text-[10px]">{q.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'}</Badge>
                                         </div>
                                       </div>
@@ -1360,7 +1519,7 @@ const CreateAssignment = () => {
                       {manualQuestions.map((q, index) => {
                         const isSlotEmpty = !q.content || q.content.replace(/<[^>]*>/g, '').trim() === "";
                         
-                        // Lấy URL thực tế để hiển thị preview (nếu vừa chọn file thì lấy previewUrl tạo từ object, nếu ko lấy url từ DB)
+                        // Lấy URL thực tế để hiển thị preview
                         const currentVideoUrl = q.videoPreviewUrl || q.videoUrl;
 
                         return (
@@ -1391,72 +1550,79 @@ const CreateAssignment = () => {
                               <div className={`flex-1 transition-all ${isSlotEmpty ? 'border-dashed border-2 border-slate-300 rounded-xl p-1 bg-white' : ''}`}>
                                 <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={q.content} onChange={(val) => handleManualChange(q.tempId, 'content', val)} />
                                 
-                                {/* 👉 VÙNG QUẢN LÝ VIDEO/AUDIO/LINK MỞ RỘNG */}
-                                <div className="mt-4 p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl">
-                                   <div className="flex justify-between items-center mb-3">
-                                     <h4 className="text-sm font-bold text-indigo-700 flex items-center"><Video className="w-4 h-4 mr-2" /> Đính kèm Video / Audio / Link</h4>
-                                   </div>
-                                   
-                                   {q.videoFile || (q.videoUrl && !q.videoUrl.includes("youtube") && !q.videoUrl.includes("drive.google.com")) ? (
-                                       <div className="relative w-full max-w-[450px] mx-auto rounded-xl overflow-hidden border border-indigo-200 shadow-sm bg-black group flex flex-col items-center justify-center p-4">
-                                           {isAudioFile(q.videoUrl) || (q.videoFile && q.videoFile.type.includes("audio")) ? (
-                                              <div className="bg-white p-4 w-full rounded-xl flex flex-col items-center">
-                                                <FileAudio className="w-12 h-12 text-indigo-400 mb-3" />
-                                                <audio controls className="w-full" src={currentVideoUrl} />
-                                              </div>
-                                           ) : (
-                                              <video className="w-full max-h-[300px] object-contain" controls src={currentVideoUrl} />
-                                           )}
-                                           <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                                              <Button type="button" onClick={() => handleRemoveManualVideo(q.tempId)} size="sm" className="bg-rose-500 hover:bg-rose-600 text-white rounded-full"><Trash2 className="w-4 h-4 mr-2"/> Xóa tệp</Button>
-                                           </div>
-                                       </div>
-                                   ) : (q.videoUrl && (q.videoUrl.includes("youtube") || q.videoUrl.includes("youtu.be") || q.videoUrl.includes("drive.google.com"))) ? (
-                                       <div className="relative w-full flex flex-col items-center group">
-                                           {(q.videoUrl.includes("youtube.com") || q.videoUrl.includes("youtu.be")) ? (
-                                                <div className="h-[200px] sm:h-[300px] w-full max-w-[400px] rounded-xl overflow-hidden border border-slate-200 shadow-sm">
-                                                    <iframe className="w-full h-full" src={getYoutubeEmbedUrl(q.videoUrl)} allow="autoplay; fullscreen" allowFullScreen></iframe>
-                                                </div>
-                                            ) : (
-                                                <div className="w-full flex flex-col items-center">
-                                                    <div className="h-[200px] sm:h-[300px] w-full max-w-[400px] rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-slate-100 flex items-center justify-center relative">
-                                                        <iframe 
-                                                           className="w-full h-full relative z-10" 
-                                                           src={getDriveEmbedUrl(q.videoUrl)} 
-                                                           allow="autoplay; fullscreen; encrypted-media" 
-                                                           allowFullScreen
-                                                           referrerPolicy="no-referrer"
-                                                           sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-                                                        ></iframe>
-                                                        <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center z-0">
-                                                            <Video className="w-8 h-8 text-slate-300 mb-2" />
-                                                            <p className="text-slate-500 font-medium text-xs">Video đang bị trình duyệt chặn...</p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
-                                           <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                                              <Button type="button" onClick={() => handleRemoveManualVideo(q.tempId)} size="sm" className="bg-rose-500 hover:bg-rose-600 text-white rounded-full shadow-md"><Trash2 className="w-4 h-4 mr-2"/> Xóa Link</Button>
-                                           </div>
-                                       </div>
-                                   ) : (
-                                       <div className="flex flex-col gap-3">
-                                          <Input placeholder="Dán link YouTube / Google Drive vào đây..." value={q.videoUrl || ""} onChange={(e) => handleManualChange(q.tempId, 'videoUrl', e.target.value)} className="bg-white border-indigo-200 focus-visible:ring-indigo-400 font-medium" />
-                                          <div className="flex items-center gap-4">
-                                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hoặc tải tệp lên</span>
-                                             <hr className="flex-1 border-slate-200" />
+                                {/* Nút bật/tắt Đính kèm */}
+                                {!openMediaPanels[q.tempId] && !q.videoFile && !q.videoUrl && (
+                                   <Button type="button" variant="ghost" size="sm" onClick={() => setOpenMediaPanels(prev => ({...prev, [q.tempId]: true}))} className="mt-2 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 font-bold self-start w-max">
+                                      <Video className="w-4 h-4 mr-2" /> Thêm Video / Audio / Link
+                                   </Button>
+                                )}
+
+                                {/* Vùng đính kèm mở rộng */}
+                                {(openMediaPanels[q.tempId] || q.videoFile || q.videoUrl) && (
+                                   <div className="mt-3 p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl relative">
+                                      <div className="flex justify-between items-center mb-3">
+                                         <h4 className="text-sm font-bold text-indigo-700 flex items-center"><Video className="w-4 h-4 mr-2" /> Đính kèm Video / Audio / Link</h4>
+                                         <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-rose-500 hover:bg-rose-100 rounded-full" title="Đóng và Xóa đính kèm" onClick={() => { setOpenMediaPanels(prev => ({...prev, [q.tempId]: false})); handleRemoveManualVideo(q.tempId); }}>
+                                            <X className="w-4 h-4" />
+                                         </Button>
+                                      </div>
+                                      
+                                      {/* 👉 HIỂN THỊ TRÌNH PHÁT VIDEO / AUDIO */}
+                                      {q.videoFile || (q.videoUrl && !q.videoUrl.includes("youtube") && !q.videoUrl.includes("drive.google.com")) ? (
+                                          <div className="relative w-full max-w-[450px] mx-auto rounded-xl overflow-hidden border border-indigo-200 shadow-sm bg-black group flex flex-col items-center justify-center p-4">
+                                              {isAudioFile(q.videoUrl) || (q.videoFile && q.videoFile.type.includes("audio")) ? (
+                                                 <div className="bg-white p-4 w-full rounded-xl flex flex-col items-center">
+                                                   <FileAudio className="w-12 h-12 text-indigo-400 mb-3" />
+                                                   <audio controls className="w-full" src={currentVideoUrl} />
+                                                 </div>
+                                              ) : (
+                                                 <video className="w-full max-h-[300px] object-contain" controls src={currentVideoUrl} />
+                                              )}
                                           </div>
-                                          <label className="flex flex-col items-center justify-center w-full h-28 rounded-xl border-2 border-dashed border-indigo-300 hover:border-indigo-500 hover:bg-indigo-100 bg-white cursor-pointer transition-all">
-                                             <div className="flex gap-3 mb-2">
-                                                <Video className="w-6 h-6 text-indigo-400" />
-                                                <FileAudio className="w-6 h-6 text-indigo-400" />
+                                      ) : (q.videoUrl && (q.videoUrl.includes("youtube") || q.videoUrl.includes("youtu.be") || q.videoUrl.includes("drive.google.com"))) ? (
+                                          <div className="relative w-full flex flex-col items-center group">
+                                              {(q.videoUrl.includes("youtube.com") || q.videoUrl.includes("youtu.be")) ? (
+                                                  <div className="h-[200px] sm:h-[300px] w-full max-w-[400px] rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                                                      <iframe className="w-full h-full" src={getYoutubeEmbedUrl(q.videoUrl)} allow="autoplay; fullscreen" allowFullScreen></iframe>
+                                                  </div>
+                                              ) : (
+                                                  <div className="w-full flex flex-col items-center">
+                                                      <div className="h-[200px] sm:h-[300px] w-full max-w-[400px] rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-slate-100 flex items-center justify-center relative">
+                                                          <iframe 
+                                                             className="w-full h-full relative z-10" 
+                                                             src={getDriveEmbedUrl(q.videoUrl)} 
+                                                             allow="autoplay; fullscreen; encrypted-media" 
+                                                             allowFullScreen
+                                                             referrerPolicy="no-referrer"
+                                                             sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                                                          ></iframe>
+                                                          <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center z-0">
+                                                             <Video className="w-8 h-8 text-slate-300 mb-2" />
+                                                             <p className="text-slate-500 font-medium text-xs">Video đang bị trình duyệt chặn...</p>
+                                                          </div>
+                                                      </div>
+                                                  </div>
+                                              )}
+                                          </div>
+                                      ) : (
+                                          <div className="flex flex-col gap-3">
+                                             <Input placeholder="Dán link YouTube / Google Drive vào đây..." value={q.videoUrl || ""} onChange={(e) => handleManualChange(q.tempId, 'videoUrl', e.target.value)} className="bg-white border-indigo-200 focus-visible:ring-indigo-400 font-medium" />
+                                             <div className="flex items-center gap-4">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hoặc tải tệp lên</span>
+                                                <hr className="flex-1 border-slate-200" />
                                              </div>
-                                             <span className="text-xs font-bold text-indigo-600 text-center px-1">Nhấp để tải lên Video / Audio</span>
-                                             <input type="file" className="hidden" accept="video/*,audio/*" onChange={(e) => handleManualVideoChange(q.tempId, e)} />
-                                          </label>
-                                       </div>
-                                   )}
-                                </div>
+                                             <label className="flex flex-col items-center justify-center w-full h-28 rounded-xl border-2 border-dashed border-indigo-300 hover:border-indigo-500 hover:bg-indigo-100 bg-white cursor-pointer transition-all">
+                                                <div className="flex gap-3 mb-2">
+                                                   <Video className="w-6 h-6 text-indigo-400" />
+                                                   <FileAudio className="w-6 h-6 text-indigo-400" />
+                                                </div>
+                                                <span className="text-xs font-bold text-indigo-600 text-center px-1">Nhấp để tải lên Video / Audio</span>
+                                                <input type="file" className="hidden" accept="video/*,audio/*" onChange={(e) => handleManualVideoChange(q.tempId, e)} />
+                                             </label>
+                                          </div>
+                                      )}
+                                   </div>
+                                )}
                               </div>
                               <div className="w-full md:w-36 shrink-0 h-[120px] sm:h-[120px]">
                                 {q.previewUrl ? (
@@ -1470,7 +1636,7 @@ const CreateAssignment = () => {
                             <div className="mt-4 p-4 bg-emerald-50/50 rounded-xl border border-emerald-100 shadow-sm">
                                <h4 className="text-sm font-bold text-emerald-700 mb-3 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Đáp án / Hướng dẫn giải </h4>
                                <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
-                                   <div className="flex-1"><RichTextEditor placeholder="Gõ lời giải hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={q.essayAnswerText} onChange={(val) => handleManualChange(q.tempId, 'essayAnswerText', val)} /></div>
+                                   <div className="flex-1"><RichTextEditor placeholder="Gõ lời giải..." value={q.essayAnswerText} onChange={(val) => handleManualChange(q.tempId, 'essayAnswerText', val)} /></div>
                                    <div className="w-full md:w-36 shrink-0 h-[100px] sm:h-[100px]">
                                      {q.essayAnswerPreviewUrl ? (
                                        <div className="relative w-full h-full rounded-xl border border-emerald-200 overflow-hidden shadow-sm group/img2"><img src={q.essayAnswerPreviewUrl} alt="Preview Answer" className="absolute inset-0 w-full h-full object-cover bg-white" /><div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img2:opacity-100 transition-opacity flex items-center justify-center"><button type="button" onClick={() => handleRemoveManualEssayImage(q.tempId)} className="bg-rose-500 text-white rounded-full p-2 hover:scale-110 transition-transform"><Trash2 className="w-4 h-4"/></button></div></div>
@@ -1481,17 +1647,20 @@ const CreateAssignment = () => {
                                </div>
                             </div>
 
-                            {q.type === "multiple_choice" && (
-                              <div className="bg-sky-50/50 p-3 sm:p-4 rounded-xl border border-sky-100 space-y-3 mt-4">
+                            {q.type === 'multiple_choice' && (
+                              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3 mt-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                   {q.options.map((optLabel, optIdx) => {
                                     const letter = String.fromCharCode(65 + optIdx);
                                     return (
-                                    <div key={optIdx} className="flex items-center gap-2">
-                                      <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base">{letter}.</span>
-                                      <Input className={`h-11 rounded-xl bg-white text-sm sm:text-base ${isSlotEmpty ? 'border-dashed border-slate-300' : 'border-sky-100'}`} value={q.options[optIdx]} onChange={(e) => handleManualOptionChange(q.tempId, optIdx, e.target.value)} />
+                                    <div key={optIdx} className="flex items-start gap-2">
+                                      <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base mt-2">{letter}.</span>
+                                      <div className="flex-1 flex items-center gap-2">
+                                        <Input className={`h-11 rounded-xl bg-white text-sm sm:text-base ${isSlotEmpty ? 'border-dashed border-slate-300' : 'border-sky-100'}`} value={q.options[optIdx]} onChange={(e) => handleManualOptionChange(q.tempId, optIdx, e.target.value)} placeholder={`Gõ đáp án ${letter}...`} />
+                                        <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: q.tempId, targetOptionIndex: optIdx, isExtracted: false })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
+                                      </div>
                                       {q.options.length > 2 && (
-                                          <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveManualOption(q.tempId, optIdx)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0"><Trash2 className="w-4 h-4"/></Button>
+                                          <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveManualOption(q.tempId, optIdx)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 mt-1.5"><Trash2 className="w-4 h-4"/></Button>
                                       )}
                                     </div>
                                   )})}
@@ -1530,7 +1699,7 @@ const CreateAssignment = () => {
                 <div className="pt-6 sm:pt-8 border-t border-slate-200">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Button type="button" onClick={() => handleSubmit('draft')} disabled={loading} variant="outline" className="w-full h-14 sm:h-16 rounded-xl sm:rounded-2xl border-2 border-slate-300 text-slate-600 hover:bg-slate-50 hover:text-slate-800 font-black text-lg shadow-sm transition-all active:scale-95 disabled:opacity-50">{loading ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <Save className="mr-2 h-5 w-5" />}Lưu Nháp (Chưa giao)</Button>
-                    <Button type="button" onClick={() => handleSubmit('published')} disabled={loading || !isPointsValid} className="w-full h-14 sm:h-16 rounded-xl sm:rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-lg shadow-xl shadow-sky-200 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">{loading ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <CheckCircle className="mr-2 h-5 w-5" />}Phát hành Bài tập</Button>
+                    <Button type="button" onClick={() => handleSubmit('published')} disabled={loading || !isPointsValid} className="w-full h-14 sm:h-16 rounded-xl sm:rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-lg shadow-xl shadow-sky-200 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">{loading ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <CheckCircle className="mr-2 h-5 w-5" />}Phát hành {currentAssignmentType === "exam" ? "Đề Kiểm Tra" : "Bài Tập"}</Button>
                   </div>
                 </div>
               )}
@@ -1619,6 +1788,51 @@ const CreateAssignment = () => {
             )}
           </DialogContent>
         </Dialog>
+
+        {/* ========================================================= */}
+        {/* MODAL GÕ TOÁN / KÝ TỰ CHO ĐÁP ÁN (A,B,C,D) */}
+        {/* ========================================================= */}
+        <Dialog open={mathModal.isOpen} onOpenChange={(open) => {
+            if (!open) {
+                if(mathFieldRef.current) mathFieldRef.current.value = '';
+                setMathModal({ isOpen: false, targetTempId: null, targetOptionIndex: null, isExtracted: false });
+            }
+        }}>
+          <DialogContent className="sm:max-w-[700px] w-[95%] rounded-3xl p-6 bg-white border-none shadow-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-black text-sky-900 flex items-center gap-2">
+                <Calculator className="w-6 h-6 text-sky-500" /> Bàn phím Ảo (Ký tự & Toán học)
+              </DialogTitle>
+              <p className="text-sm text-slate-500 font-medium pt-1">
+                Bấm vào <strong>Biểu tượng Bàn Phím</strong> ở góc phải ô đứt nét bên dưới để chọn Phân số, Căn bậc, Ký tự đặc biệt...
+              </p>
+            </DialogHeader>
+            
+            <div className="my-6 p-4 bg-sky-50/50 rounded-2xl border-2 border-sky-200 shadow-inner">
+              <math-field 
+                 ref={mathFieldRef}
+                 style={{ 
+                     fontSize: '28px', 
+                     width: '100%', 
+                     padding: '16px', 
+                     backgroundColor: 'white', 
+                     borderRadius: '12px', 
+                     border: '1px solid #bae6fd',
+                     boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)'
+                 }}
+              >
+              </math-field>
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+              <Button variant="ghost" onClick={() => setMathModal({ isOpen: false, targetTempId: null, targetOptionIndex: null, isExtracted: false })} className="rounded-xl h-11 font-bold text-slate-500 hover:text-slate-700">Hủy bỏ</Button>
+              <Button onClick={confirmMathInsertion} className="bg-sky-500 hover:bg-sky-600 text-white rounded-xl h-11 px-8 font-black shadow-md transition-all active:scale-95">
+                 <CheckCircle2 className="w-5 h-5 mr-2" /> Chèn vào Đáp án
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
       </div>
     </div>
   );

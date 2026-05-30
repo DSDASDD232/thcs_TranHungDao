@@ -8,10 +8,9 @@ import { saveAs } from 'file-saver';
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 // Import các Icon
@@ -19,82 +18,34 @@ import {
   BookOpen, FileQuestion, LogOut, CheckSquare, School,
   Loader2, PlusCircle, Trash2, Pencil, Image as ImageIcon, X,
   UserCircle, Users, CheckCircle2, ArrowUpDown, Menu, Trophy, History, Database, Search, Filter,
-  CalendarClock, Calendar, Lock, AlertCircle
+  CalendarClock, Calendar, Lock, AlertCircle, FileCheck, Clock, Eye, Download, Sparkles, Medal, BarChart
 } from "lucide-react";
 
-// Import các Tab (Lưu ý: Bỏ QuestionsTab vì đã inline trực tiếp)
-import { MyClassesTab, LeaderboardTab, AssignmentsTab } from "./TeacherTabs";
+import 'katex/dist/katex.min.css';
 
 // ==========================================
-// COMPONENT CHỌN NGÀY TÙY CHỈNH (CÓ CHẶN QUÁ KHỨ)
+// CÁC HÀM HỖ TRỢ CHUNG
 // ==========================================
-const CustomDateInput = ({ label, value, onChange, min }) => {
-  const [textVal, setTextVal] = useState("");
+const getRankMedal = (index) => {
+  if (index === 0) return <Medal className="w-8 h-8 text-amber-400 drop-shadow-md" fill="currentColor" />;
+  if (index === 1) return <Medal className="w-8 h-8 text-slate-300 drop-shadow-md" fill="currentColor" />;
+  if (index === 2) return <Medal className="w-8 h-8 text-orange-400 drop-shadow-md" fill="currentColor" />;
+  return <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold">{index + 1}</div>;
+};
 
-  useEffect(() => {
-    if (value) {
-      const [y, m, d] = value.split("-");
-      setTextVal(`${d}/${m}/${y}`);
-    } else {
-      setTextVal("");
-    }
-  }, [value]);
+const formatDateTime = (dateString) => {
+  if (!dateString) return { time: "--", date: "--" };
+  const d = new Date(dateString);
+  const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return { time, date };
+};
 
-  const handleTextChange = (e) => {
-    let val = e.target.value.replace(/[^0-9/]/g, ""); 
-    setTextVal(val);
-    
-    if (val.length === 10) {
-      const [d, m, y] = val.split("/");
-      if (d && m && y?.length === 4) {
-        const typedDate = `${y}-${m}-${d}`;
-        if (min && typedDate < min) {
-          alert(`Không thể chọn ngày trong quá khứ!\nNgày hợp lệ nhỏ nhất là: ${min.split('-').reverse().join('/')}`);
-          const [minY, minM, minD] = min.split("-");
-          setTextVal(`${minD}/${minM}/${minY}`);
-          onChange(min);
-        } else {
-          onChange(typedDate); 
-        }
-      }
-    } else if (val === "") {
-      onChange("");
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-2 bg-white px-3 h-11 sm:h-12 rounded-xl border border-slate-200 shadow-sm w-full">
-      {label && <span className="text-xs font-bold text-slate-500 uppercase shrink-0">{label}</span>}
-      <Input 
-        type="text" 
-        placeholder="dd/mm/yyyy" 
-        value={textVal} 
-        onChange={handleTextChange} 
-        maxLength={10}
-        className="h-full border-0 p-0 text-sm font-bold flex-1 bg-transparent text-slate-700 focus:ring-0 placeholder:font-normal placeholder:text-slate-400" 
-      />
-      <div className="relative w-6 h-6 flex items-center justify-center cursor-pointer hover:bg-slate-100 rounded-md transition-colors shrink-0">
-         <Calendar className="w-4 h-4 text-sky-600 pointer-events-none absolute" />
-         <input 
-           type="date" 
-           value={value} 
-           min={min}
-           onChange={(e) => {
-             if (e.target.value) {
-               if (min && e.target.value < min) {
-                 alert(`Không thể chọn ngày trong quá khứ!\nNgày hợp lệ nhỏ nhất là: ${min.split('-').reverse().join('/')}`);
-                 onChange(min);
-               } else {
-                 onChange(e.target.value);
-               }
-             }
-           }} 
-           className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" 
-           title="Mở lịch"
-         />
-      </div>
-    </div>
-  );
+const getPrimarySubject = (profile) => {
+  if (!profile) return "";
+  if (Array.isArray(profile.subjects) && profile.subjects.length > 0) return profile.subjects[0];
+  if (profile.subject) return profile.subject;
+  return "";
 };
 
 const exportFormalExcel = async (dataList, reportTitle, fileName, teacherName) => {
@@ -172,37 +123,511 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, teacherName) =
   saveAs(blob, `${fileName}.xlsx`);
 };
 
-const getPrimarySubject = (profile) => {
-  if (!profile) return "";
-  if (Array.isArray(profile.subjects) && profile.subjects.length > 0) return profile.subjects[0];
-  if (profile.subject) return profile.subject;
-  return "";
+const CustomDateInput = ({ label, value, onChange, min }) => {
+  const [textVal, setTextVal] = useState("");
+
+  useEffect(() => {
+    if (value) {
+      const [y, m, d] = value.split("-");
+      setTextVal(`${d}/${m}/${y}`);
+    } else {
+      setTextVal("");
+    }
+  }, [value]);
+
+  const handleTextChange = (e) => {
+    let val = e.target.value.replace(/[^0-9/]/g, ""); 
+    setTextVal(val);
+    
+    if (val.length === 10) {
+      const [d, m, y] = val.split("/");
+      if (d && m && y?.length === 4) {
+        const typedDate = `${y}-${m}-${d}`;
+        if (min && typedDate < min) {
+          alert(`Không thể chọn ngày trong quá khứ!\nNgày hợp lệ nhỏ nhất là: ${min.split('-').reverse().join('/')}`);
+          const [minY, minM, minD] = min.split("-");
+          setTextVal(`${minD}/${minM}/${minY}`);
+          onChange(min);
+        } else {
+          onChange(typedDate); 
+        }
+      }
+    } else if (val === "") {
+      onChange("");
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 bg-white px-3 h-11 sm:h-12 rounded-xl border border-slate-200 shadow-sm w-full">
+      {label && <span className="text-xs font-bold text-slate-500 uppercase shrink-0">{label}</span>}
+      <Input 
+        type="text" 
+        placeholder="dd/mm/yyyy" 
+        value={textVal} 
+        onChange={handleTextChange} 
+        maxLength={10}
+        className="h-full border-0 p-0 text-sm font-bold flex-1 bg-transparent text-slate-700 focus:ring-0 placeholder:font-normal placeholder:text-slate-400" 
+      />
+      <div className="relative w-6 h-6 flex items-center justify-center cursor-pointer hover:bg-slate-100 rounded-md transition-colors shrink-0">
+         <Calendar className="w-4 h-4 text-sky-600 pointer-events-none absolute" />
+         <input 
+           type="date" 
+           value={value} 
+           min={min}
+           onChange={(e) => {
+             if (e.target.value) {
+               if (min && e.target.value < min) {
+                 alert(`Không thể chọn ngày trong quá khứ!\nNgày hợp lệ nhỏ nhất là: ${min.split('-').reverse().join('/')}`);
+                 onChange(min);
+               } else {
+                 onChange(e.target.value);
+               }
+             }
+           }} 
+           className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" 
+           title="Mở lịch"
+         />
+      </div>
+    </div>
+  );
 };
 
-const formatDisplayDate = (ymdString) => {
-  if (!ymdString) return "";
-  const [year, month, day] = ymdString.split("-");
-  return `${day}/${month}/${year}`;
+// ==========================================
+// 1. TAB QUẢN LÝ LỚP
+// ==========================================
+const MyClassesTab = ({ isLoadingData, filteredClasses, allClasses, classStatsMap, isFetchingStats, searchClassQuery, setSearchClassQuery, handleViewStudentList, handleExportClassReport }) => (
+  <div className="space-y-6">
+    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-sky-100">
+      <div>
+        <h2 className="text-xl sm:text-2xl font-bold text-sky-950 flex items-center gap-2">
+          <School className="w-6 h-6 text-sky-500" /> Tiến độ & Thi đua
+        </h2>
+        <p className="text-slate-500 text-xs sm:text-sm mt-1">Báo cáo tổng quan các lớp thầy/cô được phân công phụ trách.</p>
+      </div>
+      <div className="flex gap-3 w-full sm:w-auto flex-col sm:flex-row">
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Input 
+            placeholder="Tìm tên lớp (VD: 6A)..." 
+            className="pl-9 h-11 rounded-xl bg-slate-50 border-sky-100 focus-visible:ring-sky-500 font-medium" 
+            value={searchClassQuery} 
+            onChange={(e) => setSearchClassQuery(e.target.value)} 
+          />
+        </div>
+      </div>
+    </div>
+
+    {isLoadingData ? (
+      <div className="text-center py-20 bg-white rounded-3xl border border-sky-100">
+        <Loader2 className="w-10 h-10 animate-spin mx-auto text-sky-500"/>
+        <p className="mt-4 text-slate-500 font-medium">Đang tải dữ liệu lớp học...</p>
+      </div>
+    ) : !filteredClasses || filteredClasses.length === 0 ? (
+      <div className="bg-white border border-dashed border-sky-200 rounded-3xl p-10 sm:p-16 text-center">
+        <School className="w-16 h-16 text-sky-200 mx-auto mb-4" />
+        <h3 className="text-xl font-bold text-slate-600 mb-2">Chưa có lớp nào</h3>
+        <p className="text-slate-400">Thầy/cô hiện chưa được admin phân công phụ trách lớp nào, hoặc không tìm thấy lớp phù hợp.</p>
+      </div>
+    ) : (
+      <Card className="border-sky-100/50 shadow-sm rounded-3xl overflow-hidden bg-white">
+        <div className="overflow-x-auto">
+          <Table className="min-w-[800px]">
+            <TableHeader className="bg-sky-50/80">
+              <TableRow>
+                <TableHead className="w-16 text-center font-bold text-sky-800 h-12">STT</TableHead>
+                <TableHead className="font-bold text-sky-800">Tên Lớp</TableHead>
+                <TableHead className="text-center font-bold text-sky-800">Khối</TableHead>
+                <TableHead className="text-center font-bold text-sky-800">Sĩ số</TableHead>
+                <TableHead className="text-center font-bold text-sky-800">Lượt làm bài</TableHead>
+                <TableHead className="text-center font-bold text-sky-800">Điểm TB Lớp</TableHead>
+                <TableHead className="text-right pr-6 font-bold text-sky-800">Thao tác</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredClasses.map((cls, idx) => {
+                const classId = cls._id || cls;
+                const classObj = allClasses.find(c => c._id === classId) || cls;
+                const stats = classStatsMap[classId] || { totalSubmissions: 0, averageScore: 0 };
+                
+                return (
+                  <TableRow key={classId} className="hover:bg-sky-50/50 transition-colors border-sky-50 group">
+                    <TableCell className="text-center font-bold text-slate-400">{idx + 1}</TableCell>
+                    <TableCell className="font-black text-sky-900 text-lg">{classObj.name || cls.name}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge className="bg-sky-100 text-sky-700 shadow-none font-bold border-0 hover:bg-sky-200">Khối {classObj.grade || cls.grade}</Badge>
+                    </TableCell>
+                    <TableCell className="text-center font-bold text-slate-700">
+                      <div className="flex items-center justify-center"><Users className="w-4 h-4 mr-1.5 text-slate-400" />{classObj.studentCount || 0} em</div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {isFetchingStats ? (<Loader2 className="w-4 h-4 animate-spin mx-auto text-teal-500" />) : (<Badge className="bg-teal-50 text-teal-700 border-0 shadow-none hover:bg-teal-100 px-3"><CheckSquare className="w-3.5 h-3.5 mr-1.5" />{stats.totalSubmissions} lượt</Badge>)}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {isFetchingStats ? (<Loader2 className="w-4 h-4 animate-spin mx-auto text-blue-500" />) : (<Badge className="bg-blue-50 text-blue-700 border-0 shadow-none hover:bg-blue-100 px-3 text-sm">{stats.averageScore}</Badge>)}
+                    </TableCell>
+                    <TableCell className="text-right pr-6 py-4">
+                      <div className="flex justify-end gap-2">
+                        <Button onClick={() => handleViewStudentList(classId, classObj.name || cls.name)} variant="outline" size="sm" className="text-sky-600 border-sky-200 hover:bg-sky-50 hover:text-sky-700 font-bold shadow-sm"><Eye className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Xem DS</span></Button>
+                        <Button onClick={() => handleExportClassReport(classId, classObj.name || cls.name)} size="sm" className="bg-sky-500 hover:bg-sky-600 text-white font-bold shadow-sm"><Download className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Báo cáo</span></Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      </Card>
+    )}
+  </div>
+);
+
+// ==========================================
+// 2. TAB BẢNG THI ĐUA (ĐÃ FIX LỖI ĐÈ CHỮ HOÀN TOÀN)
+// ==========================================
+const LeaderboardTab = ({ 
+  leaderboardTimeFilter, setLeaderboardTimeFilter, 
+  leaderboardSubjectFilter, setLeaderboardSubjectFilter,
+  leaderboardTypeFilter, setLeaderboardTypeFilter, 
+  selectedLeaderboardClass, setSelectedLeaderboardClass, 
+  teacherProfile, allClasses, isLoadingLeaderboard, leaderboardData,
+  handleExportLeaderboardExcel, handleViewStudentDetails
+}) => {
+
+  const teacherSubjects = Array.isArray(teacherProfile?.subjects) && teacherProfile.subjects.length > 0 
+    ? teacherProfile.subjects 
+    : teacherProfile?.subject ? [teacherProfile.subject] : [];
+
+  return (
+  <div className="space-y-6">
+    <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-sky-100">
+      <div>
+        <h2 className="text-xl sm:text-2xl font-bold text-sky-950 flex items-center gap-2">
+          <Trophy className="w-6 h-6 text-amber-500" /> Bảng Xếp Hạng Lớp
+        </h2>
+      </div>
+      <div className="flex flex-wrap gap-2 w-full xl:w-auto overflow-x-auto pb-2 sm:pb-0">
+        
+        {/* 👉 FIX: BỘ LỌC LOẠI BÀI */}
+        <Select value={leaderboardTypeFilter} onValueChange={setLeaderboardTypeFilter}>
+          <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-amber-50 min-w-[200px] border-none font-bold text-amber-800 shadow-sm">
+            <span className="truncate">
+              {leaderboardTypeFilter === 'all' ? 'Tất cả bài làm' : leaderboardTypeFilter === 'homework' ? 'Bài Tập Về Nhà' : 'Đề Kiểm Tra'}
+            </span>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tất cả bài làm</SelectItem>
+            <SelectItem value="homework">Bài Tập Về Nhà</SelectItem>
+            <SelectItem value="exam">Đề Kiểm Tra</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* 👉 FIX: BỘ LỌC MÔN */}
+        <Select value={leaderboardSubjectFilter} onValueChange={setLeaderboardSubjectFilter}>
+          <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[160px] border-none font-bold text-sky-800 shadow-sm">
+            <span className="truncate">
+              {leaderboardSubjectFilter === 'all' ? 'Tất cả môn của tôi' : `Môn: ${leaderboardSubjectFilter}`}
+            </span>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tất cả môn của tôi</SelectItem>
+            {teacherSubjects.map(sub => (
+              <SelectItem key={sub} value={sub} className="font-bold">Môn: {sub}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* 👉 FIX: BỘ LỌC THỜI GIAN */}
+        <Select value={leaderboardTimeFilter} onValueChange={setLeaderboardTimeFilter}>
+          <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[160px] border-none font-bold text-sky-800 shadow-sm">
+            <div className="flex items-center gap-2 truncate">
+              <Calendar className="w-4 h-4 shrink-0" />
+              <span className="truncate">
+                {leaderboardTimeFilter === 'week' ? 'Tuần này' : leaderboardTimeFilter === 'month' ? 'Tháng này' : leaderboardTimeFilter === 'year' ? 'Năm nay' : 'Tất cả thời gian'}
+              </span>
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tất cả thời gian</SelectItem>
+            <SelectItem value="week">Tuần này</SelectItem>
+            <SelectItem value="month">Tháng này</SelectItem>
+            <SelectItem value="year">Năm nay</SelectItem>
+          </SelectContent>
+        </Select>
+        
+        {/* 👉 FIX: BỘ LỌC LỚP */}
+        <Select value={selectedLeaderboardClass || ""} onValueChange={setSelectedLeaderboardClass}>
+          <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 border-none font-bold text-sky-800 shadow-sm min-w-[140px]">
+            <span className="truncate">
+              {selectedLeaderboardClass ? (() => { 
+                const matched = allClasses.find(c => String(c._id) === String(selectedLeaderboardClass)); 
+                return matched ? `Lớp ${matched.name}` : "Đang tải..."; 
+              })() : "-- Chọn lớp --"}
+            </span>
+          </SelectTrigger>
+          <SelectContent>
+            {!teacherProfile?.assignedClasses || teacherProfile.assignedClasses.length === 0 ? (
+              <SelectItem value="none" disabled>Bạn chưa quản lý lớp</SelectItem>
+            ) : (
+              teacherProfile.assignedClasses.map(c => { 
+                const classId = String(c._id || c); 
+                const matchedClass = allClasses.find(cls => String(cls._id) === classId); 
+                return <SelectItem key={classId} value={classId} className="font-bold">Lớp {matchedClass ? matchedClass.name : "Đang tải..."}</SelectItem> 
+              })
+            )}
+          </SelectContent>
+        </Select>
+        
+        <Button onClick={handleExportLeaderboardExcel} className="h-10 sm:h-12 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl shadow-sm shrink-0">
+          <Download className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Xuất Excel</span>
+        </Button>
+      </div>
+    </div>
+
+    {isLoadingLeaderboard ? (
+      <div className="text-center py-20 bg-white rounded-3xl border border-sky-100"><Loader2 className="w-12 h-12 animate-spin mx-auto text-sky-500 mb-4"/></div>
+    ) : !selectedLeaderboardClass ? (
+      <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-sky-200"><Trophy className="w-16 h-16 text-slate-200 mx-auto mb-4" /><p className="text-slate-500 font-medium">Chọn một lớp để xem xếp hạng.</p></div>
+    ) : leaderboardData.length === 0 ? (
+      <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-sky-200"><BarChart className="w-16 h-16 text-slate-200 mx-auto mb-4" /><p className="text-slate-500 font-medium">Chưa có học sinh nào làm bài hoặc chưa khớp bộ lọc.</p></div>
+    ) : (
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-1 space-y-4">
+          <h3 className="font-black text-sky-900 text-lg uppercase flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-amber-500"/> Bảng Vàng
+          </h3>
+          {leaderboardData.slice(0, 3).map((student, idx) => (
+            <Card key={student._id} onClick={() => handleViewStudentDetails(student)} className={`border-none shadow-md rounded-2xl cursor-pointer transition-transform hover:scale-[1.02] ${idx === 0 ? 'bg-gradient-to-br from-amber-100 to-amber-50' : idx === 1 ? 'bg-gradient-to-br from-slate-200 to-slate-100' : 'bg-gradient-to-br from-orange-200 to-orange-100'}`}>
+              <CardContent className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm">{getRankMedal(idx)}</div>
+                    <div><p className="font-black text-slate-800 text-lg line-clamp-1">{student.fullName}</p><p className="text-xs font-bold text-slate-500">{student.totalTests} bài</p></div>
+                  </div>
+                  <div className="text-right shrink-0 ml-2"><p className="font-black text-2xl">{student.averageScore}</p><p className="text-[10px] font-black uppercase opacity-60">Điểm TB</p></div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-sky-100 overflow-hidden">
+          <div className="bg-sky-50/50 p-4 border-b border-sky-100">
+            <h3 className="font-black text-sky-900">Danh sách toàn lớp</h3>
+          </div>
+          <div className="max-h-[500px] overflow-x-auto p-2">
+            <Table className="min-w-[400px]">
+              <TableHeader><TableRow><TableHead className="w-16 text-center">Hạng</TableHead><TableHead>Họ và Tên</TableHead><TableHead className="text-center">Đã làm</TableHead><TableHead className="text-right pr-6">Điểm TB</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {leaderboardData.map((student, idx) => (
+                  <TableRow key={student._id} onClick={() => handleViewStudentDetails(student)} className="cursor-pointer hover:bg-sky-50/50 transition-colors group">
+                    <TableCell className="text-center font-bold text-slate-400 group-hover:text-sky-600">{idx + 1}</TableCell>
+                    <TableCell className="font-bold text-slate-700 group-hover:text-sky-700">{student.fullName}</TableCell>
+                    <TableCell className="text-center font-medium">
+                      <Badge className="bg-sky-100 text-sky-700 border-0 shadow-none hover:bg-sky-200">{student.totalTests}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right pr-6 font-black text-sky-600">{student.averageScore}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+)};
+
+// ==========================================
+// 3. TAB BÀI TẬP ĐÃ GIAO (ĐÃ CĂN CHỈNH LẠI CHUẨN UX/UI)
+// ==========================================
+const AssignmentsTab = ({ isLoadingData, assignments, handleDeleteAssignment, openDeadlineModal, openPasswordModal }) => {
+  const navigate = useNavigate();
+
+  // Hàm format thời gian hiển thị gọn gàng
+  const formatDateTime = (dateString) => {
+    if (!dateString) return { time: "--", date: "--" };
+    const d = new Date(dateString);
+    const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    return { time, date };
+  };
+
+  return (
+    <Card className="border-sky-100/50 shadow-sm rounded-3xl overflow-hidden bg-white animate-in fade-in duration-300">
+      <div className="overflow-x-auto">
+        <Table className="min-w-[1100px] border-collapse">
+          <TableHeader className="bg-sky-50/80">
+            <TableRow>
+              <TableHead className="w-[50px] text-center font-bold text-sky-800 h-12">STT</TableHead>
+              <TableHead className="w-[280px] font-bold text-sky-800 pl-4">Tên bài / Phân loại</TableHead>
+              <TableHead className="w-[80px] text-center font-bold text-sky-800">Lớp</TableHead>
+              <TableHead className="w-[80px] text-center font-bold text-sky-800">Số câu</TableHead>
+              <TableHead className="w-[120px] text-center font-bold text-sky-800">Thời gian</TableHead>
+              <TableHead className="w-[120px] text-center font-bold text-sky-800">Hạn nộp</TableHead>
+              <TableHead className="w-[100px] text-center font-bold text-sky-800">Đã nộp</TableHead>
+              <TableHead className="w-[100px] text-center font-bold text-sky-800">Chờ chấm</TableHead>
+              <TableHead className="w-[140px] text-center font-bold text-sky-800">Thao tác</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoadingData ? (
+              <TableRow>
+                <TableCell colSpan={9} className="text-center py-20">
+                  <Loader2 className="w-10 h-10 animate-spin text-sky-500 mx-auto" />
+                </TableCell>
+              </TableRow>
+            ) : assignments.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={9} className="text-center py-20 text-slate-500">
+                  <FileQuestion className="w-16 h-16 text-slate-200 mx-auto mb-3" />
+                  <p className="font-bold text-lg text-slate-600">Chưa có bài tập nào.</p>
+                  <p className="text-sm mt-1">Hãy bấm "Giao bài mới" để bắt đầu.</p>
+                </TableCell>
+              </TableRow>
+            ) : (
+              assignments.map((assignment, index) => {
+                const isExam = assignment.assignmentType === "exam";
+                const isDraft = assignment.status === "draft";
+                const due = formatDateTime(assignment.dueDate);
+                const submittedCount = assignment.submittedCount || 0;
+                const pendingCount = assignment.pendingCount || 0;
+                const totalStudents = assignment.totalStudents || 0;
+                
+                return (
+                  <TableRow 
+                    key={assignment._id} 
+                    className={`transition-colors hover:bg-slate-50/50 ${isExam ? 'bg-indigo-50/20' : ''}`}
+                  >
+                    {/* STT */}
+                    <TableCell className="text-center font-bold text-slate-400 align-middle">
+                      {index + 1}
+                    </TableCell>
+                    
+                    {/* THÔNG TIN BÀI TẬP (BỎ ICON) */}
+                    <TableCell className="align-middle pl-4 py-3">
+                      <div className="flex flex-col gap-1.5">
+                        <p className={`font-black text-base line-clamp-2 ${isExam ? 'text-indigo-900' : 'text-sky-900'}`}>
+                          {assignment.title}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                          <Badge variant="outline" className={`border-0 font-bold text-[10px] ${isExam ? 'bg-indigo-100 text-indigo-700' : 'bg-sky-100 text-sky-700'}`}>
+                            {isExam ? "ĐỀ THI" : "BÀI TẬP"}
+                          </Badge>
+                          {isDraft && <Badge variant="outline" className="bg-amber-100 text-amber-700 border-0 font-bold text-[10px]">BẢN NHÁP</Badge>}
+                          <Badge variant="outline" className="bg-slate-100 text-slate-600 border-0 text-[10px]">{assignment.subject}</Badge>
+                        </div>
+                      </div>
+                    </TableCell>
+
+                    {/* LỚP */}
+                    <TableCell className="text-center align-middle">
+                      <Badge variant="outline" className="bg-white border-slate-200 text-slate-700 font-bold text-sm shadow-sm px-3">
+                        {assignment.targetClass}
+                      </Badge>
+                    </TableCell>
+
+                    {/* SỐ CÂU */}
+                    <TableCell className="text-center align-middle">
+                      <span className="font-bold text-slate-600 text-base">
+                        {assignment.questions?.length || 0}
+                      </span>
+                    </TableCell>
+
+                    {/* THỜI GIAN LÀM BÀI */}
+                    <TableCell className="text-center align-middle">
+                      <span className="font-bold text-slate-700">
+                        {assignment.duration ? `${assignment.duration} phút` : "Không giới hạn"}
+                      </span>
+                    </TableCell>
+
+                    {/* HẠN NỘP */}
+                    <TableCell className="text-center align-middle">
+                      <div className="flex flex-col items-center justify-center">
+                        <span className="font-bold text-rose-600 text-base">{due.time}</span>
+                        <span className="text-[11px] font-medium text-slate-500">{due.date}</span>
+                      </div>
+                    </TableCell>
+
+                    {/* ĐÃ NỘP (Dạng X/Y) */}
+                    <TableCell className="text-center align-middle">
+                      {isDraft ? (
+                        <span className="text-slate-400">-</span>
+                      ) : (
+                        <span className="font-black text-emerald-600 text-base">
+                          {submittedCount}<span className="text-sm font-medium text-slate-400">/{totalStudents}</span>
+                        </span>
+                      )}
+                    </TableCell>
+
+                    {/* CHỜ CHẤM */}
+                    <TableCell className="text-center align-middle">
+                      {isDraft ? (
+                        <span className="text-slate-400">-</span>
+                      ) : pendingCount > 0 ? (
+                        <span className="font-black text-amber-500 text-base">{pendingCount}</span>
+                      ) : (
+                        <span className="font-medium text-slate-300">0</span>
+                      )}
+                    </TableCell>
+
+                    {/* THAO TÁC (ĐÃ BỎ NÚT SỬA) */}
+                    <TableCell className="text-center align-middle">
+                      <div className="flex justify-center gap-1">
+                        <Button 
+                          onClick={() => navigate(`/teacher/assignment/${assignment._id}/grades`)} 
+                          variant="ghost" size="icon" title="Xem chi tiết & Chấm bài" 
+                          className="h-8 w-8 text-emerald-600 hover:bg-emerald-100 rounded-lg"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          onClick={() => openDeadlineModal(assignment)} 
+                          variant="ghost" size="icon" title="Gia hạn nộp bài" 
+                          className="h-8 w-8 text-amber-500 hover:bg-amber-100 rounded-lg"
+                        >
+                          <CalendarClock className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          onClick={() => openPasswordModal(assignment)} 
+                          variant="ghost" size="icon" title="Cài đặt mật khẩu" 
+                          className={`h-8 w-8 rounded-lg ${assignment.password ? 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100' : 'text-slate-400 hover:bg-slate-100'}`}
+                        >
+                          <Lock className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          onClick={() => handleDeleteAssignment(assignment._id, assignment.title)} 
+                          variant="ghost" size="icon" title="Xóa bài" 
+                          className="h-8 w-8 text-rose-400 hover:bg-rose-100 hover:text-rose-600 rounded-lg"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </Card>
+  );
 };
 
+// ==========================================
+// COMPONENT CHÍNH
+// ==========================================
 const TeacherDashboard = () => {
   const navigate = useNavigate();
-  const editFileInputRef = useRef(null);
   const fullName = localStorage.getItem("fullName") || "Giáo viên";
-  const serverUrl = axios.defaults.baseURL.replace('/api', '');
 
   const [activeTab, setActiveTab] = useState("my-classes"); 
-  const [loading, setLoading] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
-  const [questions, setQuestions] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [teacherProfile, setTeacherProfile] = useState(null);
   const [allClasses, setAllClasses] = useState([]);
 
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  
   const [isStudentListOpen, setIsStudentListOpen] = useState(false);
   const [classStudents, setClassStudents] = useState([]);
   const [selectedClassName, setSelectedClassName] = useState("");
@@ -218,22 +643,11 @@ const TeacherDashboard = () => {
   const [selectedLeaderboardClass, setSelectedLeaderboardClass] = useState("");
   const [leaderboardTimeFilter, setLeaderboardTimeFilter] = useState("all");
   const [leaderboardSubjectFilter, setLeaderboardSubjectFilter] = useState("all"); 
+  const [leaderboardTypeFilter, setLeaderboardTypeFilter] = useState("all"); 
 
   const [searchClassQuery, setSearchClassQuery] = useState("");
   const [classStatsMap, setClassStatsMap] = useState({});
   const [isFetchingStats, setIsFetchingStats] = useState(false);
-
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterGrade, setFilterGrade] = useState("all");
-  const [filterSubject, setFilterSubject] = useState("all");
-  const [filterType, setFilterType] = useState("all");
-  const [filterPoints, setFilterPoints] = useState("");
-
-  const initialQuestionState = { content: "", subject: "", type: "multiple_choice", difficulty: "medium", grade: "6", optA: "", optB: "", optC: "", optD: "", correctAnswer: "A" };
-  const [editingQuestionId, setEditingQuestionId] = useState(null);
-  const [editQuestionData, setEditQuestionData] = useState(initialQuestionState);
 
   const [isDeadlineModalOpen, setIsDeadlineModalOpen] = useState(false);
   const [selectedAssignmentForDeadline, setSelectedAssignmentForDeadline] = useState(null);
@@ -246,19 +660,9 @@ const TeacherDashboard = () => {
   const [newPassword, setNewPassword] = useState("");
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
-  const getHeader = (isMultipart = false) => {
+  const getHeader = () => {
     const token = localStorage.getItem("token");
-    const headers = { Authorization: `Bearer ${token}` };
-    if (isMultipart) headers["Content-Type"] = "multipart/form-data";
-    return { headers };
-  };
-
-  const getImageUrl = (url) => {
-      if (!url) return "";
-      if (url.startsWith("http") || url.startsWith("blob:")) return url;
-      let cleanUrl = url.replace(/\\/g, '/'); 
-      if (!cleanUrl.startsWith("/")) cleanUrl = "/" + cleanUrl;
-      return `${serverUrl}${cleanUrl}`;
+    return { headers: { Authorization: `Bearer ${token}` } };
   };
 
   const fetchData = async () => {
@@ -267,22 +671,19 @@ const TeacherDashboard = () => {
       const config = getHeader();
       if (!config.headers.Authorization.split(" ")[1]) return navigate("/login");
       
-      const [profRes, classRes, questionsRes, assignmentsRes] = await Promise.all([
+      const [profRes, classRes, assignmentsRes] = await Promise.all([
         axios.get("/teacher/me", config),
         axios.get("/classes/all", config),
-        axios.get("/questions/all", config),
         axios.get("/assignments/my-assignments", config)
       ]);
       
       const tProfile = profRes.data;
       setTeacherProfile(tProfile);
       setAllClasses(classRes.data.classes || []);
-      setQuestions(questionsRes.data?.questions || []);
       setAssignments(assignmentsRes.data?.assignments || []);
 
       const primarySubject = getPrimarySubject(tProfile);
-      setFilterSubject(primarySubject || "all"); 
-      setLeaderboardSubjectFilter("all"); 
+      setLeaderboardSubjectFilter(primarySubject || "all"); 
 
     } catch (error) { console.error("Lỗi tải dữ liệu:", error); } finally { setIsLoadingData(false); }
   };
@@ -316,13 +717,13 @@ const TeacherDashboard = () => {
   }, [activeTab, teacherProfile]);
 
   useEffect(() => {
-    const fetchLeaderboard = async (classId, timeFilter, subjectFilter) => {
+    const fetchLeaderboard = async (classId, timeFilter, subjectFilter, typeFilter) => {
       if (!classId) return;
       setIsLoadingLeaderboard(true);
       try {
         const [studentsRes, leaderboardRes] = await Promise.all([
           axios.get(`/classes/${classId}/students`, getHeader()),
-          axios.get(`/submissions/class/${classId}/leaderboard?timeframe=${timeFilter}&subject=${subjectFilter}`, getHeader()).catch(() => ({ data: { leaderboard: [] } }))
+          axios.get(`/submissions/class/${classId}/leaderboard?timeframe=${timeFilter}&subject=${subjectFilter}&type=${typeFilter}`, getHeader()).catch(() => ({ data: { leaderboard: [] } }))
         ]);
 
         const baseStudents = studentsRes.data.students || [];
@@ -344,86 +745,16 @@ const TeacherDashboard = () => {
     };
 
     if (activeTab === "leaderboard" && selectedLeaderboardClass) {
-        fetchLeaderboard(selectedLeaderboardClass, leaderboardTimeFilter, leaderboardSubjectFilter);
+        fetchLeaderboard(selectedLeaderboardClass, leaderboardTimeFilter, leaderboardSubjectFilter, leaderboardTypeFilter);
     }
-  }, [activeTab, selectedLeaderboardClass, leaderboardTimeFilter, leaderboardSubjectFilter]);
+  }, [activeTab, selectedLeaderboardClass, leaderboardTimeFilter, leaderboardSubjectFilter, leaderboardTypeFilter]);
 
   const handleLogout = () => { localStorage.clear(); navigate("/login"); };
   const handleMenuClick = (tab) => { setActiveTab(tab); setIsMobileMenuOpen(false); };
 
-  const handleFileChange = (e) => { const file = e.target.files[0]; if (file) { setSelectedFile(file); setPreviewUrl(URL.createObjectURL(file)); } };
-  const handleRemoveImage = () => { setSelectedFile(null); setPreviewUrl(""); };
-
-  const filteredQuestions = questions.filter(q => {
-    const matchesSearch = (q.content || "").toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesGrade = filterGrade === "all" || String(q.grade) === filterGrade;
-    const matchesSubject = !filterSubject || filterSubject === "all" || q.subject === filterSubject;
-    const matchesType = filterType === "all" || q.type === filterType;
-    return matchesSearch && matchesGrade && matchesSubject && matchesType;
-  });
-
-  const handleEditClick = (q) => {
-    setEditingQuestionId(q._id);
-    let parsedOptions = ["", "", "", ""];
-    if (q.options && q.options.length > 0) {
-      if (typeof q.options[0] === 'string' && q.options[0].startsWith('[')) {
-        try { parsedOptions = JSON.parse(q.options[0]); } catch (e) { parsedOptions = [q.options[0], "", "", ""]; }
-      } else if (typeof q.options === 'string') {
-        try { parsedOptions = JSON.parse(q.options); } catch (e) { parsedOptions = [q.options, "", "", ""]; }
-      } else { parsedOptions = q.options; }
-    }
-    
-    let correctKey = "A";
-    if (q.type === 'multiple_choice' && parsedOptions.length > 0) {
-      if (["A", "B", "C", "D"].includes(q.correctAnswer)) correctKey = q.correctAnswer;
-      else {
-          if (q.correctAnswer === parsedOptions[0]) correctKey = "A";
-          else if (q.correctAnswer === parsedOptions[1]) correctKey = "B";
-          else if (q.correctAnswer === parsedOptions[2]) correctKey = "C";
-          else if (q.correctAnswer === parsedOptions[3]) correctKey = "D";
-      }
-    }
-
-    setEditQuestionData({
-      content: q.content, 
-      subject: q.subject || getPrimarySubject(teacherProfile) || "Chung", 
-      difficulty: q.difficulty, grade: q.grade || "6", type: q.type || "multiple_choice",
-      optA: parsedOptions[0] || "", optB: parsedOptions[1] || "", optC: parsedOptions[2] || "", optD: parsedOptions[3] || "", correctAnswer: correctKey
-    });
-    setPreviewUrl(getImageUrl(q.imageUrl)); setIsEditDialogOpen(true);
-  };
-
-  const handleUpdateQuestion = async (e) => {
-    e.preventDefault();
-    const formData = new FormData();
-    formData.append("content", editQuestionData.content); 
-    formData.append("subject", editQuestionData.subject); 
-    formData.append("difficulty", editQuestionData.difficulty); formData.append("grade", editQuestionData.grade); formData.append("type", editQuestionData.type);
-    
-    if (editQuestionData.type === "multiple_choice") {
-      formData.append("correctAnswer", editQuestionData.correctAnswer);
-      formData.append("options", JSON.stringify([editQuestionData.optA, editQuestionData.optB, editQuestionData.optC, editQuestionData.optD]));
-    } else { formData.append("correctAnswer", ""); formData.append("options", "[]"); }
-
-    if (selectedFile) formData.append("image", selectedFile);
-    else if (!previewUrl) formData.append("imageUrl", ""); 
-
-    setLoading(true);
-    try {
-      await axios.put(`/questions/update/${editingQuestionId}`, formData, getHeader(true));
-      alert("✅ Cập nhật thành công!");
-      setIsEditDialogOpen(false); setPreviewUrl(""); setSelectedFile(null); fetchData();
-    } catch (err) { alert("Lỗi cập nhật!"); } finally { setLoading(false); }
-  };
-
   const handleDeleteAssignment = async (id, title) => {
     if (!window.confirm(`Xóa bài "${title}"?`)) return;
     try { await axios.delete(`/assignments/${id}`, getHeader()); fetchData(); } catch (err) { alert("Lỗi!"); }
-  };
-
-  const handleDeleteQuestion = async (id) => {
-    if (!window.confirm("Xóa câu hỏi này?")) return;
-    try { await axios.delete(`/questions/delete/${id}`, getHeader()); fetchData(); } catch (err) { alert("Lỗi xóa!"); }
   };
 
   const handleViewStudentList = async (classId, className) => {
@@ -533,11 +864,6 @@ const TeacherDashboard = () => {
     }
   };
 
-  const handleEditAssignmentClick = (id) => {
-    if(!window.confirm("Bạn có muốn mở bản nháp này để tiếp tục chỉnh sửa không?")) return;
-    navigate(`/teacher/edit-assignment/${id}`);
-  };
-
   const filteredClasses = (teacherProfile?.assignedClasses || []).filter(c => {
     const classObj = allClasses.find(ac => ac._id === c._id || ac._id === c) || c;
     return (classObj.name || "").toLowerCase().includes(searchClassQuery.toLowerCase());
@@ -548,10 +874,6 @@ const TeacherDashboard = () => {
     const deptStr = teacherProfile.department === "KHTN" ? "Tổ KHTN" : teacherProfile.department === "KHXH" ? "Tổ KHXH" : "Chưa phân tổ";
     return deptStr;
   };
-
-  const teacherSubjects = Array.isArray(teacherProfile?.subjects) && teacherProfile.subjects.length > 0 
-    ? teacherProfile.subjects 
-    : teacherProfile?.subject ? [teacherProfile.subject] : [];
 
   return (
     <div className="min-h-screen bg-sky-50/40 flex font-sans text-slate-800 relative">
@@ -572,7 +894,7 @@ const TeacherDashboard = () => {
           <Button onClick={() => handleMenuClick("my-classes")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'my-classes' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'hover:bg-sky-50 hover:text-sky-600 text-slate-500'}`}><School className="mr-3 h-5 w-5" /> Quản lý Lớp</Button>
           <Button onClick={() => {handleMenuClick("leaderboard"); if(!selectedLeaderboardClass && teacherProfile?.assignedClasses?.length > 0) setSelectedLeaderboardClass(String(teacherProfile.assignedClasses[0]._id || teacherProfile.assignedClasses[0]));}} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'leaderboard' ? 'bg-amber-500 text-white shadow-md shadow-amber-200' : 'hover:bg-amber-50 hover:text-amber-600 text-slate-500'}`}><Trophy className="mr-3 h-5 w-5" /> Bảng thi đua</Button>
           <Button onClick={() => handleMenuClick("assignments")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'assignments' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'hover:bg-sky-50 hover:text-sky-600 text-slate-500'}`}><CheckSquare className="mr-3 h-5 w-5" /> Bài tập đã giao</Button>
-          <Button onClick={() => handleMenuClick("questions")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'questions' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'hover:bg-sky-50 hover:text-sky-600 text-slate-500'}`}><Database className="mr-3 h-5 w-5" /> Kho câu hỏi</Button>
+          <Button onClick={() => navigate("/teacher/question-bank")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all hover:bg-sky-50 hover:text-sky-600 text-slate-500`}><Database className="mr-3 h-5 w-5" /> Kho câu hỏi</Button>
         </nav>
         <div className="p-5 border-t border-sky-50">
           <Button onClick={handleLogout} variant="ghost" className="w-full text-rose-500 hover:bg-rose-50 hover:text-rose-600 font-bold h-11 rounded-xl">
@@ -600,104 +922,14 @@ const TeacherDashboard = () => {
           </div>
           <div className="flex gap-3 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
             {activeTab === "assignments" && (
-              <Button onClick={() => navigate("/teacher/create-assignment")} className="bg-sky-500 hover:bg-sky-600 whitespace-nowrap text-white h-11 px-6 rounded-xl shadow-md flex items-center font-bold">
+              <Button onClick={() => setIsCreateModalOpen(true)} className="bg-sky-500 hover:bg-sky-600 whitespace-nowrap text-white h-11 px-6 rounded-xl shadow-md flex items-center font-bold">
                 <PlusCircle className="mr-2 h-5 w-5" /> Giao bài mới
-              </Button>
-            )}
-
-            {activeTab === "questions" && (
-              <Button onClick={() => navigate("/teacher/question-bank")} className="bg-sky-500 hover:bg-sky-600 whitespace-nowrap text-white h-11 px-6 rounded-xl shadow-md flex items-center font-bold">
-                <Database className="mr-2 h-5 w-5" /> Quản lý Thư mục
               </Button>
             )}
           </div>
         </header>
 
-        <Dialog open={isEditDialogOpen} onOpenChange={(val) => { setIsEditDialogOpen(val); if(!val) {setPreviewUrl(""); setSelectedFile(null);}}}>
-          <DialogContent className="sm:max-w-[700px] w-[95%] max-h-[90vh] overflow-y-auto rounded-3xl border-none shadow-2xl p-4 sm:p-8">
-            <DialogHeader>
-              <DialogTitle className="text-xl sm:text-2xl font-black text-sky-950 flex items-center gap-2 border-b border-sky-100 pb-3">
-                <Pencil className="h-5 sm:h-6 w-5 sm:w-6 text-sky-500"/> Chỉnh sửa câu hỏi
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleUpdateQuestion} className="space-y-5 pt-2">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Select value={editQuestionData.type} onValueChange={(v) => setEditQuestionData({...editQuestionData, type: v})}>
-                  <SelectTrigger className="h-12 rounded-xl bg-slate-50 border-sky-100 font-bold">
-                    <span className="truncate">{editQuestionData.type === "multiple_choice" ? "Trắc nghiệm" : "Tự luận"}</span>
-                  </SelectTrigger>
-                  <SelectContent><SelectItem value="multiple_choice">Trắc nghiệm</SelectItem><SelectItem value="essay">Tự luận</SelectItem></SelectContent>
-                </Select>
-                
-                <Select value={editQuestionData.grade} onValueChange={(v) => setEditQuestionData({...editQuestionData, grade: v})}>
-                  <SelectTrigger className="h-12 rounded-xl bg-slate-50 border-sky-100 font-bold">
-                    <span className="truncate">{editQuestionData.grade ? `Khối ${editQuestionData.grade}` : "Chọn khối"}</span>
-                  </SelectTrigger>
-                  <SelectContent><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent>
-                </Select>
-                
-                <div className="relative">
-                  <Input 
-                     value={`Môn: ${editQuestionData.subject || "Chưa phân tổ"}`} 
-                     readOnly 
-                     className="h-12 rounded-xl bg-slate-100 border-slate-200 font-bold text-sky-700 cursor-not-allowed" 
-                  />
-                </div>
-
-                <Select value={editQuestionData.difficulty} onValueChange={(v) => setEditQuestionData({...editQuestionData, difficulty: v})}>
-                  <SelectTrigger className="h-12 rounded-xl bg-slate-50 border-sky-100 font-bold">
-                    <span className="truncate">{editQuestionData.difficulty === 'easy' ? 'Dễ' : editQuestionData.difficulty === 'hard' ? 'Khó' : 'Trung bình'}</span>
-                  </SelectTrigger>
-                  <SelectContent><SelectItem value="easy">Dễ</SelectItem><SelectItem value="medium">Trung bình</SelectItem><SelectItem value="hard">Khó</SelectItem></SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1 relative">
-                  <Textarea placeholder="Nhập nội dung câu hỏi..." className="w-full h-full rounded-xl min-h-[140px] border-sky-100 font-medium bg-slate-50 text-base" value={editQuestionData.content} onChange={(e) => setEditQuestionData({...editQuestionData, content: e.target.value})} required />
-                </div>
-                <div className="w-full md:w-40 shrink-0 h-[140px]">
-                  {previewUrl ? (
-                    <div className="relative w-full h-full rounded-xl border border-sky-200 overflow-hidden shadow-sm group">
-                      <img src={previewUrl} alt="Preview" className="absolute inset-0 w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><button type="button" onClick={handleRemoveImage} className="bg-rose-500 text-white rounded-full p-2 hover:scale-110 transition-transform"><Trash2 className="w-4 h-4"/></button></div>
-                    </div>
-                  ) : (
-                    <label className="flex flex-col items-center justify-center w-full h-full rounded-xl border-2 border-dashed border-sky-200 hover:border-sky-400 bg-sky-50 cursor-pointer transition-all">
-                      <ImageIcon className="w-8 h-8 text-sky-400 mb-2" />
-                      <span className="text-sm font-bold text-sky-600 text-center px-1">Thay ảnh mới</span>
-                      <input type="file" ref={editFileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
-                    </label>
-                  )}
-                </div>
-              </div>
-              {editQuestionData.type === "multiple_choice" && (
-                <div className="bg-sky-50/50 p-4 sm:p-5 rounded-2xl border border-sky-100 space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {['A', 'B', 'C', 'D'].map((k) => (
-                      <div key={k} className="flex items-center gap-2">
-                        <span className="font-bold text-sky-800 w-5">{k}.</span>
-                        <Input placeholder={`Nhập đáp án ${k}`} className="h-12 rounded-xl bg-white border-sky-100 font-medium" value={editQuestionData[`opt${k}`]} onChange={(e) => setEditQuestionData({...editQuestionData, [`opt${k}`]: e.target.value})} required />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-sky-100">
-                    <label className="text-sm font-bold text-rose-600 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Chọn đáp án ĐÚNG:</label>
-                    <Select value={editQuestionData.correctAnswer} onValueChange={(v) => setEditQuestionData({...editQuestionData, correctAnswer: v})}>
-                      <SelectTrigger className="h-11 w-full sm:w-32 bg-white text-rose-600 font-bold border-rose-200 rounded-xl shadow-sm">
-                        <span className="truncate">{editQuestionData.correctAnswer ? `Câu ${editQuestionData.correctAnswer}` : "Chọn"}</span>
-                      </SelectTrigger>
-                      <SelectContent><SelectItem value="A">Câu A</SelectItem><SelectItem value="B">Câu B</SelectItem><SelectItem value="C">Câu C</SelectItem><SelectItem value="D">Câu D</SelectItem></SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
-              <Button type="submit" disabled={loading} className="w-full h-12 sm:h-14 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-lg shadow-xl mt-2">
-                Cập nhật thay đổi
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-
+        {/* MODAL DANH SÁCH LỚP */}
         <Dialog open={isStudentListOpen} onOpenChange={setIsStudentListOpen}>
           <DialogContent className="sm:max-w-[700px] w-[95%] rounded-3xl border-none p-4 sm:p-6">
             <DialogHeader>
@@ -710,10 +942,14 @@ const TeacherDashboard = () => {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input placeholder="Tìm theo tên học sinh..." className="pl-10 h-11 rounded-xl bg-slate-50 border-sky-100" value={studentSearchQuery} onChange={(e) => setStudentSearchQuery(e.target.value)} />
               </div>
+              
+              {/* LỌC SẮP XẾP */}
               <Select value={studentSortOption} onValueChange={setStudentSortOption}>
                 <SelectTrigger className="h-11 rounded-xl bg-sky-50 border-sky-100 font-bold text-sky-800 sm:w-[180px]">
-                  <ArrowUpDown className="w-4 h-4 mr-2" />
-                  <span className="truncate">{studentSortOption === "name" ? "Tên A-Z" : studentSortOption === "most_submissions" ? "Nộp nhiều nhất" : "Nộp gần nhất"}</span>
+                  <span className="flex items-center truncate">
+                    <ArrowUpDown className="w-4 h-4 mr-2 shrink-0" />
+                    {studentSortOption === "name" ? "Tên A-Z" : studentSortOption === "most_submissions" ? "Nộp nhiều nhất" : "Nộp gần nhất"}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="name">Tên A-Z</SelectItem><SelectItem value="most_submissions">Nộp nhiều nhất</SelectItem><SelectItem value="latest_submission">Nộp gần nhất</SelectItem>
@@ -898,6 +1134,36 @@ const TeacherDashboard = () => {
           </DialogContent>
         </Dialog>
 
+        {/* 👉 MODAL CHỌN LOẠI BÀI */}
+        <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+            <DialogContent className="sm:max-w-[450px] w-[95%] rounded-3xl border-none p-6 shadow-2xl">
+                <DialogHeader>
+                    <DialogTitle className="text-xl font-black text-slate-800 text-center mb-4">
+                        Bạn muốn tạo loại bài nào?
+                    </DialogTitle>
+                </DialogHeader>
+                <div className="grid grid-cols-2 gap-4">
+                    <Button 
+                        onClick={() => { setIsCreateModalOpen(false); navigate("/teacher/create-assignment?type=homework"); }}
+                        className="h-32 flex flex-col items-center justify-center bg-sky-50 hover:bg-sky-100 text-sky-700 hover:text-sky-800 border-2 border-sky-200 hover:border-sky-400 transition-all rounded-2xl shadow-sm"
+                    >
+                        <BookOpen className="w-10 h-10 mb-2" />
+                        <span className="font-bold text-base">Bài tập về nhà</span>
+                    </Button>
+                    <Button 
+                        onClick={() => { setIsCreateModalOpen(false); navigate("/teacher/create-assignment?type=exam"); }}
+                        className="h-32 flex flex-col items-center justify-center bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-800 border-2 border-indigo-200 hover:border-indigo-400 transition-all rounded-2xl shadow-sm"
+                    >
+                        <FileCheck className="w-10 h-10 mb-2" />
+                        <span className="font-bold text-base">Đề kiểm tra/Thi</span>
+                    </Button>
+                </div>
+                <p className="text-xs text-center text-slate-500 mt-4 font-medium">
+                    *Bạn có thể cài đặt thời gian làm bài ở bước tiếp theo.
+                </p>
+            </DialogContent>
+        </Dialog>
+
         {activeTab === "my-classes" && (
           <MyClassesTab 
             isLoadingData={isLoadingData} filteredClasses={filteredClasses} allClasses={allClasses} classStatsMap={classStatsMap} 
@@ -910,6 +1176,7 @@ const TeacherDashboard = () => {
           <LeaderboardTab 
             leaderboardTimeFilter={leaderboardTimeFilter} setLeaderboardTimeFilter={setLeaderboardTimeFilter} 
             leaderboardSubjectFilter={leaderboardSubjectFilter} setLeaderboardSubjectFilter={setLeaderboardSubjectFilter} 
+            leaderboardTypeFilter={leaderboardTypeFilter} setLeaderboardTypeFilter={setLeaderboardTypeFilter} 
             selectedLeaderboardClass={selectedLeaderboardClass} setSelectedLeaderboardClass={setSelectedLeaderboardClass} 
             teacherProfile={teacherProfile} allClasses={allClasses} isLoadingLeaderboard={isLoadingLeaderboard} leaderboardData={leaderboardData} 
             handleExportLeaderboardExcel={handleExportLeaderboardExcel} 
@@ -922,123 +1189,9 @@ const TeacherDashboard = () => {
             isLoadingData={isLoadingData} 
             assignments={assignments} 
             handleDeleteAssignment={handleDeleteAssignment} 
-            handleEditAssignment={handleEditAssignmentClick}
             openDeadlineModal={openDeadlineModal}
             openPasswordModal={handleOpenPasswordModal} 
           />
-        )}
-
-        {/* 👉 ĐÃ INLINE VÀ FIX TRIỆT ĐỂ LỖI CĂN CHỈNH BỘ LỌC KHO CÂU HỎI THEO ẢNH CỦA BẠN */}
-        {activeTab === "questions" && (
-          <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden mb-10">
-            <div className="p-4 sm:p-6 border-b border-slate-100 shrink-0">
-               <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center">
-                  
-                  {/* Ô TÌM KIẾM NỘI DUNG */}
-                  <div className="relative flex-1 w-full">
-                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                     <Input
-                       placeholder="Tìm nội dung câu hỏi..."
-                       className="pl-9 h-11 w-full bg-slate-50 border-sky-100 focus-visible:ring-sky-500 rounded-xl font-medium"
-                       value={searchQuery}
-                       onChange={(e) => setSearchQuery(e.target.value)}
-                     />
-                  </div>
-
-                  {/* THANH BỘ LỌC CHỐNG TRÀN HÀNG */}
-                  <div className="flex items-center gap-2 sm:gap-3 w-full lg:w-auto overflow-x-auto pb-2 sm:pb-0 no-scrollbar">
-                     <div className="flex items-center gap-1.5 shrink-0">
-                        <Filter className="w-5 h-5 text-sky-500" />
-                        <span className="text-sm font-bold text-slate-600 hidden sm:inline">Lọc:</span>
-                     </div>
-
-                     <Select value={filterSubject} onValueChange={setFilterSubject}>
-                       <SelectTrigger className="h-11 w-[130px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl shrink-0">
-                         <span className="truncate">{filterSubject === 'all' ? 'Tất cả môn' : filterSubject}</span>
-                       </SelectTrigger>
-                       <SelectContent>
-                         <SelectItem value="all">Tất cả môn</SelectItem>
-                         {teacherSubjects.map(sub => (
-                            <SelectItem key={sub} value={sub}>{sub}</SelectItem>
-                         ))}
-                       </SelectContent>
-                     </Select>
-
-                     <Select value={filterGrade} onValueChange={setFilterGrade}>
-                       <SelectTrigger className="h-11 w-[120px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl shrink-0">
-                         <span className="truncate">{filterGrade === 'all' ? 'Tất cả khối' : `Khối ${filterGrade}`}</span>
-                       </SelectTrigger>
-                       <SelectContent>
-                         <SelectItem value="all">Tất cả khối</SelectItem>
-                         <SelectItem value="6">Khối 6</SelectItem>
-                         <SelectItem value="7">Khối 7</SelectItem>
-                         <SelectItem value="8">Khối 8</SelectItem>
-                         <SelectItem value="9">Khối 9</SelectItem>
-                       </SelectContent>
-                     </Select>
-
-                     <Select value={filterType} onValueChange={setFilterType}>
-                       <SelectTrigger className="h-11 w-[140px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl shrink-0">
-                         <span className="truncate">{filterType === 'all' ? 'Tất cả loại' : filterType === 'multiple_choice' ? 'Trắc nghiệm' : 'Tự luận'}</span>
-                       </SelectTrigger>
-                       <SelectContent>
-                         <SelectItem value="all">Tất cả loại</SelectItem>
-                         <SelectItem value="multiple_choice">Trắc nghiệm</SelectItem>
-                         <SelectItem value="essay">Tự luận</SelectItem>
-                       </SelectContent>
-                     </Select>
-                  </div>
-               </div>
-            </div>
-
-            {/* BẢNG HIỂN THỊ CÂU HỎI */}
-            <div className="p-4 sm:p-6 overflow-x-auto">
-              <Table className="min-w-[700px] border border-slate-100 rounded-2xl overflow-hidden">
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="w-16 text-center font-bold text-slate-700">STT</TableHead>
-                    <TableHead className="font-bold text-slate-700">Nội dung</TableHead>
-                    <TableHead className="w-32 text-center font-bold text-slate-700">Khối</TableHead>
-                    <TableHead className="w-32 text-center font-bold text-slate-700">Môn</TableHead>
-                    <TableHead className="w-32 text-center font-bold text-slate-700">Độ khó</TableHead>
-                    <TableHead className="w-32 text-right pr-4 font-bold text-slate-700">Thao tác</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoadingData ? (
-                    <TableRow><TableCell colSpan={6} className="text-center py-10"><Loader2 className="w-8 h-8 animate-spin mx-auto text-sky-500"/></TableCell></TableRow>
-                  ) : filteredQuestions.length === 0 ? (
-                    <TableRow><TableCell colSpan={6} className="text-center py-10 text-slate-400 italic">Không tìm thấy câu hỏi nào phù hợp.</TableCell></TableRow>
-                  ) : (
-                    filteredQuestions.map((q, idx) => (
-                      <TableRow key={q._id} className="hover:bg-slate-50/50 transition-colors border-b border-slate-100 last:border-0">
-                        <TableCell className="text-center font-medium text-slate-500">{idx + 1}</TableCell>
-                        <TableCell className="font-medium text-slate-700 py-4">
-                          <div className="flex items-center gap-2">
-                            {q.imageUrl && <ImageIcon className="w-4 h-4 text-sky-500 shrink-0" />}
-                            <div className="line-clamp-2 q-content-view break-all" dangerouslySetInnerHTML={{ __html: q.content }} />
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center"><Badge variant="outline" className="bg-white border-slate-200 text-slate-500">Khối {q.grade}</Badge></TableCell>
-                        <TableCell className="text-center"><span className="text-sm font-semibold text-slate-600">{q.subject}</span></TableCell>
-                        <TableCell className="text-center">
-                          <Badge className={`${q.difficulty === 'easy' ? 'bg-emerald-50 text-emerald-700' : q.difficulty === 'hard' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'} shadow-none border-0 font-bold`}>
-                            {q.difficulty === 'easy' ? 'Dễ' : q.difficulty === 'hard' ? 'Khó' : 'TB'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right pr-4">
-                          <div className="flex justify-end gap-1">
-                            <Button onClick={() => handleEditClick(q)} variant="ghost" size="icon" className="h-8 w-8 text-sky-500 rounded-lg"><Pencil className="w-4 h-4" /></Button>
-                            <Button onClick={() => handleDeleteQuestion(q._id)} variant="ghost" size="icon" className="h-8 w-8 text-rose-400 hover:bg-rose-50 hover:text-rose-500 rounded-lg"><Trash2 className="w-4 h-4" /></Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </Card>
         )}
 
       </main>

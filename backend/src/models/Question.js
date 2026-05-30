@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const questionSchema = new mongoose.Schema(
     {
-        // Nội dung câu hỏi (Đã bỏ required: true để cho phép câu hỏi chỉ có ảnh/video)
+        // Nội dung câu hỏi
         content: {
             type: String,
             default: "", // Nếu không gõ chữ, mặc định sẽ lưu chuỗi rỗng
@@ -58,6 +58,12 @@ const questionSchema = new mongoose.Schema(
             enum: ["6", "7", "8", "9"]
         },
 
+        // Học kỳ
+        semester: {
+            type: String,
+            default: "1"
+        },
+
         // Độ khó
         difficulty: {
             type: String,
@@ -71,11 +77,21 @@ const questionSchema = new mongoose.Schema(
             default: "" 
         },
 
-        // Phân loại bộ đề trong kho
-        questionSet: { 
+        // ==========================================
+        // CẤU TRÚC LƯU TRỮ TRONG KHO (MỚI)
+        // ==========================================
+        // Tên Thư mục chứa câu hỏi này
+        folderName: { 
             type: String, 
-            default: "Ngân hàng chung" 
+            default: "" 
         },
+        
+        // Tên Đề thi chứa câu hỏi này (nằm trong thư mục trên)
+        examName: { 
+            type: String, 
+            default: "" 
+        },
+        // ==========================================
         
         // Người tạo (Giáo viên)
         teacher: {

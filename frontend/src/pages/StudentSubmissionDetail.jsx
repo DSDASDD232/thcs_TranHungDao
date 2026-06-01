@@ -6,8 +6,40 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { 
     ArrowLeft, Loader2, CheckCircle2, MessageSquareText, 
-    AlertCircle, Clock, BookOpen, PenTool, XCircle
+    AlertCircle, Clock, BookOpen, PenTool, XCircle, Video, FileAudio
 } from "lucide-react"; 
+
+// 👉 IMPORT THÊM KATEX ĐỂ RENDER CÔNG THỨC TOÁN
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
+
+// ==========================================
+// HÀM DỊCH MÃ LATEX THÀNH CÔNG THỨC TOÁN HỌC (ĐÃ ÉP KÍCH THƯỚC TO)
+// ==========================================
+const renderLatexContent = (htmlString) => {
+  if (!htmlString) return "";
+  
+  // Xử lý công thức Toán block $$...$$
+  let parsedHtml = htmlString.replace(/\$\$([\s\S]*?)\$\$/g, (match, math) => {
+    try {
+      // Dùng \displaystyle để ép phân số to ra, kết hợp displayMode: false để giữ nó trên cùng 1 dòng
+      return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false });
+    } catch (e) {
+      return match;
+    }
+  });
+
+  // Xử lý công thức Toán inline $...$ (nếu có)
+  parsedHtml = parsedHtml.replace(/\$([^\$]+)\$/g, (match, math) => {
+    try {
+      return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false });
+    } catch (e) {
+      return match;
+    }
+  });
+  
+  return parsedHtml;
+};
 
 const StudentSubmissionDetail = () => {
   const { id } = useParams();
@@ -34,6 +66,35 @@ const StudentSubmissionDetail = () => {
     const hours = d.getHours().toString().padStart(2, '0');
     const mins = d.getMinutes().toString().padStart(2, '0');
     return `${hours}:${mins} - ${day}/${month}/${year}`;
+  };
+
+  // ==========================================
+  // HÀM XỬ LÝ LINK YOUTUBE VÀ GOOGLE DRIVE
+  // ==========================================
+  const getYoutubeEmbedUrl = (url) => {
+    if (!url) return "";
+    if (url.includes("youtube.com/watch?v=")) return url.replace("watch?v=", "embed/").split("&")[0];
+    if (url.includes("youtu.be/")) return url.replace("youtu.be/", "youtube.com/embed/").split("?")[0];
+    return url;
+  };
+
+  const getDriveEmbedUrl = (url) => {
+    if (!url) return "";
+    let fileId = null;
+    if (url.includes("/file/d/")) {
+      const matches = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+      if (matches && matches[1]) fileId = matches[1];
+    } else if (url.includes("?id=")) {
+      const matches = url.match(/\?id=([a-zA-Z0-9_-]+)/);
+      if (matches && matches[1]) fileId = matches[1];
+    }
+    if (fileId) return `https://drive.google.com/file/d/${fileId}/preview`;
+    return url;
+  };
+
+  const isAudioFile = (url) => {
+    if (!url) return false;
+    return url.toLowerCase().match(/\.(mp3|wav|m4a|ogg)$/) != null;
   };
 
   useEffect(() => {
@@ -167,15 +228,55 @@ const StudentSubmissionDetail = () => {
                                 </div>
                             </div>
 
-                            {/* Nội dung Đề bài */}
+                            {/* 👉 Nội dung Đề bài (ĐÃ BỌC RENDER LATEX) */}
                             <div className="p-5 sm:p-6 space-y-5">
                                 <div className="space-y-3">
                                     <div 
                                         className="font-semibold text-slate-800 leading-relaxed text-base q-content-view"
-                                        dangerouslySetInnerHTML={{ __html: q.content }}
+                                        dangerouslySetInnerHTML={{ __html: renderLatexContent(q.content) }}
                                     />
                                     {q.imageUrl && <img src={getImageUrl(q.imageUrl)} className="max-w-full max-h-64 rounded-xl shadow-sm border border-slate-200 object-contain" alt="Đề bài" />}
                                 </div>
+
+                                {/* 👉 Bổ sung Video (nếu có) vào phần bài làm */}
+                                {q?.videoUrl && (
+                                  <div className="w-full bg-slate-50/50 border border-slate-100 rounded-xl p-4 flex justify-center mb-4">
+                                     {(q.videoUrl.includes("youtube.com") || q.videoUrl.includes("youtu.be")) ? (
+                                         <div className="h-[250px] sm:h-[350px] w-full max-w-2xl rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                                             <iframe className="w-full h-full" src={getYoutubeEmbedUrl(q.videoUrl)} allow="autoplay; fullscreen" allowFullScreen></iframe>
+                                         </div>
+                                     ) : q.videoUrl.includes("drive.google.com") ? (
+                                         <div className="flex flex-col items-center w-full">
+                                             <div className="h-[200px] sm:h-[300px] w-full max-w-xl rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-slate-100 flex items-center justify-center relative">
+                                                 <iframe 
+                                                    className="w-full h-full relative z-10" 
+                                                    src={getDriveEmbedUrl(q.videoUrl)} 
+                                                    allow="autoplay; fullscreen; encrypted-media" 
+                                                    allowFullScreen
+                                                    referrerPolicy="no-referrer"
+                                                    sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                                                 ></iframe>
+                                                 <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center z-0">
+                                                     <Video className="w-8 h-8 text-slate-300 mb-2" />
+                                                     <p className="text-slate-500 font-medium text-xs">Video đang bị Google Drive chặn.</p>
+                                                 </div>
+                                             </div>
+                                             <a href={q.videoUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center justify-center h-9 px-4 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-xs transition-colors border border-indigo-200 shadow-sm">
+                                                <Video className="w-3.5 h-3.5 mr-2" /> Click mở Video sang Tab mới
+                                             </a>
+                                         </div>
+                                     ) : isAudioFile(q.videoUrl) ? (
+                                         <div className="w-full max-w-sm bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center">
+                                            <FileAudio className="w-10 h-10 text-indigo-400 mb-3" />
+                                            <audio controls className="w-full rounded-full h-10" src={q.videoUrl} preload="metadata" />
+                                         </div>
+                                     ) : (
+                                         <div className="w-full max-w-2xl rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-black flex justify-center">
+                                            <video controls className="w-full max-h-[350px]" src={q.videoUrl} preload="metadata" playsInline />
+                                         </div>
+                                     )}
+                                  </div>
+                                )}
 
                                 {/* BÀI LÀM: TRẮC NGHIỆM */}
                                 {isMultipleChoice && (
@@ -227,9 +328,10 @@ const StudentSubmissionDetail = () => {
                                                             <div className={`w-8 h-8 flex items-center justify-center rounded-full text-sm font-black shrink-0 ${letterBoxClass}`}>
                                                                 {letter}
                                                             </div>
+                                                            {/* 👉 BỌC RENDER LATEX CHO ĐÁP ÁN A,B,C,D */}
                                                             <div 
                                                                 className={`text-sm sm:text-base ${textClass} q-content-view leading-snug`}
-                                                                dangerouslySetInnerHTML={{ __html: opt }}
+                                                                dangerouslySetInnerHTML={{ __html: renderLatexContent(opt) }}
                                                             />
                                                         </div>
                                                         <div className="flex flex-col items-end gap-1.5 shrink-0">
@@ -252,7 +354,8 @@ const StudentSubmissionDetail = () => {
                                         </div>
                                         <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm min-h-[80px]">
                                             {ans.studentAnswer ? (
-                                                <div className="text-slate-800 font-medium q-content-view text-base leading-relaxed" dangerouslySetInnerHTML={{ __html: ans.studentAnswer }} />
+                                                /* 👉 BỌC RENDER LATEX CHO BÀI LÀM TỰ LUẬN */
+                                                <div className="text-slate-800 font-medium q-content-view text-base leading-relaxed" dangerouslySetInnerHTML={{ __html: renderLatexContent(ans.studentAnswer) }} />
                                             ) : (
                                                 <div className="flex flex-col items-center justify-center h-full opacity-60 py-3">
                                                     <FileX className="w-8 h-8 mb-1 text-slate-400" />
@@ -268,7 +371,7 @@ const StudentSubmissionDetail = () => {
                                     </div>
                                 )}
 
-                                {/* HƯỚNG DẪN GIẢI */}
+                                {/* HƯỚNG DẪN GIẢI CỦA GIÁO VIÊN */}
                                 {submission.status === 'graded' && (q.essayAnswerText || q.essayAnswerImageUrl) && (
                                     <div className="mt-6 bg-emerald-50/50 p-4 sm:p-5 rounded-xl border border-emerald-100 relative overflow-hidden">
                                         <div className="flex items-center gap-2 mb-3">
@@ -278,9 +381,10 @@ const StudentSubmissionDetail = () => {
                                         
                                         {q.essayAnswerText && (
                                             <div className="bg-white p-4 rounded-xl border border-emerald-50 shadow-sm q-content-view">
+                                                {/* 👉 BỌC RENDER LATEX CHO LỜI GIẢI */}
                                                 <div 
                                                     className="text-emerald-950 font-medium leading-relaxed text-sm sm:text-base" 
-                                                    dangerouslySetInnerHTML={{ __html: q.essayAnswerText }} 
+                                                    dangerouslySetInnerHTML={{ __html: renderLatexContent(q.essayAnswerText) }} 
                                                 />
                                             </div>
                                         )}

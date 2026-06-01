@@ -77,8 +77,11 @@ const RichTextEditor = ({ value, onChange, placeholder }) => {
     const editor = quillRef.current.getEditor();
     const cursorPosition = editor.getSelection()?.index || editor.getLength();
     
-    // Chèn công thức vào vị trí con trỏ
-    editor.insertEmbed(cursorPosition, 'formula', latex);
+    // ĐÃ FIX: Bọc $$ vào 2 đầu chuỗi latex để KaTeX có thể nhận diện
+    const formattedLatex = `$$ ${latex} $$`;
+    
+    // Chèn công thức đã được bọc vào vị trí con trỏ
+    editor.insertEmbed(cursorPosition, 'formula', formattedLatex);
     editor.insertText(cursorPosition + 1, ' '); // Cách ra một khoảng cho dễ nhìn
     editor.setSelection(cursorPosition + 2);
     
@@ -89,7 +92,7 @@ const RichTextEditor = ({ value, onChange, placeholder }) => {
 
   return (
     <div className="flex flex-col gap-2">
-        {/* KHUNG SOẠN THẢO CHÍNH (ĐÃ TINH CHỈNH CSS CHO ĐẸP VÀ MỀM MẠI HƠN) */}
+        {/* KHUNG SOẠN THẢO CHÍNH */}
         <div className="bg-white rounded-xl border border-sky-100 overflow-hidden shadow-sm focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100 transition-all">
           <div className="
             [&_.ql-editor]:min-h-[120px] 
@@ -123,7 +126,7 @@ const RichTextEditor = ({ value, onChange, placeholder }) => {
           </div>
         </div>
 
-        {/* THANH CÔNG CỤ GÕ TOÁN (HIỂN THỊ DÍNH LIỀN BÊN DƯỚI NẾU BẤM NÚT Σ) */}
+        {/* THANH CÔNG CỤ GÕ TOÁN */}
         {isMathPanelOpen && (
           <div className="bg-sky-50/80 border-2 border-sky-200 rounded-xl p-3 sm:p-4 shadow-sm animate-in fade-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-3 border-b border-sky-100 pb-2">

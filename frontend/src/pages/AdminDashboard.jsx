@@ -15,13 +15,13 @@ import {
   ShieldCheck, Users, GraduationCap, School, LogOut, TrendingUp, UserPlus, 
   Loader2, Trash2, Edit, Search, FileSpreadsheet, Sparkles, PenTool, Download, Trophy, 
   Menu, X, Key, Lock, Unlock, Library, Database, ChevronLeft, ChevronRight,
-  Settings, Save, UploadCloud, FileCheck // <-- ĐÃ THÊM FileCheck Ở ĐÂY
+  Settings, Save, UploadCloud, FileCheck
 } from "lucide-react";
 
 import AdminClassManagement from "./AdminClassManagement";
 import AdminDepartmentManagement from "./AdminDepartmentManagement";
 import AdminQuestionBank from "./AdminQuestionBank";
-import AdminLeaderboardManagement from "./AdminLeaderboardManagement"; // <-- IMPORT SUB-COMPONENT MỚI
+import AdminLeaderboardManagement from "./AdminLeaderboardManagement";
 
 const exportFormalExcel = async (dataList, reportTitle, fileName, adminName) => {
   if (!dataList || dataList.length === 0) return alert("Không có dữ liệu để xuất báo cáo!");
@@ -170,12 +170,11 @@ const AdminDashboard = () => {
       const usersData = usersRes.data;
       const allUsrs = Array.isArray(usersData) ? usersData : (usersData.users || usersData.data || []);
       setRecentUsers(allUsrs);
-      classesList
       setClassesList(classRes.data.classes || []);
       setTeachersList(allUsrs.filter(u => u.role === 'teacher'));
     } catch (error) { 
         if (error.response?.status === 403 || error.response?.status === 401) handleLogout(); 
-    } { 
+    } finally { 
         setIsLoadingData(false); 
     }
   };
@@ -395,8 +394,8 @@ const AdminDashboard = () => {
         <div className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden" onClick={() => setIsMobileMenuOpen(false)}/>
       )}
 
-      {/* THANH SIDEBAR THANH MENU CHÍNH */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-100 flex flex-col h-screen shadow-xl transform transition-transform duration-300 lg:translate-x-0 lg:static lg:shadow-[4px_0_24px_rgba(15,23,42,0.04)] ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      {/* 👉 FIX: THANH SIDEBAR THANH MENU CHÍNH (Đã sửa lại lg:sticky để cố định khi cuộn) */}
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-100 flex flex-col h-screen shadow-xl transform transition-transform duration-300 lg:translate-x-0 lg:sticky lg:top-0 lg:shadow-[4px_0_24px_rgba(15,23,42,0.04)] ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6 flex items-center justify-between gap-3 border-b border-slate-50">
           <div className="flex items-center gap-3">
             <div className="bg-sky-100 p-2 rounded-xl text-sky-600"><ShieldCheck className="h-6 w-6" /></div>
@@ -406,12 +405,14 @@ const AdminDashboard = () => {
             <X className="w-5 h-5 text-slate-500" />
           </Button>
         </div>
+
+        {/* 👉 FIX: THỨ TỰ MENU ĐÃ ĐƯỢC SẮP XẾP LẠI */}
         <nav className="flex-1 p-4 space-y-2 mt-4 overflow-y-auto">
           <Button onClick={() => handleMenuClick("overview")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'overview' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><TrendingUp className="mr-3 h-5 w-5" /> Tổng quan</Button>
-          <Button onClick={() => handleMenuClick("classes")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'classes' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><School className="mr-3 h-5 w-5" /> Quản lý Lớp học</Button>
           <Button onClick={() => handleMenuClick("departments")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'departments' ? 'bg-indigo-500 text-white shadow-md shadow-indigo-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><Library className="mr-3 h-5 w-5" /> Quản lý Tổ chuyên môn</Button>
-          <Button onClick={() => handleMenuClick("questions")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'questions' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><Database className="mr-3 h-5 w-5" /> Quản lý Kho câu hỏi</Button>
+          <Button onClick={() => handleMenuClick("classes")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'classes' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><School className="mr-3 h-5 w-5" /> Quản lý Lớp học</Button>
           <Button onClick={() => handleMenuClick("accounts")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'accounts' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><Users className="mr-3 h-5 w-5" /> Quản lý Tài khoản</Button>
+          <Button onClick={() => handleMenuClick("questions")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'questions' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><Database className="mr-3 h-5 w-5" /> Quản lý Kho câu hỏi</Button>
           <Button onClick={() => handleMenuClick("leaderboard")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'leaderboard' ? 'bg-amber-500 text-white shadow-md shadow-amber-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><Trophy className="mr-3 h-5 w-5" /> Thi đua toàn trường</Button>
           
           <Button onClick={() => handleMenuClick("settings")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all mt-4 ${activeTab === 'settings' ? 'bg-slate-800 text-white shadow-md shadow-slate-300' : 'text-slate-500 hover:bg-slate-200 hover:text-slate-800'}`}><Settings className="mr-3 h-5 w-5" /> Cài đặt hệ thống</Button>
@@ -540,8 +541,6 @@ const AdminDashboard = () => {
         {activeTab === "classes" && <AdminClassManagement classesList={classesList} teachersList={teachersList} fetchData={fetchData} />}
         {activeTab === "departments" && <AdminDepartmentManagement teachersList={teachersList} fetchData={fetchData} />}
         {activeTab === "questions" && <AdminQuestionBank />}
-
-        {/* 👉 THAY THẾ COMPONENT BẢNG THI ĐUA TẠI ĐÂY */}
         {activeTab === "leaderboard" && <AdminLeaderboardManagement />}
 
         {activeTab === "accounts" && (

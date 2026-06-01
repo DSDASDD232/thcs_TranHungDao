@@ -19,6 +19,37 @@ import {
 
 import GeometryDrawing from "@/components/ui/GeometryDrawing";
 
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
+
+// ==========================================
+// HÀM DỊCH MÃ LATEX THÀNH CÔNG THỨC TOÁN HỌC (ĐÃ ÉP KÍCH THƯỚC TO)
+// ==========================================
+const renderLatexContent = (htmlString) => {
+  if (!htmlString) return "";
+  
+  // Xử lý công thức Toán block $$...$$
+  let parsedHtml = htmlString.replace(/\$\$([\s\S]*?)\$\$/g, (match, math) => {
+    try {
+      // Dùng \displaystyle để ép phân số to ra, kết hợp displayMode: false để giữ nó trên cùng 1 dòng
+      return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false });
+    } catch (e) {
+      return match;
+    }
+  });
+
+  // Xử lý công thức Toán inline $...$ (nếu có)
+  parsedHtml = parsedHtml.replace(/\$([^\$]+)\$/g, (match, math) => {
+    try {
+      return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false });
+    } catch (e) {
+      return match;
+    }
+  });
+  
+  return parsedHtml;
+};
+
 // ==========================================
 // HÀM GIẢI MÃ TOKEN ĐỂ LẤY ID HỌC SINH
 // ==========================================
@@ -515,9 +546,10 @@ const TakeQuiz = () => {
               <Badge className={`mb-3 font-black border-0 px-3 sm:px-4 py-1.5 text-xs sm:text-sm uppercase tracking-wider shadow-sm ${currentAnswer.isFlagged ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'}`}>
                 Câu {idx + 1}
               </Badge>
+              {/* 👉 RENDER ĐỀ BÀI CHUẨN CÔNG THỨC TOÁN */}
               <div 
                   className="text-lg sm:text-xl font-bold text-slate-800 leading-relaxed whitespace-pre-wrap q-content-view w-full"
-                  dangerouslySetInnerHTML={{ __html: q?.content }}
+                  dangerouslySetInnerHTML={{ __html: renderLatexContent(q?.content) }}
               />
           </div>
           <div className="flex items-center gap-2 ml-4">
@@ -607,9 +639,10 @@ const TakeQuiz = () => {
                         <span className={`flex shrink-0 items-center justify-center w-8 h-8 rounded-full text-sm font-black transition-colors ${isSelected ? 'bg-sky-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
                           {optLabel}
                         </span> 
+                        {/* 👉 RENDER ĐÁP ÁN CHUẨN CÔNG THỨC TOÁN */}
                         <div 
-                            className={`q-content-view w-full ${isSelected ? 'text-sky-950 font-bold' : 'text-slate-600'}`}
-                            dangerouslySetInnerHTML={{ __html: opt }}
+                            className={`q-content-view w-full text-lg ${isSelected ? 'text-sky-950 font-bold' : 'text-slate-600'}`}
+                            dangerouslySetInnerHTML={{ __html: renderLatexContent(opt) }}
                         />
                       </Label>
                     </div>

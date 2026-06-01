@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import axios from "../lib/axios"; 
-import mammoth from "mammoth"; 
+import { processWordFile, extractQuestionsFromText } from "../lib/wordExtractor"; 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+// 👉 ĐÃ THÊM LẠI SelectValue VÀO ĐÂY:
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -18,8 +19,26 @@ import {
 } from "lucide-react";
 
 import RichTextEditor from "@/components/ui/RichTextEditor";
+
+import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import 'mathlive';
+
+// ==========================================
+// HÀM DỊCH MÃ LATEX THÀNH CÔNG THỨC TOÁN HỌC (ĐỂ XEM TRƯỚC)
+// ==========================================
+const renderLatexContent = (htmlString) => {
+  if (!htmlString) return "";
+  let parsedHtml = htmlString.replace(/\$\$([\s\S]*?)\$\$/g, (match, math) => {
+    try { return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false }); } 
+    catch (e) { return match; }
+  });
+  parsedHtml = parsedHtml.replace(/\$([^\$]+)\$/g, (match, math) => {
+    try { return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false }); } 
+    catch (e) { return match; }
+  });
+  return parsedHtml;
+};
 
 // ==========================================
 // HÀM XỬ LÝ LINK YOUTUBE VÀ GOOGLE DRIVE & KIỂM TRA AUDIO
@@ -221,13 +240,12 @@ const CreateAssignment = () => {
     return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`; 
   };
 
-  // 👉 TỰ ĐỘNG ĐỌC LOẠI BÀI TỪ URL
   const queryParams = new URLSearchParams(location.search);
   const currentAssignmentType = queryParams.get("type") === "exam" ? "exam" : "homework";
 
   const [newAssignment, setNewAssignment] = useState({ 
     title: "", targetClass: "", subject: "", duration: "45", semester: "1", 
-    assignmentType: currentAssignmentType, // Gán loại bài tự động
+    assignmentType: currentAssignmentType,
     startDate_date: getCurrentDate(), 
     startDate_time: getCurrentTime(), 
     dueDate_date: getDefaultDate(), 
@@ -597,122 +615,18 @@ const CreateAssignment = () => {
     if (file) setAssignmentFile(file);
   };
 
-  const extractQuestionsFromText = (text, isForPreview = false) => {
-    const textParts = text.split(/(?:\n\s*HẾT\b|\n\s*Hết\b|\n\s*Bảng đáp án\b)/i);
-    let mainPart = textParts[0]; 
-
-    let globalAnswers = {};
-    if (textParts.length > 1) {
-        const answerPart = textParts.slice(1).join(" ");
-        const ansRegex = /(?:Câu\s*)?(\d+)\s*[:.-]?\s*([A-D])/gi;
-        let match;
-        while ((match = ansRegex.exec(answerPart)) !== null) {
-            globalAnswers[match[1]] = match[2].toUpperCase(); 
-        }
-    }
-
-    const rawBlocks = mainPart.split(/(?=(?:^|\n)\s*(?:Câu|Bài)\s+\d+\s*[:.])/i);
-    
-    const questionBlocks = rawBlocks.filter(block => {
-        return /^\s*(?:Câu|Bài)\s+\d+\s*[:.]/i.test(block);
-    });
-    
-    return questionBlocks.map((block) => {
-      let type = "multiple_choice";
-      let content = "";
-      let options = [];
-      let correctAnswer = "A";
-      let essayAnswerText = "";
-
-      const qMatch = block.match(/^\s*(?:Câu|Bài)\s+(\d+)\s*[:.]/i);
-      const qNumber = qMatch ? qMatch[1] : null;
-
-      const partsByExplanation = block.split(/(?:^|\n)\s*(?:Lời giải|Hướng dẫn giải|HDG|Giải|Đáp án)\s*[:.]\s*/i);
-      let questionBody = partsByExplanation[0];
-      
-      if (partsByExplanation.length > 1) {
-          essayAnswerText = partsByExplanation[1].trim();
-      }
-
-      const partsByOptions = questionBody.split(/(?:^|\n|\t|\s{3,})(?=\*?\s*[A-D][.)]\s)/i);
-      
-      content = partsByOptions[0].replace(/^\s*(?:Câu|Bài)\s+\d+\s*[:.]\s*/i, "").trim();
-      content = content.split(/\n\s*PHẦN\s+[IVXLCDM]+\b/i)[0].trim();
-
-      let detectedCorrectAnswer = null;
-      partsByOptions.slice(1).forEach(optStr => {
-        let textOpt = optStr.trim();
-        let isCorrect = false;
-        
-        if (textOpt.startsWith('*')) {
-           isCorrect = true;
-           textOpt = textOpt.substring(1).trim();
-        }
-
-        const letterMatch = textOpt.match(/^([A-D])[.)]\s*(.*)/is);
-        if (letterMatch) {
-            const letter = letterMatch[1].toUpperCase();
-            let val = letterMatch[2].trim();
-            val = val.split(/\n\s*PHẦN\s+[IVXLCDM]+\b/i)[0].trim();
-
-            options.push(val);
-            if (isCorrect) detectedCorrectAnswer = letter;
-        }
-      });
-
-      if (detectedCorrectAnswer) {
-          correctAnswer = detectedCorrectAnswer;
-      } else if (essayAnswerText.match(/^[A-D]$/i)) { 
-          correctAnswer = essayAnswerText.toUpperCase();
-          essayAnswerText = ""; 
-      } else if (qNumber && globalAnswers[qNumber]) {
-          correctAnswer = globalAnswers[qNumber];
-      } else {
-          correctAnswer = "A";
-      }
-
-      if (options.length === 0) {
-          type = "essay";
-          options = []; 
-          correctAnswer = "";
-      } else {
-          type = "multiple_choice";
-      }
-      
-      const baseData = { 
-          type: type, 
-          content: content, 
-          videoUrl: "", 
-          options: options, 
-          correctAnswer: correctAnswer,
-          essayAnswerText: essayAnswerText, 
-          difficulty: "medium" 
-      };
-
-      if (isForPreview) return { ...baseData, tempId: `ext_prev_${Date.now()}_${Math.random()}` };
-      return baseData;
-    });
-  };
-
   const handleExtractWord = async () => {
     if (!assignmentFile) return alert("Vui lòng chọn file Word trước!");
     setLoading(true);
     try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const arrayBuffer = event.target.result;
-        const result = await mammoth.extractRawText({ arrayBuffer });
-        const text = result.value;
-        
-        setRawExtractedText(text); 
-        setExtractedQuestions(extractQuestionsFromText(text, true)); 
-        setIsReviewingExtraction(true); 
-        setLoading(false);
-      };
-      reader.readAsArrayBuffer(assignmentFile);
+      const { text, questions } = await processWordFile(assignmentFile, true);
+      setRawExtractedText(text); 
+      setExtractedQuestions(questions); 
+      setIsReviewingExtraction(true); 
     } catch (error) { 
       alert("Lỗi bóc tách file Word. Vui lòng thử lại!"); 
-      setLoading(false); 
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -722,18 +636,13 @@ const CreateAssignment = () => {
     setAssignmentFile(file);
     setLoading(true);
     try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const arrayBuffer = event.target.result;
-        const result = await mammoth.extractRawText({ arrayBuffer });
-        const text = result.value;
-        setRawExtractedText(text); 
-        setExtractedQuestions(extractQuestionsFromText(text, true)); 
-        setLoading(false);
-      };
-      reader.readAsArrayBuffer(file);
+      const { text, questions } = await processWordFile(file, true);
+      setRawExtractedText(text); 
+      setExtractedQuestions(questions); 
     } catch (error) { 
-      alert("Lỗi bóc tách. Vui lòng thử lại!"); setLoading(false); 
+      alert("Lỗi bóc tách. Vui lòng thử lại!"); 
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1030,7 +939,6 @@ const CreateAssignment = () => {
                 <h3 className="text-lg sm:text-xl font-black text-sky-900 border-b border-sky-100 pb-2">1. Thông tin chung</h3>
                 <Input placeholder={currentAssignmentType === "exam" ? "Nhập tên đề kiểm tra..." : "Nhập tên bài tập..."} className="h-12 sm:h-14 rounded-xl bg-slate-50 font-bold text-base sm:text-lg border-sky-100 focus-visible:ring-sky-500" value={newAssignment.title} onChange={(e) => setNewAssignment({...newAssignment, title: e.target.value})} required />
                 
-                {/* 👉 [BỎ Ô CHỌN LOẠI BÀI - ĐƯA GRID VỀ LẠI 4 CỘT] */}
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-xs sm:text-sm font-bold text-slate-500 ml-1">Giao cho Lớp</label>
@@ -1072,7 +980,6 @@ const CreateAssignment = () => {
                         <SelectContent position="popper" sideOffset={4} className="bg-white">
                           <SelectItem value="1">Học kỳ 1</SelectItem>
                           <SelectItem value="2">Học kỳ 2</SelectItem>
-                          <SelectItem value="3">Học kỳ Hè</SelectItem>
                         </SelectContent>
                       </Select>
                   </div>
@@ -1282,7 +1189,9 @@ const CreateAssignment = () => {
                                       </CardHeader>
                                       <CardContent className="p-4 space-y-4 bg-white">
                                         <div className="flex flex-col">
-                                            <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁNẢNH  THỨC..." value={q.content} onChange={(val) => handleExtractedChange(q.tempId, 'content', val)} />
+                                            {/* 👉 ĐÃ SỬA LỖI: CÔNG THỨC TOÁN HIỂN THỊ CHUẨN TRONG TEXT EDITOR */}
+                                            <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={q.content} onChange={(val) => handleExtractedChange(q.tempId, 'content', val)} />
+                                            {/* Phần khung xem trước đã được loại bỏ để tránh rườm rà, nó sẽ tự hiện trong Editor! */}
                                             
                                             {/* Nút bật/tắt Đính kèm */}
                                             {!openExtractedMediaPanels[q.tempId] && !q.videoFile && !q.videoUrl && (
@@ -1361,6 +1270,7 @@ const CreateAssignment = () => {
                                         
                                         <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-3">
                                           <h4 className="text-sm font-bold text-emerald-700 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Hướng dẫn giải</h4>
+                                          {/* 👉 ĐÃ SỬA LỖI: Hiện phần xem trước phân số trực tiếp trong RichTextEditor */}
                                           <RichTextEditor value={q.essayAnswerText} onChange={(val) => handleExtractedChange(q.tempId, 'essayAnswerText', val)} />
                                         </div>
 
@@ -1370,15 +1280,23 @@ const CreateAssignment = () => {
                                               {q.options.map((opt, i) => {
                                                 const letter = String.fromCharCode(65 + i);
                                                 return (
-                                                <div key={i} className="flex items-start gap-2">
-                                                  <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base mt-2">{letter}.</span>
-                                                  <div className="flex-1 flex items-center gap-2">
-                                                    <Input className={`h-11 rounded-xl bg-white text-sm sm:text-base border-sky-100`} value={q.options[i]} onChange={(e) => handleExtractedOptionChange(q.tempId, i, e.target.value)} placeholder={`Gõ đáp án ${letter}...`} />
-                                                    <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: q.tempId, targetOptionIndex: i, isExtracted: true })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
-                                                  </div>
-                                                  {q.options.length > 2 && (
-                                                      <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveExtractedOption(q.tempId, i)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 mt-1.5"><Trash2 className="w-4 h-4"/></Button>
-                                                  )}
+                                                <div key={i} className="flex flex-col gap-1">
+                                                    <div className="flex items-start gap-2">
+                                                      <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base mt-2">{letter}.</span>
+                                                      <div className="flex-1 flex items-center gap-2">
+                                                        <Input className={`h-11 rounded-xl bg-white text-sm sm:text-base border-sky-100`} value={q.options[i]} onChange={(e) => handleExtractedOptionChange(q.tempId, i, e.target.value)} placeholder={`Gõ đáp án ${letter}...`} />
+                                                        <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: q.tempId, targetOptionIndex: i, isExtracted: true })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
+                                                      </div>
+                                                      {q.options.length > 2 && (
+                                                          <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveExtractedOption(q.tempId, i)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 mt-1.5"><Trash2 className="w-4 h-4"/></Button>
+                                                      )}
+                                                    </div>
+                                                    {/* 👉 SỬA LỖI: Hiện phần xem trước phân số ở dưới Input đáp án */}
+                                                    {q.options[i] && q.options[i].includes('$$') && (
+                                                        <div className="ml-8 p-2 bg-white border border-sky-100 rounded-lg text-sm text-sky-900 q-content-view flex items-center"
+                                                             dangerouslySetInnerHTML={{ __html: renderLatexContent(q.options[i]) }}
+                                                        />
+                                                    )}
                                                 </div>
                                               )})}
                                             </div>
@@ -1386,8 +1304,11 @@ const CreateAssignment = () => {
                                               <Button type="button" variant="ghost" size="sm" onClick={() => handleAddExtractedOption(q.tempId)} className="text-sky-600 hover:bg-sky-100 rounded-lg"><PlusCircle className="w-4 h-4 mr-1"/> Thêm đáp án</Button>
                                               <div className="flex items-center gap-2">
                                                 <label className="text-xs font-bold text-rose-500">ĐÁP ÁN ĐÚNG:</label>
+                                                {/* 👉 ĐÃ FIX: CHUẨN SELECT TRÁNH CHỒNG CHỮ */}
                                                 <Select value={q.correctAnswer || ""} onValueChange={(val) => handleExtractedChange(q.tempId, 'correctAnswer', val)}>
-                                                  <SelectTrigger className="h-9 w-24 bg-white text-rose-600 font-bold border-rose-200 rounded-lg"><span className="truncate">{q.correctAnswer ? `Câu ${q.correctAnswer}` : "Chọn"}</span></SelectTrigger>
+                                                  <SelectTrigger className="h-9 w-24 bg-white text-rose-600 font-bold border-rose-200 rounded-lg [&>span]:truncate">
+                                                    <SelectValue placeholder="Chọn" />
+                                                  </SelectTrigger>
                                                   <SelectContent>
                                                     {q.options.map((_, i) => {
                                                       const l = String.fromCharCode(65 + i);
@@ -1424,9 +1345,10 @@ const CreateAssignment = () => {
                         </div>
 
                         <div className="flex flex-wrap items-center gap-3">
+                          {/* 👉 ĐÃ FIX: CHUẨN SELECT TRÁNH CHỒNG CHỮ */}
                           <Select value={bankType || "all"} onValueChange={(val) => {setBankType(val); if(val !== 'essay') setBankPoints("");}}>
                              <SelectTrigger className="h-10 w-[140px] bg-white border-sky-200 font-bold text-sky-700 [&>span]:truncate">
-                               <SelectValue>{bankType === 'all' ? 'Tất cả loại' : bankType === 'multiple_choice' ? 'Trắc nghiệm' : 'Tự luận'}</SelectValue>
+                               <SelectValue placeholder="Tất cả loại" />
                              </SelectTrigger>
                              <SelectContent>
                                <SelectItem value="all">Tất cả loại</SelectItem>
@@ -1437,7 +1359,7 @@ const CreateAssignment = () => {
                           
                           <Select value={bankSubject || "all"} onValueChange={(val) => setBankSubject(val)}>
                             <SelectTrigger className="h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700 [&>span]:truncate">
-                              <SelectValue>{bankSubject === 'all' ? 'Tất cả môn' : `Môn: ${bankSubject}`}</SelectValue>
+                              <SelectValue placeholder="Tất cả môn" />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="all">Tất cả môn</SelectItem>
@@ -1449,7 +1371,7 @@ const CreateAssignment = () => {
 
                           <Select value={bankFolder || "all"} onValueChange={(val) => { setBankFolder(val); setBankExam("all"); }}>
                             <SelectTrigger className="h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700 [&>span]:truncate">
-                              <SelectValue>{bankFolder === 'all' ? 'Tất cả Thư mục' : bankFolder}</SelectValue>
+                              <SelectValue placeholder="Tất cả Thư mục" />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="all">Tất cả Thư mục</SelectItem>
@@ -1459,7 +1381,7 @@ const CreateAssignment = () => {
 
                           <Select value={bankExam || "all"} onValueChange={setBankExam}>
                             <SelectTrigger className="h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700 [&>span]:truncate">
-                              <SelectValue>{bankExam === 'all' ? 'Tất cả Đề thi' : bankExam}</SelectValue>
+                              <SelectValue placeholder="Tất cả Đề thi" />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="all">Tất cả Đề thi</SelectItem>
@@ -1548,7 +1470,14 @@ const CreateAssignment = () => {
                           <CardContent className="p-4 sm:p-5 space-y-4 relative z-10">
                             <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
                               <div className={`flex-1 transition-all ${isSlotEmpty ? 'border-dashed border-2 border-slate-300 rounded-xl p-1 bg-white' : ''}`}>
+                                {/* 👉 SỬA LỖI: Hiện phần xem trước phân số ở dưới Input Đề bài */}
                                 <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={q.content} onChange={(val) => handleManualChange(q.tempId, 'content', val)} />
+                                {q.content && q.content.includes('$$') && (
+                                    <div className="mt-2 p-3 bg-sky-50 border border-sky-100 rounded-lg text-slate-700 text-sm font-medium">
+                                        <div className="text-xs font-bold text-sky-600 uppercase mb-1">Xem trước Đề bài:</div>
+                                        <div dangerouslySetInnerHTML={{ __html: renderLatexContent(q.content) }} />
+                                    </div>
+                                )}
                                 
                                 {/* Nút bật/tắt Đính kèm */}
                                 {!openMediaPanels[q.tempId] && !q.videoFile && !q.videoUrl && (
@@ -1598,7 +1527,7 @@ const CreateAssignment = () => {
                                                           ></iframe>
                                                           <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center z-0">
                                                              <Video className="w-8 h-8 text-slate-300 mb-2" />
-                                                             <p className="text-slate-500 font-medium text-xs">Video đang bị trình duyệt chặn...</p>
+                                                             <p className="text-slate-500 font-medium text-xs">Video bị chặn. Nhấn link để xem.</p>
                                                           </div>
                                                       </div>
                                                   </div>
@@ -1633,18 +1562,16 @@ const CreateAssignment = () => {
                               </div>
                             </div>
                             
-                            <div className="mt-4 p-4 bg-emerald-50/50 rounded-xl border border-emerald-100 shadow-sm">
-                               <h4 className="text-sm font-bold text-emerald-700 mb-3 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Đáp án / Hướng dẫn giải </h4>
-                               <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
-                                   <div className="flex-1"><RichTextEditor placeholder="Gõ lời giải..." value={q.essayAnswerText} onChange={(val) => handleManualChange(q.tempId, 'essayAnswerText', val)} /></div>
-                                   <div className="w-full md:w-36 shrink-0 h-[100px] sm:h-[100px]">
-                                     {q.essayAnswerPreviewUrl ? (
-                                       <div className="relative w-full h-full rounded-xl border border-emerald-200 overflow-hidden shadow-sm group/img2"><img src={q.essayAnswerPreviewUrl} alt="Preview Answer" className="absolute inset-0 w-full h-full object-cover bg-white" /><div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img2:opacity-100 transition-opacity flex items-center justify-center"><button type="button" onClick={() => handleRemoveManualEssayImage(q.tempId)} className="bg-rose-500 text-white rounded-full p-2 hover:scale-110 transition-transform"><Trash2 className="w-4 h-4"/></button></div></div>
-                                     ) : (
-                                       <label className="flex flex-col items-center justify-center w-full h-full rounded-xl border-2 border-dashed border-emerald-300 hover:border-emerald-500 bg-white cursor-pointer transition-all"><ImageIcon className="w-6 h-6 text-emerald-400 mb-1" /><span className="text-xs font-bold text-emerald-600 text-center px-1">Ảnh Phụ (Lời giải)</span><input type="file" className="hidden" accept="image/*" onChange={(e) => handleManualEssayImageChange(q.tempId, e)} /></label>
-                                     )}
-                                   </div>
-                               </div>
+                            <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-3">
+                              <h4 className="text-sm font-bold text-emerald-700 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Hướng dẫn giải</h4>
+                              {/* 👉 SỬA LỖI: Hiện phần xem trước phân số ở dưới Input Lời giải */}
+                              <RichTextEditor value={q.essayAnswerText} onChange={(val) => handleManualChange(q.tempId, 'essayAnswerText', val)} />
+                              {q.essayAnswerText && q.essayAnswerText.includes('$$') && (
+                                  <div className="mt-2 p-3 bg-white border border-emerald-100 rounded-lg text-emerald-900 text-sm font-medium">
+                                      <div className="text-xs font-bold text-emerald-600 uppercase mb-1">Xem trước Lời giải:</div>
+                                      <div dangerouslySetInnerHTML={{ __html: renderLatexContent(q.essayAnswerText) }} />
+                                  </div>
+                              )}
                             </div>
 
                             {q.type === 'multiple_choice' && (
@@ -1653,15 +1580,23 @@ const CreateAssignment = () => {
                                   {q.options.map((optLabel, optIdx) => {
                                     const letter = String.fromCharCode(65 + optIdx);
                                     return (
-                                    <div key={optIdx} className="flex items-start gap-2">
-                                      <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base mt-2">{letter}.</span>
-                                      <div className="flex-1 flex items-center gap-2">
-                                        <Input className={`h-11 rounded-xl bg-white text-sm sm:text-base ${isSlotEmpty ? 'border-dashed border-slate-300' : 'border-sky-100'}`} value={q.options[optIdx]} onChange={(e) => handleManualOptionChange(q.tempId, optIdx, e.target.value)} placeholder={`Gõ đáp án ${letter}...`} />
-                                        <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: q.tempId, targetOptionIndex: optIdx, isExtracted: false })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
-                                      </div>
-                                      {q.options.length > 2 && (
-                                          <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveManualOption(q.tempId, optIdx)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 mt-1.5"><Trash2 className="w-4 h-4"/></Button>
-                                      )}
+                                    <div key={optIdx} className="flex flex-col gap-1">
+                                        <div className="flex items-start gap-2">
+                                          <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base mt-2">{letter}.</span>
+                                          <div className="flex-1 flex items-center gap-2">
+                                            <Input className={`h-11 rounded-xl bg-white text-sm sm:text-base ${isSlotEmpty ? 'border-dashed border-slate-300' : 'border-sky-100'}`} value={q.options[optIdx]} onChange={(e) => handleManualOptionChange(q.tempId, optIdx, e.target.value)} placeholder={`Gõ đáp án ${letter}...`} />
+                                            <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: q.tempId, targetOptionIndex: optIdx, isExtracted: false })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
+                                          </div>
+                                          {q.options.length > 2 && (
+                                              <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveManualOption(q.tempId, optIdx)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 mt-1.5"><Trash2 className="w-4 h-4"/></Button>
+                                          )}
+                                        </div>
+                                        {/* 👉 SỬA LỖI: Hiện phần xem trước phân số ở dưới Input đáp án */}
+                                        {q.options[optIdx] && q.options[optIdx].includes('$$') && (
+                                            <div className="ml-8 p-2 bg-white border border-sky-100 rounded-lg text-sm text-sky-900 q-content-view flex items-center"
+                                                 dangerouslySetInnerHTML={{ __html: renderLatexContent(q.options[optIdx]) }}
+                                            />
+                                        )}
                                     </div>
                                   )})}
                                 </div>
@@ -1669,8 +1604,11 @@ const CreateAssignment = () => {
                                   <Button type="button" variant="ghost" size="sm" onClick={() => handleAddManualOption(q.tempId)} className="text-sky-600 hover:bg-sky-100"><PlusCircle className="w-4 h-4 mr-2"/> Thêm đáp án</Button>
                                   <div className="flex items-center gap-2">
                                     <label className="text-sm font-bold text-rose-600">ĐÁP ÁN ĐÚNG:</label>
+                                    {/* 👉 ĐÃ FIX: CHUẨN SELECT TRÁNH CHỒNG CHỮ */}
                                     <Select value={q.correctAnswer || ""} onValueChange={(val) => handleManualChange(q.tempId, 'correctAnswer', val)}>
-                                      <SelectTrigger className="h-10 w-28 bg-white text-rose-600 font-bold border-rose-200 rounded-xl"><span className="truncate">{q.correctAnswer ? `Câu ${q.correctAnswer}` : "Chọn"}</span></SelectTrigger>
+                                      <SelectTrigger className="h-10 w-28 bg-white text-rose-600 font-bold border-rose-200 rounded-xl [&>span]:truncate">
+                                        <SelectValue placeholder="Chọn" />
+                                      </SelectTrigger>
                                       <SelectContent>
                                         {q.options.map((_, i) => {
                                           const l = String.fromCharCode(65 + i);

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "../lib/axios";
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -402,7 +402,13 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
   });
 
   const assignedTeachers = teachersList.filter(t => assignedTeacherIds.includes(t._id));
-  const unassignedTeachers = teachersList.filter(t => !assignedTeacherIds.includes(t._id) && (t.fullName.toLowerCase().includes(assignSearchQuery.toLowerCase()) || t.username.toLowerCase().includes(assignSearchQuery.toLowerCase())));
+  
+  // 👉 ĐÃ FIX: TRÁNH GIÁO VIÊN CHƯA PHÂN TỔ HIỆN LÊN KHUNG THÊM
+  const unassignedTeachers = teachersList.filter(t => 
+      !assignedTeacherIds.includes(t._id) && 
+      (t.department === "KHTN" || t.department === "KHXH") && 
+      (t.fullName.toLowerCase().includes(assignSearchQuery.toLowerCase()) || t.username.toLowerCase().includes(assignSearchQuery.toLowerCase()))
+  );
 
   const filteredStudentsInClass = studentsInClass.filter(s => 
      s.fullName.toLowerCase().includes(studentSearchQuery.toLowerCase()) || 

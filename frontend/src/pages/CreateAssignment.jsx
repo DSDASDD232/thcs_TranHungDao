@@ -5,7 +5,6 @@ import { processWordFile, extractQuestionsFromText } from "../lib/wordExtractor"
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-// 👉 ĐÃ THÊM LẠI SelectValue VÀO ĐÂY:
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -291,6 +290,7 @@ const CreateAssignment = () => {
 
   const [bankSearch, setBankSearch] = useState("");
   const [bankSubject, setBankSubject] = useState("all");
+  const [bankSemester, setBankSemester] = useState("all"); // Đã thêm bankSemester
   const [bankFolder, setBankFolder] = useState("all"); 
   const [bankExam, setBankExam] = useState("all"); 
   const [bankType, setBankType] = useState("all"); 
@@ -865,14 +865,26 @@ const CreateAssignment = () => {
   const availableFolders = [...new Set(questions.filter(q => bankSubject === "all" || q.subject === bankSubject).map(q => q.folderName).filter(Boolean))];
   const availableExams = [...new Set(questions.filter(q => (bankSubject === "all" || q.subject === bankSubject) && (bankFolder === "all" || q.folderName === bankFolder)).map(q => q.examName).filter(Boolean))];
 
+  // 👉 ĐÃ THÊM LOGIC LỌC THEO "CẢ NĂM" (Bao gồm HK1, HK2, Cả năm) CHO KHO CÂU HỎI
   const filteredBankQuestions = questions.filter(q => {
     const matchSearch = (q.content || "").toLowerCase().includes(bankSearch.toLowerCase());
     const matchSubject = bankSubject === "all" || q.subject === bankSubject;
+    
+    let matchSemester = false;
+    const qSem = String(q.semester || "1");
+    if (bankSemester === "all") {
+       matchSemester = true;
+    } else if (bankSemester === "Cả năm") {
+       matchSemester = ["1", "2", "Cả năm"].includes(qSem);
+    } else {
+       matchSemester = qSem === bankSemester;
+    }
+
     const matchType = bankType === "all" || q.type === bankType;
     const matchFolder = bankFolder === "all" || q.folderName === bankFolder;
     const matchExam = bankExam === "all" || q.examName === bankExam;
     const matchPoints = !bankPoints || Number(q.points) === Number(bankPoints);
-    return matchSearch && matchSubject && matchType && matchFolder && matchExam && matchPoints;
+    return matchSearch && matchSubject && matchSemester && matchType && matchFolder && matchExam && matchPoints;
   });
 
   const handleSelectAllFiltered = () => {
@@ -980,6 +992,7 @@ const CreateAssignment = () => {
                         <SelectContent position="popper" sideOffset={4} className="bg-white">
                           <SelectItem value="1">Học kỳ 1</SelectItem>
                           <SelectItem value="2">Học kỳ 2</SelectItem>
+                          <SelectItem value="Cả năm">Cả năm</SelectItem>
                         </SelectContent>
                       </Select>
                   </div>
@@ -1189,18 +1202,14 @@ const CreateAssignment = () => {
                                       </CardHeader>
                                       <CardContent className="p-4 space-y-4 bg-white">
                                         <div className="flex flex-col">
-                                            {/* 👉 ĐÃ SỬA LỖI: CÔNG THỨC TOÁN HIỂN THỊ CHUẨN TRONG TEXT EDITOR */}
                                             <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={q.content} onChange={(val) => handleExtractedChange(q.tempId, 'content', val)} />
-                                            {/* Phần khung xem trước đã được loại bỏ để tránh rườm rà, nó sẽ tự hiện trong Editor! */}
                                             
-                                            {/* Nút bật/tắt Đính kèm */}
                                             {!openExtractedMediaPanels[q.tempId] && !q.videoFile && !q.videoUrl && (
                                                <Button type="button" variant="ghost" size="sm" onClick={() => setOpenExtractedMediaPanels(prev => ({...prev, [q.tempId]: true}))} className="mt-2 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 font-bold self-start w-max">
                                                   <Video className="w-4 h-4 mr-2" /> Thêm Video / Audio / Link
                                                </Button>
                                             )}
 
-                                            {/* Vùng đính kèm mở rộng */}
                                             {(openExtractedMediaPanels[q.tempId] || q.videoFile || q.videoUrl) && (
                                                <div className="mt-3 p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl relative">
                                                   <div className="flex justify-between items-center mb-3">
@@ -1210,7 +1219,6 @@ const CreateAssignment = () => {
                                                      </Button>
                                                   </div>
                                                   
-                                                  {/* 👉 HIỂN THỊ TRÌNH PHÁT VIDEO / AUDIO */}
                                                   {q.videoFile || (q.videoUrl && !q.videoUrl.includes("youtube") && !q.videoUrl.includes("drive.google.com")) ? (
                                                       <div className="relative w-full max-w-[450px] mx-auto rounded-xl overflow-hidden border border-indigo-200 shadow-sm bg-black group flex flex-col items-center justify-center p-4">
                                                           {isAudioFile(q.videoUrl) || (q.videoFile && q.videoFile.type.includes("audio")) ? (
@@ -1270,46 +1278,39 @@ const CreateAssignment = () => {
                                         
                                         <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-3">
                                           <h4 className="text-sm font-bold text-emerald-700 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Hướng dẫn giải</h4>
-                                          {/* 👉 ĐÃ SỬA LỖI: Hiện phần xem trước phân số trực tiếp trong RichTextEditor */}
                                           <RichTextEditor value={q.essayAnswerText} onChange={(val) => handleExtractedChange(q.tempId, 'essayAnswerText', val)} />
                                         </div>
 
                                         {q.type === 'multiple_choice' && (
                                           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3 mt-4">
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                               {q.options.map((opt, i) => {
                                                 const letter = String.fromCharCode(65 + i);
                                                 return (
                                                 <div key={i} className="flex flex-col gap-1">
-                                                    <div className="flex items-start gap-2">
+                                                    <div className="flex items-center gap-2">
                                                       <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base mt-2">{letter}.</span>
                                                       <div className="flex-1 flex items-center gap-2">
-                                                        <Input className={`h-11 rounded-xl bg-white text-sm sm:text-base border-sky-100`} value={q.options[i]} onChange={(e) => handleExtractedOptionChange(q.tempId, i, e.target.value)} placeholder={`Gõ đáp án ${letter}...`} />
-                                                        <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: q.tempId, targetOptionIndex: i, isExtracted: true })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
+                                                        <Input className="h-11 rounded-xl bg-white text-sm sm:text-base border-sky-100" value={q.options[i]} onChange={(e) => handleExtractedOptionChange(q.tempId, i, e.target.value)} />
+                                                        <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: q.tempId, targetOptionIndex: i, isExtracted: true, isEditing: false })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
                                                       </div>
-                                                      {q.options.length > 2 && (
-                                                          <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveExtractedOption(q.tempId, i)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 mt-1.5"><Trash2 className="w-4 h-4"/></Button>
-                                                      )}
+                                                      {q.options.length > 2 && <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveExtractedOption(q.tempId, i)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 mt-1.5"><Trash2 className="w-4 h-4"/></Button>}
                                                     </div>
-                                                    {/* 👉 SỬA LỖI: Hiện phần xem trước phân số ở dưới Input đáp án */}
-                                                    {q.options[i] && q.options[i].includes('$$') && (
-                                                        <div className="ml-8 p-2 bg-white border border-sky-100 rounded-lg text-sm text-sky-900 q-content-view flex items-center"
+                                                    {q.options[i] && q.options[i].includes('\\') && (
+                                                        <div className="ml-8 p-2 bg-white border border-sky-100 rounded-lg text-sm text-sky-900 q-content-view whitespace-pre-wrap flex items-center"
                                                              dangerouslySetInnerHTML={{ __html: renderLatexContent(q.options[i]) }}
                                                         />
                                                     )}
                                                 </div>
                                               )})}
                                             </div>
-                                            <div className="flex justify-between items-center pt-2 gap-3 border-t border-slate-200 mt-2">
-                                              <Button type="button" variant="ghost" size="sm" onClick={() => handleAddExtractedOption(q.tempId)} className="text-sky-600 hover:bg-sky-100 rounded-lg"><PlusCircle className="w-4 h-4 mr-1"/> Thêm đáp án</Button>
+                                            <div className="flex justify-between items-center pt-2 border-t border-slate-200 mt-2">
+                                              <Button type="button" variant="ghost" size="sm" onClick={() => handleAddExtractedOption(q.tempId)} className="text-indigo-600 hover:bg-indigo-100 rounded-lg"><PlusCircle className="w-4 h-4 mr-1"/> Thêm đáp án</Button>
                                               <div className="flex items-center gap-2">
                                                 <label className="text-xs font-bold text-rose-500">ĐÁP ÁN ĐÚNG:</label>
-                                                {/* 👉 ĐÃ FIX: CHUẨN SELECT TRÁNH CHỒNG CHỮ */}
                                                 <Select value={q.correctAnswer || ""} onValueChange={(val) => handleExtractedChange(q.tempId, 'correctAnswer', val)}>
-                                                  <SelectTrigger className="h-9 w-24 bg-white text-rose-600 font-bold border-rose-200 rounded-lg [&>span]:truncate">
-                                                    <SelectValue placeholder="Chọn" />
-                                                  </SelectTrigger>
-                                                  <SelectContent>
+                                                  <SelectTrigger className="h-9 w-24 bg-white text-rose-600 font-bold border-rose-200 rounded-lg"><span className="truncate">{q.correctAnswer ? `Câu ${q.correctAnswer}` : "Chọn"}</span></SelectTrigger>
+                                                  <SelectContent position="popper" className="bg-white z-50">
                                                     {q.options.map((_, i) => {
                                                       const l = String.fromCharCode(65 + i);
                                                       return <SelectItem key={l} value={l}>Câu {l}</SelectItem>
@@ -1345,12 +1346,13 @@ const CreateAssignment = () => {
                         </div>
 
                         <div className="flex flex-wrap items-center gap-3">
-                          {/* 👉 ĐÃ FIX: CHUẨN SELECT TRÁNH CHỒNG CHỮ */}
                           <Select value={bankType || "all"} onValueChange={(val) => {setBankType(val); if(val !== 'essay') setBankPoints("");}}>
-                             <SelectTrigger className="h-10 w-[140px] bg-white border-sky-200 font-bold text-sky-700 [&>span]:truncate">
-                               <SelectValue placeholder="Tất cả loại" />
+                             <SelectTrigger className="h-10 w-[140px] bg-white border-sky-200 font-bold text-sky-700">
+                               <span className="truncate">
+                                 {bankType === 'all' ? 'Tất cả loại' : bankType === 'multiple_choice' ? 'Trắc nghiệm' : 'Tự luận'}
+                               </span>
                              </SelectTrigger>
-                             <SelectContent>
+                             <SelectContent position="popper" sideOffset={4} className="bg-white max-h-[300px]">
                                <SelectItem value="all">Tất cả loại</SelectItem>
                                <SelectItem value="multiple_choice">Trắc nghiệm</SelectItem>
                                <SelectItem value="essay">Tự luận</SelectItem>
@@ -1358,32 +1360,45 @@ const CreateAssignment = () => {
                           </Select>
                           
                           <Select value={bankSubject || "all"} onValueChange={(val) => setBankSubject(val)}>
-                            <SelectTrigger className="h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700 [&>span]:truncate">
-                              <SelectValue placeholder="Tất cả môn" />
+                            <SelectTrigger className="h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700">
+                              <span className="truncate">{bankSubject === 'all' ? 'Tất cả môn' : bankSubject}</span>
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent position="popper" sideOffset={4} className="bg-white max-h-[300px]">
                               <SelectItem value="all">Tất cả môn</SelectItem>
                               {teacherSubjects.map((sub, idx) => (
                                 <SelectItem key={idx} value={sub}>Môn: {sub}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
+                          
+                          {/* 👉 BỘ LỌC THEO HỌC KỲ CHO KHO CÂU HỎI */}
+                          <Select value={bankSemester} onValueChange={setBankSemester}>
+                            <SelectTrigger className="h-10 w-[150px] bg-white border-sky-200 font-bold text-sky-700">
+                              <span className="truncate">{bankSemester === 'all' ? 'Tất cả Học kỳ' : bankSemester === 'Cả năm' ? 'Cả năm' : `Học kỳ ${bankSemester}`}</span>
+                            </SelectTrigger>
+                            <SelectContent position="popper" sideOffset={4} className="bg-white max-h-[300px]">
+                              <SelectItem value="all">Tất cả Học kỳ</SelectItem>
+                              <SelectItem value="1">Học kỳ 1</SelectItem>
+                              <SelectItem value="2">Học kỳ 2</SelectItem>
+                              <SelectItem value="Cả năm">Cả năm</SelectItem>
+                            </SelectContent>
+                          </Select>
 
                           <Select value={bankFolder || "all"} onValueChange={(val) => { setBankFolder(val); setBankExam("all"); }}>
-                            <SelectTrigger className="h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700 [&>span]:truncate">
-                              <SelectValue placeholder="Tất cả Thư mục" />
+                            <SelectTrigger className="h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700">
+                              <span className="truncate">{bankFolder === 'all' ? 'Tất cả Thư mục' : bankFolder}</span>
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent position="popper" sideOffset={4} className="bg-white max-h-[300px]">
                               <SelectItem value="all">Tất cả Thư mục</SelectItem>
                               {availableFolders.map((f, idx) => (<SelectItem key={idx} value={f}>{f}</SelectItem>))}
                             </SelectContent>
                           </Select>
 
                           <Select value={bankExam || "all"} onValueChange={setBankExam}>
-                            <SelectTrigger className="h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700 [&>span]:truncate">
-                              <SelectValue placeholder="Tất cả Đề thi" />
+                            <SelectTrigger className="h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700">
+                              <span className="truncate">{bankExam === 'all' ? 'Tất cả Đề thi' : bankExam}</span>
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent position="popper" sideOffset={4} className="bg-white max-h-[300px]">
                               <SelectItem value="all">Tất cả Đề thi</SelectItem>
                               {availableExams.map((e, idx) => (<SelectItem key={idx} value={e}>{e}</SelectItem>))}
                             </SelectContent>
@@ -1470,23 +1485,14 @@ const CreateAssignment = () => {
                           <CardContent className="p-4 sm:p-5 space-y-4 relative z-10">
                             <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
                               <div className={`flex-1 transition-all ${isSlotEmpty ? 'border-dashed border-2 border-slate-300 rounded-xl p-1 bg-white' : ''}`}>
-                                {/* 👉 SỬA LỖI: Hiện phần xem trước phân số ở dưới Input Đề bài */}
                                 <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={q.content} onChange={(val) => handleManualChange(q.tempId, 'content', val)} />
-                                {q.content && q.content.includes('$$') && (
-                                    <div className="mt-2 p-3 bg-sky-50 border border-sky-100 rounded-lg text-slate-700 text-sm font-medium">
-                                        <div className="text-xs font-bold text-sky-600 uppercase mb-1">Xem trước Đề bài:</div>
-                                        <div dangerouslySetInnerHTML={{ __html: renderLatexContent(q.content) }} />
-                                    </div>
-                                )}
                                 
-                                {/* Nút bật/tắt Đính kèm */}
                                 {!openMediaPanels[q.tempId] && !q.videoFile && !q.videoUrl && (
                                    <Button type="button" variant="ghost" size="sm" onClick={() => setOpenMediaPanels(prev => ({...prev, [q.tempId]: true}))} className="mt-2 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 font-bold self-start w-max">
                                       <Video className="w-4 h-4 mr-2" /> Thêm Video / Audio / Link
                                    </Button>
                                 )}
 
-                                {/* Vùng đính kèm mở rộng */}
                                 {(openMediaPanels[q.tempId] || q.videoFile || q.videoUrl) && (
                                    <div className="mt-3 p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl relative">
                                       <div className="flex justify-between items-center mb-3">
@@ -1496,7 +1502,6 @@ const CreateAssignment = () => {
                                          </Button>
                                       </div>
                                       
-                                      {/* 👉 HIỂN THỊ TRÌNH PHÁT VIDEO / AUDIO */}
                                       {q.videoFile || (q.videoUrl && !q.videoUrl.includes("youtube") && !q.videoUrl.includes("drive.google.com")) ? (
                                           <div className="relative w-full max-w-[450px] mx-auto rounded-xl overflow-hidden border border-indigo-200 shadow-sm bg-black group flex flex-col items-center justify-center p-4">
                                               {isAudioFile(q.videoUrl) || (q.videoFile && q.videoFile.type.includes("audio")) ? (
@@ -1564,14 +1569,7 @@ const CreateAssignment = () => {
                             
                             <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-3">
                               <h4 className="text-sm font-bold text-emerald-700 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Hướng dẫn giải</h4>
-                              {/* 👉 SỬA LỖI: Hiện phần xem trước phân số ở dưới Input Lời giải */}
                               <RichTextEditor value={q.essayAnswerText} onChange={(val) => handleManualChange(q.tempId, 'essayAnswerText', val)} />
-                              {q.essayAnswerText && q.essayAnswerText.includes('$$') && (
-                                  <div className="mt-2 p-3 bg-white border border-emerald-100 rounded-lg text-emerald-900 text-sm font-medium">
-                                      <div className="text-xs font-bold text-emerald-600 uppercase mb-1">Xem trước Lời giải:</div>
-                                      <div dangerouslySetInnerHTML={{ __html: renderLatexContent(q.essayAnswerText) }} />
-                                  </div>
-                              )}
                             </div>
 
                             {q.type === 'multiple_choice' && (
@@ -1591,12 +1589,6 @@ const CreateAssignment = () => {
                                               <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveManualOption(q.tempId, optIdx)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 mt-1.5"><Trash2 className="w-4 h-4"/></Button>
                                           )}
                                         </div>
-                                        {/* 👉 SỬA LỖI: Hiện phần xem trước phân số ở dưới Input đáp án */}
-                                        {q.options[optIdx] && q.options[optIdx].includes('$$') && (
-                                            <div className="ml-8 p-2 bg-white border border-sky-100 rounded-lg text-sm text-sky-900 q-content-view flex items-center"
-                                                 dangerouslySetInnerHTML={{ __html: renderLatexContent(q.options[optIdx]) }}
-                                            />
-                                        )}
                                     </div>
                                   )})}
                                 </div>
@@ -1604,7 +1596,6 @@ const CreateAssignment = () => {
                                   <Button type="button" variant="ghost" size="sm" onClick={() => handleAddManualOption(q.tempId)} className="text-sky-600 hover:bg-sky-100"><PlusCircle className="w-4 h-4 mr-2"/> Thêm đáp án</Button>
                                   <div className="flex items-center gap-2">
                                     <label className="text-sm font-bold text-rose-600">ĐÁP ÁN ĐÚNG:</label>
-                                    {/* 👉 ĐÃ FIX: CHUẨN SELECT TRÁNH CHỒNG CHỮ */}
                                     <Select value={q.correctAnswer || ""} onValueChange={(val) => handleManualChange(q.tempId, 'correctAnswer', val)}>
                                       <SelectTrigger className="h-10 w-28 bg-white text-rose-600 font-bold border-rose-200 rounded-xl [&>span]:truncate">
                                         <SelectValue placeholder="Chọn" />

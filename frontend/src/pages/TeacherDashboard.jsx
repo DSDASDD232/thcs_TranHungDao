@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import axios from "../lib/axios";
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -8,24 +8,68 @@ import { saveAs } from 'file-saver';
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress"; 
+import { processWordFile, extractQuestionsFromText } from "../lib/wordExtractor"; 
 
 // Import các Icon
 import { 
   BookOpen, FileQuestion, LogOut, CheckSquare, School,
   Loader2, PlusCircle, Trash2, Pencil, Image as ImageIcon, X,
   UserCircle, Users, CheckCircle2, ArrowUpDown, Menu, Trophy, History, Database, Search, Filter,
-  CalendarClock, Calendar, Lock, AlertCircle, FileCheck, Clock, Eye, Download, Sparkles, Medal, BarChart
+  CalendarClock, Calendar, Lock, AlertCircle, FileCheck, Clock, Eye, Download, Sparkles, Medal, BarChart, Eraser, PenTool, ArrowRight, FolderOpen, Video, FileAudio, Sigma
 } from "lucide-react";
 
+import RichTextEditor from "@/components/ui/RichTextEditor";
+import katex from 'katex';
 import 'katex/dist/katex.min.css';
+import 'mathlive';
 
 // ==========================================
 // CÁC HÀM HỖ TRỢ CHUNG
 // ==========================================
+const renderLatexContent = (htmlString) => {
+  if (!htmlString) return "";
+  let parsedHtml = htmlString.replace(/\$\$([\s\S]*?)\$\$/g, (match, math) => {
+    try { return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false }); } 
+    catch (e) { return match; }
+  });
+  parsedHtml = parsedHtml.replace(/\$([^\$]+)\$/g, (match, math) => {
+    try { return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false }); } 
+    catch (e) { return match; }
+  });
+  return parsedHtml;
+};
+
+const getYoutubeEmbedUrl = (url) => {
+  if (!url) return "";
+  if (url.includes("youtube.com/watch?v=")) return url.replace("watch?v=", "embed/").split("&")[0];
+  if (url.includes("youtu.be/")) return url.replace("youtu.be/", "youtube.com/embed/").split("?")[0];
+  return url;
+};
+
+const getDriveEmbedUrl = (url) => {
+  if (!url) return "";
+  let fileId = null;
+  if (url.includes("/file/d/")) {
+    const matches = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (matches && matches[1]) fileId = matches[1];
+  } else if (url.includes("?id=")) {
+    const matches = url.match(/\?id=([a-zA-Z0-9_-]+)/);
+    if (matches && matches[1]) fileId = matches[1];
+  }
+  if (fileId) return `https://drive.google.com/file/d/${fileId}/preview`;
+  return url;
+};
+
+const isAudioFile = (url) => {
+  if (!url) return false;
+  return url.toLowerCase().match(/\.(mp3|wav|m4a|ogg)$/) != null;
+};
+
 const getRankMedal = (index) => {
   if (index === 0) return <Medal className="w-8 h-8 text-amber-400 drop-shadow-md" fill="currentColor" />;
   if (index === 1) return <Medal className="w-8 h-8 text-slate-300 drop-shadow-md" fill="currentColor" />;
@@ -283,7 +327,7 @@ const MyClassesTab = ({ isLoadingData, filteredClasses, allClasses, classStatsMa
 );
 
 // ==========================================
-// 2. TAB BẢNG THI ĐUA (ĐÃ FIX LỖI ĐÈ CHỮ HOÀN TOÀN)
+// 2. TAB BẢNG THI ĐUA (ĐÃ FIX LỖI ĐÈ CHỮ VÀ TIẾNG ANH)
 // ==========================================
 const LeaderboardTab = ({ 
   leaderboardTimeFilter, setLeaderboardTimeFilter, 
@@ -308,28 +352,27 @@ const LeaderboardTab = ({
       </div>
       <div className="flex flex-wrap gap-2 w-full xl:w-auto overflow-x-auto pb-2 sm:pb-0">
         
-        {/* 👉 FIX: BỘ LỌC LOẠI BÀI */}
+        {/* 👉 ĐÃ FIX TIẾNG ANH: Sử dụng text thủ công thay thế SelectValue */}
         <Select value={leaderboardTypeFilter} onValueChange={setLeaderboardTypeFilter}>
-          <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-amber-50 min-w-[200px] border-none font-bold text-amber-800 shadow-sm">
-            <span className="truncate">
-              {leaderboardTypeFilter === 'all' ? 'Tất cả bài làm' : leaderboardTypeFilter === 'homework' ? 'Bài Tập Về Nhà' : 'Đề Kiểm Tra'}
-            </span>
+          <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-amber-50 min-w-[180px] border-none font-bold text-amber-800 shadow-sm">
+             <span className="truncate">
+               {leaderboardTypeFilter === 'all' ? 'Tất cả bài làm' : leaderboardTypeFilter === 'homework' ? 'Bài Tập Về Nhà' : 'Đề Kiểm Tra'}
+             </span>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent position="popper" className="bg-white z-50">
             <SelectItem value="all">Tất cả bài làm</SelectItem>
             <SelectItem value="homework">Bài Tập Về Nhà</SelectItem>
             <SelectItem value="exam">Đề Kiểm Tra</SelectItem>
           </SelectContent>
         </Select>
 
-        {/* 👉 FIX: BỘ LỌC MÔN */}
         <Select value={leaderboardSubjectFilter} onValueChange={setLeaderboardSubjectFilter}>
           <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[160px] border-none font-bold text-sky-800 shadow-sm">
-            <span className="truncate">
-              {leaderboardSubjectFilter === 'all' ? 'Tất cả môn của tôi' : `Môn: ${leaderboardSubjectFilter}`}
-            </span>
+             <span className="truncate">
+               {leaderboardSubjectFilter === 'all' ? 'Tất cả môn của tôi' : `Môn: ${leaderboardSubjectFilter}`}
+             </span>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent position="popper" className="bg-white z-50">
             <SelectItem value="all">Tất cả môn của tôi</SelectItem>
             {teacherSubjects.map(sub => (
               <SelectItem key={sub} value={sub} className="font-bold">Môn: {sub}</SelectItem>
@@ -337,17 +380,16 @@ const LeaderboardTab = ({
           </SelectContent>
         </Select>
 
-        {/* 👉 FIX: BỘ LỌC THỜI GIAN */}
         <Select value={leaderboardTimeFilter} onValueChange={setLeaderboardTimeFilter}>
           <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[160px] border-none font-bold text-sky-800 shadow-sm">
             <div className="flex items-center gap-2 truncate">
               <Calendar className="w-4 h-4 shrink-0" />
               <span className="truncate">
-                {leaderboardTimeFilter === 'week' ? 'Tuần này' : leaderboardTimeFilter === 'month' ? 'Tháng này' : leaderboardTimeFilter === 'year' ? 'Năm nay' : 'Tất cả thời gian'}
+                {leaderboardTimeFilter === 'all' ? 'Tất cả thời gian' : leaderboardTimeFilter === 'week' ? 'Tuần này' : leaderboardTimeFilter === 'month' ? 'Tháng này' : 'Năm nay'}
               </span>
             </div>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent position="popper" className="bg-white z-50">
             <SelectItem value="all">Tất cả thời gian</SelectItem>
             <SelectItem value="week">Tuần này</SelectItem>
             <SelectItem value="month">Tháng này</SelectItem>
@@ -355,17 +397,16 @@ const LeaderboardTab = ({
           </SelectContent>
         </Select>
         
-        {/* 👉 FIX: BỘ LỌC LỚP */}
         <Select value={selectedLeaderboardClass || ""} onValueChange={setSelectedLeaderboardClass}>
           <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 border-none font-bold text-sky-800 shadow-sm min-w-[140px]">
-            <span className="truncate">
-              {selectedLeaderboardClass ? (() => { 
-                const matched = allClasses.find(c => String(c._id) === String(selectedLeaderboardClass)); 
-                return matched ? `Lớp ${matched.name}` : "Đang tải..."; 
-              })() : "-- Chọn lớp --"}
-            </span>
+             <span className="truncate">
+               {selectedLeaderboardClass ? (() => { 
+                 const matched = allClasses.find(c => String(c._id) === String(selectedLeaderboardClass)); 
+                 return matched ? `Lớp ${matched.name}` : "Đang tải..."; 
+               })() : "-- Chọn lớp --"}
+             </span>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent position="popper" className="bg-white z-50">
             {!teacherProfile?.assignedClasses || teacherProfile.assignedClasses.length === 0 ? (
               <SelectItem value="none" disabled>Bạn chưa quản lý lớp</SelectItem>
             ) : (
@@ -436,19 +477,10 @@ const LeaderboardTab = ({
 )};
 
 // ==========================================
-// 3. TAB BÀI TẬP ĐÃ GIAO (ĐÃ CĂN CHỈNH LẠI CHUẨN UX/UI)
+// 3. TAB BÀI TẬP ĐÃ GIAO (ĐÃ FIX TÍNH TOÁN SĨ SỐ THỰC TẾ)
 // ==========================================
-const AssignmentsTab = ({ isLoadingData, assignments, handleDeleteAssignment, openDeadlineModal, openPasswordModal }) => {
+const AssignmentsTab = ({ isLoadingData, assignments, allClasses, handleDeleteAssignment, openDeadlineModal, openPasswordModal }) => {
   const navigate = useNavigate();
-
-  // Hàm format thời gian hiển thị gọn gàng
-  const formatDateTime = (dateString) => {
-    if (!dateString) return { time: "--", date: "--" };
-    const d = new Date(dateString);
-    const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-    const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    return { time, date };
-  };
 
   return (
     <Card className="border-sky-100/50 shadow-sm rounded-3xl overflow-hidden bg-white animate-in fade-in duration-300">
@@ -487,21 +519,23 @@ const AssignmentsTab = ({ isLoadingData, assignments, handleDeleteAssignment, op
                 const isExam = assignment.assignmentType === "exam";
                 const isDraft = assignment.status === "draft";
                 const due = formatDateTime(assignment.dueDate);
+                
                 const submittedCount = assignment.submittedCount || 0;
                 const pendingCount = assignment.pendingCount || 0;
-                const totalStudents = assignment.totalStudents || 0;
+                
+                // 👉 ĐÃ FIX: Tính toán sĩ số thực tế từ danh sách lớp (allClasses)
+                const classObj = allClasses?.find(c => c.name === assignment.targetClass);
+                const totalStudents = assignment.totalStudents || (classObj?.studentCount || 0);
                 
                 return (
                   <TableRow 
                     key={assignment._id} 
                     className={`transition-colors hover:bg-slate-50/50 ${isExam ? 'bg-indigo-50/20' : ''}`}
                   >
-                    {/* STT */}
                     <TableCell className="text-center font-bold text-slate-400 align-middle">
                       {index + 1}
                     </TableCell>
                     
-                    {/* THÔNG TIN BÀI TẬP (BỎ ICON) */}
                     <TableCell className="align-middle pl-4 py-3">
                       <div className="flex flex-col gap-1.5">
                         <p className={`font-black text-base line-clamp-2 ${isExam ? 'text-indigo-900' : 'text-sky-900'}`}>
@@ -517,28 +551,24 @@ const AssignmentsTab = ({ isLoadingData, assignments, handleDeleteAssignment, op
                       </div>
                     </TableCell>
 
-                    {/* LỚP */}
                     <TableCell className="text-center align-middle">
                       <Badge variant="outline" className="bg-white border-slate-200 text-slate-700 font-bold text-sm shadow-sm px-3">
                         {assignment.targetClass}
                       </Badge>
                     </TableCell>
 
-                    {/* SỐ CÂU */}
                     <TableCell className="text-center align-middle">
                       <span className="font-bold text-slate-600 text-base">
                         {assignment.questions?.length || 0}
                       </span>
                     </TableCell>
 
-                    {/* THỜI GIAN LÀM BÀI */}
                     <TableCell className="text-center align-middle">
                       <span className="font-bold text-slate-700">
                         {assignment.duration ? `${assignment.duration} phút` : "Không giới hạn"}
                       </span>
                     </TableCell>
 
-                    {/* HẠN NỘP */}
                     <TableCell className="text-center align-middle">
                       <div className="flex flex-col items-center justify-center">
                         <span className="font-bold text-rose-600 text-base">{due.time}</span>
@@ -546,7 +576,6 @@ const AssignmentsTab = ({ isLoadingData, assignments, handleDeleteAssignment, op
                       </div>
                     </TableCell>
 
-                    {/* ĐÃ NỘP (Dạng X/Y) */}
                     <TableCell className="text-center align-middle">
                       {isDraft ? (
                         <span className="text-slate-400">-</span>
@@ -557,7 +586,6 @@ const AssignmentsTab = ({ isLoadingData, assignments, handleDeleteAssignment, op
                       )}
                     </TableCell>
 
-                    {/* CHỜ CHẤM */}
                     <TableCell className="text-center align-middle">
                       {isDraft ? (
                         <span className="text-slate-400">-</span>
@@ -568,7 +596,6 @@ const AssignmentsTab = ({ isLoadingData, assignments, handleDeleteAssignment, op
                       )}
                     </TableCell>
 
-                    {/* THAO TÁC (ĐÃ BỎ NÚT SỬA) */}
                     <TableCell className="text-center align-middle">
                       <div className="flex justify-center gap-1">
                         <Button 
@@ -943,16 +970,17 @@ const TeacherDashboard = () => {
                 <Input placeholder="Tìm theo tên học sinh..." className="pl-10 h-11 rounded-xl bg-slate-50 border-sky-100" value={studentSearchQuery} onChange={(e) => setStudentSearchQuery(e.target.value)} />
               </div>
               
-              {/* LỌC SẮP XẾP */}
               <Select value={studentSortOption} onValueChange={setStudentSortOption}>
-                <SelectTrigger className="h-11 rounded-xl bg-sky-50 border-sky-100 font-bold text-sky-800 sm:w-[180px]">
-                  <span className="flex items-center truncate">
-                    <ArrowUpDown className="w-4 h-4 mr-2 shrink-0" />
-                    {studentSortOption === "name" ? "Tên A-Z" : studentSortOption === "most_submissions" ? "Nộp nhiều nhất" : "Nộp gần nhất"}
-                  </span>
+                <SelectTrigger className="h-11 rounded-xl bg-sky-50 border-sky-100 font-bold text-sky-800 sm:w-[180px] [&>span]:truncate">
+                  <div className="flex items-center gap-2">
+                    <ArrowUpDown className="w-4 h-4 shrink-0" />
+                    <SelectValue placeholder="Sắp xếp" />
+                  </div>
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="name">Tên A-Z</SelectItem><SelectItem value="most_submissions">Nộp nhiều nhất</SelectItem><SelectItem value="latest_submission">Nộp gần nhất</SelectItem>
+                <SelectContent position="popper" className="bg-white z-50">
+                  <SelectItem value="name">Tên A-Z</SelectItem>
+                  <SelectItem value="most_submissions">Nộp nhiều nhất</SelectItem>
+                  <SelectItem value="latest_submission">Nộp gần nhất</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1188,6 +1216,7 @@ const TeacherDashboard = () => {
           <AssignmentsTab 
             isLoadingData={isLoadingData} 
             assignments={assignments} 
+            allClasses={allClasses} // Đã thêm props này để map sĩ số
             handleDeleteAssignment={handleDeleteAssignment} 
             openDeadlineModal={openDeadlineModal}
             openPasswordModal={handleOpenPasswordModal} 

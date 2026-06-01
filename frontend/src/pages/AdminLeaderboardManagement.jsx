@@ -5,13 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { 
   Trophy, Medal, BarChart as BarChartIcon, Calendar, Filter, Loader2, Sparkles, Eye, Search, BarChart3
 } from "lucide-react";
-
-// KHÔNG CẦN IMPORT BẤT KỲ THƯ VIỆN BIỂU ĐỒ NÀO NỮA!
 
 const AdminLeaderboardManagement = () => {
   const [adminLeaderboard, setAdminLeaderboard] = useState([]);
@@ -122,31 +120,63 @@ const AdminLeaderboardManagement = () => {
         <div className="flex flex-wrap gap-3 w-full lg:w-auto">
           <div className="flex items-center gap-1 sm:gap-2 bg-slate-50 p-1 sm:p-1.5 rounded-xl border border-slate-200 shadow-sm">
             <Calendar className="w-4 h-4 text-slate-500 ml-2 hidden sm:block" />
+            
+            {/* 👉 BỘ LỌC NĂM (Đã loại bỏ SelectValue, ép cứng text tiếng Việt) */}
             <Select value={lbYear} onValueChange={setLbYear}>
-              <SelectTrigger className="h-9 bg-white border-none font-bold text-sky-700 shadow-sm w-[90px] sm:w-[100px]"><span className="truncate">Năm {lbYear}</span></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="2024">Năm 2024</SelectItem><SelectItem value="2025">Năm 2025</SelectItem><SelectItem value="2026">Năm 2026</SelectItem><SelectItem value="2027">Năm 2027</SelectItem>
+              <SelectTrigger className="h-9 bg-white border-none font-bold text-sky-700 shadow-sm w-[100px] sm:w-[110px]">
+                 <span className="truncate">Năm {lbYear}</span>
+              </SelectTrigger>
+              <SelectContent position="popper" className="bg-white z-50">
+                <SelectItem value="2024">Năm 2024</SelectItem>
+                <SelectItem value="2025">Năm 2025</SelectItem>
+                <SelectItem value="2026">Năm 2026</SelectItem>
+                <SelectItem value="2027">Năm 2027</SelectItem>
               </SelectContent>
             </Select>
+
+            {/* 👉 BỘ LỌC THÁNG */}
             <Select value={lbMonth} onValueChange={(val) => { setLbMonth(val); if(val === "all") setLbWeek("all"); }}>
-              <SelectTrigger className="h-9 bg-white border-none font-bold text-sky-700 shadow-sm w-[110px] sm:w-[120px]"><span className="truncate">{lbMonth === "all" ? "Cả năm" : `Tháng ${lbMonth}`}</span></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Cả năm</SelectItem>{[...Array(12)].map((_, i) => (<SelectItem key={i+1} value={(i+1).toString()}>Tháng {i+1}</SelectItem>))}
+              <SelectTrigger className="h-9 bg-white border-none font-bold text-sky-700 shadow-sm w-[110px] sm:w-[120px]">
+                 <span className="truncate">{lbMonth === "all" ? "Cả năm" : `Tháng ${lbMonth}`}</span>
+              </SelectTrigger>
+              <SelectContent position="popper" className="bg-white z-50 max-h-[300px]">
+                <SelectItem value="all">Cả năm</SelectItem>
+                {[...Array(12)].map((_, i) => (
+                  <SelectItem key={i+1} value={(i+1).toString()}>Tháng {i+1}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
+
+            {/* 👉 BỘ LỌC TUẦN */}
             <Select value={lbWeek} onValueChange={setLbWeek} disabled={lbMonth === "all"}>
-              <SelectTrigger className="h-9 bg-white border-none font-bold text-sky-700 shadow-sm w-[110px] sm:w-[120px]"><span className="truncate">{lbWeek === "all" ? "Cả tháng" : `Tuần ${lbWeek}`}</span></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Cả tháng</SelectItem><SelectItem value="1">Tuần 1</SelectItem><SelectItem value="2">Tuần 2</SelectItem><SelectItem value="3">Tuần 3</SelectItem><SelectItem value="4">Tuần 4</SelectItem><SelectItem value="5">Tuần 5</SelectItem>
+              <SelectTrigger className="h-9 bg-white border-none font-bold text-sky-700 shadow-sm w-[110px] sm:w-[120px]">
+                 <span className="truncate">{lbWeek === "all" ? "Cả tháng" : `Tuần ${lbWeek}`}</span>
+              </SelectTrigger>
+              <SelectContent position="popper" className="bg-white z-50">
+                <SelectItem value="all">Cả tháng</SelectItem>
+                <SelectItem value="1">Tuần 1</SelectItem>
+                <SelectItem value="2">Tuần 2</SelectItem>
+                <SelectItem value="3">Tuần 3</SelectItem>
+                <SelectItem value="4">Tuần 4</SelectItem>
+                <SelectItem value="5">Tuần 5</SelectItem>
               </SelectContent>
             </Select>
           </div>
+
+          {/* 👉 BỘ LỌC KHỐI LỚP */}
           <Select value={lbGradeFilter} onValueChange={setLbGradeFilter}>
-            <SelectTrigger className="h-11 sm:h-[50px] rounded-xl bg-slate-50 min-w-[120px] border border-slate-200 font-bold text-slate-700 shadow-sm">
-              <Filter className="w-4 h-4 mr-2" /><span className="truncate">{lbGradeFilter === "all" ? "Tất cả Khối" : `Khối ${lbGradeFilter}`}</span>
+            <SelectTrigger className="h-11 sm:h-[50px] rounded-xl bg-slate-50 min-w-[140px] border border-slate-200 font-bold text-slate-700 shadow-sm">
+              <div className="flex items-center gap-2">
+                 <Filter className="w-4 h-4 shrink-0" />
+                 <span className="truncate">{lbGradeFilter === "all" ? "Tất cả Khối" : `Khối ${lbGradeFilter}`}</span>
+              </div>
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tất cả Khối</SelectItem><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem>
+            <SelectContent position="popper" className="bg-white z-50">
+              <SelectItem value="all">Tất cả Khối</SelectItem>
+              <SelectItem value="6">Khối 6</SelectItem>
+              <SelectItem value="7">Khối 7</SelectItem>
+              <SelectItem value="8">Khối 8</SelectItem>
+              <SelectItem value="9">Khối 9</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -322,13 +352,23 @@ const AdminLeaderboardManagement = () => {
         </Card>
       )}
 
-      {/* DIALOG XEM CHI TIẾT */}
+      {/* DIALOG XEM CHI TIẾT LỚP */}
       <Dialog open={isClassDetailsOpen} onOpenChange={setIsClassDetailsOpen}>
         <DialogContent className="sm:max-w-[750px] w-[95%] rounded-3xl border-none p-5 sm:p-7">
           <DialogHeader><DialogTitle className="text-xl sm:text-2xl font-black text-sky-950 flex items-center gap-2"><Trophy className="w-6 h-6 text-amber-500" /> Chi tiết thi đua - {selectedClassName}</DialogTitle></DialogHeader>
           <div className="flex flex-col sm:flex-row justify-between items-center mt-3 mb-5 gap-3">
             <div className="relative w-full sm:w-1/2"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" /><Input placeholder="Tìm tên học sinh..." className="pl-10 h-11 rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-sky-500 shadow-sm" value={searchStudent} onChange={(e) => setSearchStudent(e.target.value)} /></div>
-            <Select value={sortOrder} onValueChange={setSortOrder}><SelectTrigger className="w-full sm:w-[220px] h-11 rounded-xl bg-slate-50 border-slate-200 font-bold text-slate-700 shadow-sm"><SelectValue placeholder="Sắp xếp điểm" /></SelectTrigger><SelectContent><SelectItem value="desc">Điểm: Cao xuống Thấp</SelectItem><SelectItem value="asc">Điểm: Thấp lên Cao</SelectItem></SelectContent></Select>
+            
+            <Select value={sortOrder} onValueChange={setSortOrder}>
+              <SelectTrigger className="w-full sm:w-[220px] h-11 rounded-xl bg-slate-50 border-slate-200 font-bold text-slate-700 shadow-sm">
+                 <span className="truncate">{sortOrder === "desc" ? "Điểm: Cao xuống Thấp" : "Điểm: Thấp lên Cao"}</span>
+              </SelectTrigger>
+              <SelectContent position="popper" className="bg-white z-50">
+                <SelectItem value="desc">Điểm: Cao xuống Thấp</SelectItem>
+                <SelectItem value="asc">Điểm: Thấp lên Cao</SelectItem>
+              </SelectContent>
+            </Select>
+
           </div>
           {classDetailsLoading ? (
              <div className="py-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-sky-500" /></div>

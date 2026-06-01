@@ -6,7 +6,7 @@ import { processWordFile, extractQuestionsFromText } from "../lib/wordExtractor"
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
@@ -486,7 +486,17 @@ const QuestionBank = () => {
      const matchSearch = set.folderName?.toLowerCase().includes(searchQuery.toLowerCase());
      const matchSub = folderSubject === "all" || set.subject === folderSubject;
      const matchGrade = folderGrade === "all" || set.grade === folderGrade;
-     const matchSemester = folderSemester === "all" || set.semester === folderSemester;
+     
+     // SỬA LOGIC LỌC HỌC KỲ "CẢ NĂM" GỒM HK1, HK2, CẢ NĂM
+     let matchSemester = false;
+     if (folderSemester === "all") {
+         matchSemester = true;
+     } else if (folderSemester === "Cả năm") {
+         matchSemester = ["1", "2", "Cả năm"].includes(set.semester);
+     } else {
+         matchSemester = set.semester === folderSemester;
+     }
+
      return matchSearch && matchSub && matchGrade && matchSemester;
   });
 
@@ -543,7 +553,8 @@ const QuestionBank = () => {
                     <SelectTrigger className="h-10 w-auto min-w-[140px] max-w-[200px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl">
                       <span className="truncate">{folderSubject === 'all' ? 'Tất cả môn' : `Môn: ${folderSubject}`}</span>
                     </SelectTrigger>
-                    <SelectContent>
+                    {/* THÊM position="popper" VÀ bg-white */}
+                    <SelectContent position="popper" className="bg-white z-50">
                       <SelectItem value="all">Tất cả môn</SelectItem>
                       {teacherSubjects.map(sub => <SelectItem key={sub} value={sub} className="font-bold">Môn: {sub}</SelectItem>)}
                     </SelectContent>
@@ -553,7 +564,7 @@ const QuestionBank = () => {
                     <SelectTrigger className="h-10 w-[120px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl">
                       <span className="truncate">{folderGrade === 'all' ? 'Tất cả khối' : `Khối ${folderGrade}`}</span>
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper" className="bg-white z-50">
                       <SelectItem value="all">Tất cả khối</SelectItem>
                       <SelectItem value="6">Khối 6</SelectItem>
                       <SelectItem value="7">Khối 7</SelectItem>
@@ -564,12 +575,13 @@ const QuestionBank = () => {
 
                   <Select value={folderSemester} onValueChange={setFolderSemester}>
                     <SelectTrigger className="h-10 w-[130px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl">
-                      <span className="truncate">{folderSemester === 'all' ? 'Tất cả học kỳ' : `Học kỳ ${folderSemester}`}</span>
+                      <span className="truncate">{folderSemester === 'all' ? 'Tất cả học kỳ' : folderSemester === 'Cả năm' ? 'Cả năm' : `Học kỳ ${folderSemester}`}</span>
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper" className="bg-white z-50">
                       <SelectItem value="all">Tất cả học kỳ</SelectItem>
                       <SelectItem value="1">Học kỳ 1</SelectItem>
                       <SelectItem value="2">Học kỳ 2</SelectItem>
+                      <SelectItem value="Cả năm">Cả năm</SelectItem>
                     </SelectContent>
                   </Select>
 
@@ -601,7 +613,7 @@ const QuestionBank = () => {
                          <h3 className="text-xl font-black text-sky-950 mb-3 line-clamp-2 group-hover:text-sky-600 transition-colors pr-8">{folder.folderName}</h3>
                          <div className="flex flex-wrap gap-2 border-t border-slate-50 pt-3">
                            <Badge variant="outline" className="border-slate-200 text-slate-500 font-medium rounded-lg">Khối {folder.grade}</Badge>
-                           <Badge variant="outline" className="border-amber-200 text-amber-600 font-medium rounded-lg bg-amber-50">HK {folder.semester}</Badge>
+                           <Badge variant="outline" className="border-amber-200 text-amber-600 font-medium rounded-lg bg-amber-50">{folder.semester === 'Cả năm' ? 'Cả năm' : `HK ${folder.semester}`}</Badge>
                            <Badge variant="outline" className="border-slate-200 text-sky-600 font-bold bg-sky-50 rounded-lg">{folder.subject}</Badge>
                          </div>
                        </CardContent>
@@ -618,7 +630,7 @@ const QuestionBank = () => {
             <Card className="border-none shadow-xl rounded-3xl bg-white overflow-hidden">
               <CardHeader className="bg-sky-500 text-white p-6 sm:p-8 border-b border-sky-600">
                 <CardTitle className="text-2xl sm:text-3xl font-black flex items-center gap-3"><FolderOpen className="w-7 h-7 sm:w-8 sm:h-8"/> Thư mục: {currentFolder.folderName}</CardTitle>
-                <p className="text-sky-50 font-medium mt-2 text-sm sm:text-base">Môn: {currentFolder.subject} • Khối: {currentFolder.grade} • HK: {currentFolder.semester}</p>
+                <p className="text-sky-50 font-medium mt-2 text-sm sm:text-base">Môn: {currentFolder.subject} • Khối: {currentFolder.grade} • {currentFolder.semester === 'Cả năm' ? 'Cả năm' : `HK: ${currentFolder.semester}`}</p>
               </CardHeader>
               
               <CardContent className="p-4 sm:p-8 bg-slate-50/50 min-h-[400px]">
@@ -681,7 +693,11 @@ const QuestionBank = () => {
                          <SelectTrigger className="h-10 w-[180px] bg-slate-50 border-indigo-100 font-bold text-indigo-700 rounded-xl">
                            <span className="truncate">{filterType === 'all' ? 'Tất cả loại' : filterType === 'multiple_choice' ? 'Trắc nghiệm' : 'Tự luận'}</span>
                          </SelectTrigger>
-                         <SelectContent><SelectItem value="all">Tất cả loại</SelectItem><SelectItem value="multiple_choice">Trắc nghiệm</SelectItem><SelectItem value="essay">Tự luận</SelectItem></SelectContent>
+                         <SelectContent position="popper" className="bg-white z-50">
+                           <SelectItem value="all">Tất cả loại</SelectItem>
+                           <SelectItem value="multiple_choice">Trắc nghiệm</SelectItem>
+                           <SelectItem value="essay">Tự luận</SelectItem>
+                         </SelectContent>
                        </Select>
                        {filterType === 'essay' && (<Input type="number" step="0.25" placeholder="Lọc theo điểm..." value={filterPoints} onChange={(e) => setFilterPoints(e.target.value)} className="h-10 w-[140px] bg-slate-50 border-indigo-100 font-bold text-indigo-700 rounded-xl" />)}
                     </div>
@@ -803,7 +819,7 @@ const QuestionBank = () => {
                                                       <label className="text-xs font-bold text-rose-500">ĐÁP ÁN ĐÚNG:</label>
                                                       <Select value={q.correctAnswer || ""} onValueChange={(val) => handleExtractedChange(q.tempId, 'correctAnswer', val)}>
                                                         <SelectTrigger className="h-9 w-24 bg-white text-rose-600 font-bold border-rose-200 rounded-lg"><span className="truncate">{q.correctAnswer ? `Câu ${q.correctAnswer}` : "Chọn"}</span></SelectTrigger>
-                                                        <SelectContent>
+                                                        <SelectContent position="popper" className="bg-white z-50">
                                                           {q.options.map((_, i) => {
                                                             const l = String.fromCharCode(65 + i);
                                                             return <SelectItem key={l} value={l}>Câu {l}</SelectItem>
@@ -819,7 +835,7 @@ const QuestionBank = () => {
                                     ))}
 
                                     <Button type="button" onClick={handleCommitExtraction} className="w-full h-14 rounded-2xl bg-indigo-500 hover:bg-indigo-600 text-white font-black text-lg shadow-xl shadow-indigo-200 transition-all mt-4">
-                                        XÁC NHẬN RÓT VÀO DANH SÁCH ĐANG SOẠN <ArrowRight className="ml-2 w-5 h-5"/>
+                                        XÁC NHẬN RÓT VÀO KHUNG TRỰC TIẾP <ArrowRight className="ml-2 w-5 h-5"/>
                                     </Button>
                                  </div>
                                </div>
@@ -839,8 +855,8 @@ const QuestionBank = () => {
                                 <CardContent className="p-5 space-y-4 bg-white">
                                    
                                    <div className={`grid gap-4 ${q.type === 'essay' ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-2'}`}>
-                                     <Select value={q.type} onValueChange={(val) => handleDraftChange(q.tempId, 'type', val)}><SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200 font-bold text-slate-700"><span className="truncate">{q.type === "multiple_choice" ? "Trắc nghiệm" : "Tự luận"}</span></SelectTrigger><SelectContent><SelectItem value="multiple_choice">Trắc nghiệm</SelectItem><SelectItem value="essay">Tự luận</SelectItem></SelectContent></Select>
-                                     <Select value={q.difficulty} onValueChange={(val) => handleDraftChange(q.tempId, 'difficulty', val)}><SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200 font-medium text-slate-700"><span className="truncate">{q.difficulty === 'easy' ? 'Dễ' : q.difficulty === 'hard' ? 'Khó' : 'Trung bình'}</span></SelectTrigger><SelectContent><SelectItem value="easy">Dễ</SelectItem><SelectItem value="medium">Trung bình</SelectItem><SelectItem value="hard">Khó</SelectItem></SelectContent></Select>
+                                     <Select value={q.type} onValueChange={(val) => handleDraftChange(q.tempId, 'type', val)}><SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200 font-bold text-slate-700"><span className="truncate">{q.type === "multiple_choice" ? "Trắc nghiệm" : "Tự luận"}</span></SelectTrigger><SelectContent position="popper" className="bg-white z-50"><SelectItem value="multiple_choice">Trắc nghiệm</SelectItem><SelectItem value="essay">Tự luận</SelectItem></SelectContent></Select>
+                                     <Select value={q.difficulty} onValueChange={(val) => handleDraftChange(q.tempId, 'difficulty', val)}><SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200 font-medium text-slate-700"><span className="truncate">{q.difficulty === 'easy' ? 'Dễ' : q.difficulty === 'hard' ? 'Khó' : 'Trung bình'}</span></SelectTrigger><SelectContent position="popper" className="bg-white z-50"><SelectItem value="easy">Dễ</SelectItem><SelectItem value="medium">Trung bình</SelectItem><SelectItem value="hard">Khó</SelectItem></SelectContent></Select>
                                      {q.type === "essay" && (<Input type="number" step="0.25" min="0" placeholder="Điểm ()" value={q.points} onChange={(e) => handleDraftChange(q.tempId, 'points', e.target.value)} className="h-11 rounded-xl bg-slate-50 border-indigo-200 font-black text-indigo-700 focus-visible:ring-indigo-500" />)}
                                    </div>
 
@@ -897,7 +913,7 @@ const QuestionBank = () => {
                                             <label className="text-sm font-bold text-rose-500">ĐÁP ÁN ĐÚNG:</label>
                                             <Select value={q.correctAnswer || ""} onValueChange={(val) => handleDraftChange(q.tempId, 'correctAnswer', val)}>
                                               <SelectTrigger className="h-10 w-28 bg-white text-rose-600 font-bold border-rose-200 rounded-xl"><span className="truncate">{q.correctAnswer ? `Câu ${q.correctAnswer}` : "Chọn"}</span></SelectTrigger>
-                                              <SelectContent>
+                                              <SelectContent position="popper" className="bg-white z-50">
                                                 {q.options.map((_, i) => {
                                                   const l = String.fromCharCode(65 + i);
                                                   return <SelectItem key={l} value={l}>Câu {l}</SelectItem>
@@ -1015,7 +1031,7 @@ const QuestionBank = () => {
                     <SelectTrigger className="h-12 rounded-xl bg-slate-50 border-sky-200 font-bold">
                       <span className="truncate">{newFolderInfo.subject || "Chọn môn"}</span>
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper" className="bg-white z-50">
                       {teacherSubjects.map(sub => <SelectItem key={sub} value={sub}>Môn: {sub}</SelectItem>)}
                       {teacherSubjects.length === 0 && <SelectItem value="none" disabled>Chưa có môn</SelectItem>}
                     </SelectContent>
@@ -1023,11 +1039,11 @@ const QuestionBank = () => {
                 </div>
                 <div className="space-y-2">
                   <label className="font-bold text-slate-700">Khối lớp</label>
-                  <Select value={newFolderInfo.grade} onValueChange={(val) => setNewFolderInfo({...newFolderInfo, grade: val})}><SelectTrigger className="h-12 rounded-xl bg-slate-50 border-sky-200 font-bold"><span className="truncate">{`Khối ${newFolderInfo.grade}`}</span></SelectTrigger><SelectContent><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent></Select>
+                  <Select value={newFolderInfo.grade} onValueChange={(val) => setNewFolderInfo({...newFolderInfo, grade: val})}><SelectTrigger className="h-12 rounded-xl bg-slate-50 border-sky-200 font-bold"><span className="truncate">{`Khối ${newFolderInfo.grade}`}</span></SelectTrigger><SelectContent position="popper" className="bg-white z-50"><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent></Select>
                 </div>
                 <div className="space-y-2">
                   <label className="font-bold text-slate-700">Học kỳ</label>
-                  <Select value={newFolderInfo.semester} onValueChange={(val) => setNewFolderInfo({...newFolderInfo, semester: val})}><SelectTrigger className="h-12 rounded-xl bg-slate-50 border-sky-200 font-bold"><span className="truncate">{`HK ${newFolderInfo.semester}`}</span></SelectTrigger><SelectContent><SelectItem value="1">HK 1</SelectItem><SelectItem value="2">HK 2</SelectItem></SelectContent></Select>
+                  <Select value={newFolderInfo.semester} onValueChange={(val) => setNewFolderInfo({...newFolderInfo, semester: val})}><SelectTrigger className="h-12 rounded-xl bg-slate-50 border-sky-200 font-bold"><span className="truncate">{newFolderInfo.semester === 'Cả năm' ? 'Cả năm' : `HK ${newFolderInfo.semester}`}</span></SelectTrigger><SelectContent position="popper" className="bg-white z-50"><SelectItem value="1">HK 1</SelectItem><SelectItem value="2">HK 2</SelectItem><SelectItem value="Cả năm">Cả năm</SelectItem></SelectContent></Select>
                 </div>
               </div>
               <Button onClick={handleCreateNewFolder} disabled={loading} className="w-full h-12 mt-4 bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl shadow-md text-lg">
@@ -1059,10 +1075,10 @@ const QuestionBank = () => {
             <DialogHeader><DialogTitle className="text-xl sm:text-2xl font-black text-sky-950 flex items-center gap-2 border-b border-sky-100 pb-3"><Pencil className="h-5 sm:h-6 w-5 sm:w-6 text-sky-500"/> Chỉnh sửa câu hỏi</DialogTitle></DialogHeader>
             <form onSubmit={handleUpdateQuestion} className="space-y-5 pt-2">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Select value={editQuestionData.type} onValueChange={(v) => setEditQuestionData({...editQuestionData, type: v})}><SelectTrigger className="h-12 rounded-xl bg-white border-sky-100 font-bold"><span className="truncate">{editQuestionData.type === "multiple_choice" ? "Trắc nghiệm" : "Tự luận"}</span></SelectTrigger><SelectContent><SelectItem value="multiple_choice">Trắc nghiệm</SelectItem><SelectItem value="essay">Tự luận</SelectItem></SelectContent></Select>
-                <Select value={editQuestionData.grade} onValueChange={(v) => setEditQuestionData({...editQuestionData, grade: v})}><SelectTrigger className="h-12 rounded-xl bg-white border-sky-100 font-bold"><span className="truncate">{editQuestionData.grade ? `Khối ${editQuestionData.grade}` : "Chọn khối"}</span></SelectTrigger><SelectContent><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent></Select>
-                <Select value={editQuestionData.semester} onValueChange={(v) => setEditQuestionData({...editQuestionData, semester: v})}><SelectTrigger className="h-12 rounded-xl bg-white border-sky-100 font-bold"><span className="truncate">HK {editQuestionData.semester}</span></SelectTrigger><SelectContent><SelectItem value="1">Học kỳ 1</SelectItem><SelectItem value="2">Học kỳ 2</SelectItem></SelectContent></Select>
-                <Select value={editQuestionData.difficulty} onValueChange={(v) => setEditQuestionData({...editQuestionData, difficulty: v})}><SelectTrigger className="h-12 rounded-xl bg-white border-sky-100 font-bold"><span className="truncate">{editQuestionData.difficulty === 'easy' ? 'Dễ' : editQuestionData.difficulty === 'hard' ? 'Khó' : 'Trung bình'}</span></SelectTrigger><SelectContent><SelectItem value="easy">Dễ</SelectItem><SelectItem value="medium">Trung bình</SelectItem><SelectItem value="hard">Khó</SelectItem></SelectContent></Select>
+                <Select value={editQuestionData.type} onValueChange={(v) => setEditQuestionData({...editQuestionData, type: v})}><SelectTrigger className="h-12 rounded-xl bg-white border-sky-100 font-bold"><span className="truncate">{editQuestionData.type === "multiple_choice" ? "Trắc nghiệm" : "Tự luận"}</span></SelectTrigger><SelectContent position="popper" className="bg-white z-50"><SelectItem value="multiple_choice">Trắc nghiệm</SelectItem><SelectItem value="essay">Tự luận</SelectItem></SelectContent></Select>
+                <Select value={editQuestionData.grade} onValueChange={(v) => setEditQuestionData({...editQuestionData, grade: v})}><SelectTrigger className="h-12 rounded-xl bg-white border-sky-100 font-bold"><span className="truncate">{editQuestionData.grade ? `Khối ${editQuestionData.grade}` : "Chọn khối"}</span></SelectTrigger><SelectContent position="popper" className="bg-white z-50"><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent></Select>
+                <Select value={editQuestionData.semester} onValueChange={(v) => setEditQuestionData({...editQuestionData, semester: v})}><SelectTrigger className="h-12 rounded-xl bg-white border-sky-100 font-bold"><span className="truncate">{editQuestionData.semester === 'Cả năm' ? 'Cả năm' : `HK ${editQuestionData.semester}`}</span></SelectTrigger><SelectContent position="popper" className="bg-white z-50"><SelectItem value="1">Học kỳ 1</SelectItem><SelectItem value="2">Học kỳ 2</SelectItem><SelectItem value="Cả năm">Cả năm</SelectItem></SelectContent></Select>
+                <Select value={editQuestionData.difficulty} onValueChange={(v) => setEditQuestionData({...editQuestionData, difficulty: v})}><SelectTrigger className="h-12 rounded-xl bg-white border-sky-100 font-bold"><span className="truncate">{editQuestionData.difficulty === 'easy' ? 'Dễ' : editQuestionData.difficulty === 'hard' ? 'Khó' : 'Trung bình'}</span></SelectTrigger><SelectContent position="popper" className="bg-white z-50"><SelectItem value="easy">Dễ</SelectItem><SelectItem value="medium">Trung bình</SelectItem><SelectItem value="hard">Khó</SelectItem></SelectContent></Select>
               </div>
 
               {editQuestionData.type === 'essay' && (
@@ -1146,7 +1162,7 @@ const QuestionBank = () => {
                         <SelectTrigger className="h-11 w-full sm:w-32 bg-white text-rose-600 font-bold border-rose-200 rounded-xl shadow-sm">
                           <span className="truncate">{editQuestionData.correctAnswer ? `Câu ${editQuestionData.correctAnswer}` : "Chọn"}</span>
                         </SelectTrigger>
-                        <SelectContent><SelectItem value="A">Câu A</SelectItem><SelectItem value="B">Câu B</SelectItem><SelectItem value="C">Câu C</SelectItem><SelectItem value="D">Câu D</SelectItem></SelectContent>
+                        <SelectContent position="popper" className="bg-white z-50"><SelectItem value="A">Câu A</SelectItem><SelectItem value="B">Câu B</SelectItem><SelectItem value="C">Câu C</SelectItem><SelectItem value="D">Câu D</SelectItem></SelectContent>
                       </Select>
                     </div>
                   </div>

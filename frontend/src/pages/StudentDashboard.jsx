@@ -60,6 +60,7 @@ import {
   FileX,
   Lock,
   Printer,
+  RefreshCcw // 👉 Đã thêm icon RefreshCcw cho nút Làm lại
 } from "lucide-react";
 
 const CustomDateInput = ({ label, value, onChange }) => {
@@ -900,9 +901,14 @@ const StudentDashboard = () => {
         const pending = [];
         const overdueMocks = [];
 
+        // 👉 ĐÃ THÊM LOGIC KIỂM TRA CHO PHÉP LÀM NHIỀU LẦN (allowMultipleSubmissions)
         allAssignments.forEach((a) => {
-          if (!submittedAssignmentIds.includes(a._id)) {
-            if (new Date(a.dueDate) < now) {
+          const isSubmitted = submittedAssignmentIds.includes(a._id);
+          const isPastDue = new Date(a.dueDate) < now;
+
+          if (!isSubmitted) {
+            // Chưa nộp lần nào
+            if (isPastDue) {
               overdueMocks.push({
                 _id: a._id + "_overdue",
                 assignment: a,
@@ -910,10 +916,15 @@ const StudentDashboard = () => {
                 status: "overdue",
                 score: 0,
                 isOverdueMock: true,
-                isOverdueMock: true,
               });
             } else {
               pending.push(a);
+            }
+          } else {
+            // Đã nộp
+            if (a.allowMultipleSubmissions && !isPastDue) {
+              // Vẫn còn hạn và cho phép nộp nhiều lần -> Thêm vào tab "Cần làm" với cờ isRetakeable
+              pending.push({ ...a, isRetakeable: true });
             }
           }
         });
@@ -1242,8 +1253,9 @@ const StudentDashboard = () => {
                       >
                         <CardHeader className="pb-3 border-b border-slate-50 p-5 sm:p-6">
                           <div className="flex justify-between items-start mb-3 gap-2">
-                            <Badge className="bg-sky-50 text-sky-600 border-0 shadow-none font-bold px-3 py-1 text-xs whitespace-nowrap">
-                              Đang mở
+                            {/* 👉 ĐÃ CẬP NHẬT GIAO DIỆN BADGE NẾU ĐƯỢC LÀM LẠI */}
+                            <Badge className={`border-0 shadow-none font-bold px-3 py-1 text-xs whitespace-nowrap ${assig.isRetakeable ? 'bg-amber-100 text-amber-700' : 'bg-sky-50 text-sky-600'}`}>
+                              {assig.isRetakeable ? "Có thể làm lại" : "Đang mở"}
                             </Badge>
                             <Badge
                               variant="outline"
@@ -1284,12 +1296,16 @@ const StudentDashboard = () => {
                           </div>
                         </CardContent>
                         <CardFooter className="pt-0 pb-5 px-5 sm:px-6">
+                          {/* 👉 ĐÃ ĐỔI NÚT NẾU ĐƯỢC LÀM LẠI */}
                           <Button
                             onClick={() => navigate(`/take-quiz/${assig._id}`)}
-                            className="w-full h-11 sm:h-12 rounded-xl font-black text-sm sm:text-base shadow-sm bg-sky-500 hover:bg-sky-600 text-white shadow-sky-200 transition-all active:scale-95"
+                            className={`w-full h-11 sm:h-12 rounded-xl font-black text-sm sm:text-base shadow-sm transition-all active:scale-95 text-white ${assig.isRetakeable ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-200' : 'bg-sky-500 hover:bg-sky-600 shadow-sky-200'}`}
                           >
-                            <PlayCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />{" "}
-                            Bắt đầu làm bài
+                            {assig.isRetakeable ? (
+                                <><RefreshCcw className="w-4 h-4 sm:w-5 sm:h-5 mr-2" /> Làm lại bài</>
+                            ) : (
+                                <><PlayCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-2" /> Bắt đầu làm bài</>
+                            )}
                           </Button>
                         </CardFooter>
                       </Card>

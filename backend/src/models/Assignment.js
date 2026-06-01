@@ -98,6 +98,12 @@ const assignmentSchema = new mongoose.Schema(
             default: "homework", // Mặc định là Bài tập về nhà
         },
 
+        // 👉 [THÊM MỚI] CHO PHÉP HỌC SINH LÀM LẠI NHIỀU LẦN (Chỉ dành cho Bài tập về nhà)
+        allowMultipleSubmissions: {
+            type: Boolean,
+            default: false,
+        },
+
         // ==========================================
         // CÁC TÍNH NĂNG MỞ RỘNG TRONG TƯƠNG LAI
         // ==========================================

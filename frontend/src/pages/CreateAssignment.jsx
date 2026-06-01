@@ -14,11 +14,10 @@ import {
   ArrowLeft, UploadCloud, CheckCircle, CheckCircle2, AlertTriangle, Eraser,
   Sparkles, FileText, Loader2, Image as ImageIcon, ListChecks, Layers,
   PenTool, Database, Calculator, Save, Search, Eye, Trash2, PlusCircle, ArrowRight, FolderOpen, Lock,
-  Calendar, Video, FileAudio, Sigma, X, BookOpen, FileCheck
+  Calendar, Video, FileAudio, Sigma, X, BookOpen, FileCheck, History // Thêm History icon
 } from "lucide-react";
 
 import RichTextEditor from "@/components/ui/RichTextEditor";
-
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import 'mathlive';
@@ -249,7 +248,8 @@ const CreateAssignment = () => {
     startDate_time: getCurrentTime(), 
     dueDate_date: getDefaultDate(), 
     dueDate_time: getDefaultTime(),
-    password: "" 
+    password: "",
+    allowMultipleSubmissions: false // 👉 THÊM BIẾN MỚI: Mặc định Tắt làm nhiều lần
   });
 
   const [hasPassword, setHasPassword] = useState(false);
@@ -290,7 +290,7 @@ const CreateAssignment = () => {
 
   const [bankSearch, setBankSearch] = useState("");
   const [bankSubject, setBankSubject] = useState("all");
-  const [bankSemester, setBankSemester] = useState("all"); // Đã thêm bankSemester
+  const [bankSemester, setBankSemester] = useState("all");
   const [bankFolder, setBankFolder] = useState("all"); 
   const [bankExam, setBankExam] = useState("all"); 
   const [bankType, setBankType] = useState("all"); 
@@ -343,7 +343,8 @@ const CreateAssignment = () => {
           dueDate_time: `${hh}:${mins}`,
           password: data.password || "",
           semester: data.semester || "1",
-          assignmentType: data.assignmentType || currentAssignmentType
+          assignmentType: data.assignmentType || currentAssignmentType,
+          allowMultipleSubmissions: data.allowMultipleSubmissions || false // 👉 Load data cũ
         });
 
         if (data.password) setHasPassword(true);
@@ -402,7 +403,7 @@ const CreateAssignment = () => {
       }
     };
     fetchAssignmentData();
-  }, [id, navigate, serverUrl]);
+  }, [id, navigate, serverUrl, currentAssignmentType]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -823,6 +824,8 @@ const CreateAssignment = () => {
       formData.append("startDate", finalStartDateISO);
       formData.append("dueDate", finalDueDateISO);
       formData.append("status", actionType); 
+      // 👉 Gửi cài đặt Làm bài nhiều lần
+      formData.append("allowMultipleSubmissions", newAssignment.allowMultipleSubmissions);
 
       if (hasPassword && newAssignment.password.trim() !== "") {
           formData.append("password", newAssignment.password.trim());
@@ -865,7 +868,6 @@ const CreateAssignment = () => {
   const availableFolders = [...new Set(questions.filter(q => bankSubject === "all" || q.subject === bankSubject).map(q => q.folderName).filter(Boolean))];
   const availableExams = [...new Set(questions.filter(q => (bankSubject === "all" || q.subject === bankSubject) && (bankFolder === "all" || q.folderName === bankFolder)).map(q => q.examName).filter(Boolean))];
 
-  // 👉 ĐÃ THÊM LOGIC LỌC THEO "CẢ NĂM" (Bao gồm HK1, HK2, Cả năm) CHO KHO CÂU HỎI
   const filteredBankQuestions = questions.filter(q => {
     const matchSearch = (q.content || "").toLowerCase().includes(bankSearch.toLowerCase());
     const matchSubject = bankSubject === "all" || q.subject === bankSubject;
@@ -1042,31 +1044,51 @@ const CreateAssignment = () => {
                    </div>
                 </div>
 
-                <div className="bg-sky-50/50 p-4 rounded-xl border border-sky-100 mt-2 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-                   <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                          <Lock className="w-5 h-5 text-sky-600" />
-                          <label className="font-bold text-sky-900 cursor-pointer flex items-center select-none" onClick={() => setHasPassword(!hasPassword)}>
-                             <input type="checkbox" className="mr-2 w-4 h-4 accent-sky-500 cursor-pointer" checked={hasPassword} onChange={() => setHasPassword(!hasPassword)} />
-                             Yêu cầu Mật khẩu làm bài (Tùy chọn)
-                          </label>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-1 pl-7">Nếu tích chọn, học sinh phải nhập đúng mật khẩu mới xem được đề.</p>
-                   </div>
-                   
-                   {hasPassword && (
-                      <div className="w-full sm:w-[280px] shrink-0 animate-in fade-in slide-in-from-right-4 duration-300">
-                          <Input 
-                             type="text" 
-                             placeholder="Nhập mật khẩu cho bài thi..." 
-                             className="h-11 rounded-xl border-sky-300 focus-visible:ring-sky-500 font-bold text-sky-700 bg-white"
-                             value={newAssignment.password}
-                             onChange={(e) => setNewAssignment({...newAssignment, password: e.target.value})}
-                             autoFocus
-                          />
-                      </div>
-                   )}
+                {/* 👉 BỔ SUNG TUỲ CHỌN MẬT KHẨU & LÀM NHIỀU LẦN DÀNH RIÊNG CHO BÀI TẬP */}
+                <div className="flex flex-col gap-4">
+                  <div className="bg-sky-50/50 p-4 rounded-xl border border-sky-100 mt-2 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                     <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                            <Lock className="w-5 h-5 text-sky-600" />
+                            <label className="font-bold text-sky-900 cursor-pointer flex items-center select-none" onClick={() => setHasPassword(!hasPassword)}>
+                               <input type="checkbox" className="mr-2 w-4 h-4 accent-sky-500 cursor-pointer" checked={hasPassword} onChange={() => setHasPassword(!hasPassword)} />
+                               Yêu cầu Mật khẩu làm bài (Tùy chọn)
+                            </label>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1 pl-7">Nếu tích chọn, học sinh phải nhập đúng mật khẩu mới xem được đề.</p>
+                     </div>
+                     
+                     {hasPassword && (
+                        <div className="w-full sm:w-[280px] shrink-0 animate-in fade-in slide-in-from-right-4 duration-300">
+                            <Input 
+                               type="text" 
+                               placeholder="Nhập mật khẩu cho bài thi..." 
+                               className="h-11 rounded-xl border-sky-300 focus-visible:ring-sky-500 font-bold text-sky-700 bg-white"
+                               value={newAssignment.password}
+                               onChange={(e) => setNewAssignment({...newAssignment, password: e.target.value})}
+                               autoFocus
+                            />
+                        </div>
+                     )}
+                  </div>
+
+                  {/* Toggle Cho phép làm nhiều lần (Chỉ dành cho Bài tập về nhà) */}
+                  {currentAssignmentType === "homework" && (
+                    <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 flex flex-col sm:flex-row gap-4 items-start sm:items-center animate-in fade-in">
+                       <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                              <History className="w-5 h-5 text-emerald-600" />
+                              <label className="font-bold text-emerald-900 cursor-pointer flex items-center select-none" onClick={() => setNewAssignment({...newAssignment, allowMultipleSubmissions: !newAssignment.allowMultipleSubmissions})}>
+                                 <input type="checkbox" className="mr-2 w-4 h-4 accent-emerald-500 cursor-pointer" checked={newAssignment.allowMultipleSubmissions} onChange={() => setNewAssignment({...newAssignment, allowMultipleSubmissions: !newAssignment.allowMultipleSubmissions})} />
+                                 Cho phép học sinh làm bài nhiều lần
+                              </label>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-1 pl-7">Học sinh có thể nộp lại bài trước hạn chót. Hệ thống sẽ lưu lại bài làm của lần nộp cuối cùng.</p>
+                       </div>
+                    </div>
+                  )}
                 </div>
+
               </div>
 
               <div className="border-t border-sky-100 pt-6 mt-6">

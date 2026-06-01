@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Loader2, Search, Edit3, Eye, CheckCircle2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Loader2, Search, Edit3, Eye, CheckCircle2, AlertCircle, Clock, Lock } from "lucide-react";
 
 const AssignmentGrades = () => {
   const { id } = useParams();
@@ -47,20 +47,38 @@ const AssignmentGrades = () => {
 
   if (loading) return <div className="min-h-screen bg-sky-50/50 flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-sky-500" /></div>;
 
+  // XÁC ĐỊNH XEM ĐÃ QUA HẠN NỘP HAY CHƯA
+  const isPastDeadline = assignment?.dueDate ? new Date() >= new Date(assignment.dueDate) : true;
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans p-4 sm:p-8 pb-20">
       <div className="max-w-6xl mx-auto space-y-6">
         
         {/* HEADER QUAY LẠI */}
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => navigate("/teacher-dashboard")} className="bg-white shadow-sm rounded-xl text-sky-700 hover:bg-sky-50 h-12 px-4 font-bold">
-            <ArrowLeft className="w-5 h-5 mr-2" /> Trở về
-          </Button>
-          <div>
-            <h1 className="text-2xl font-black text-sky-950">{assignment?.title}</h1>
-            <p className="text-slate-500 font-medium mt-1">Sĩ số nộp: {submissions.length}</p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" onClick={() => navigate("/teacher-dashboard")} className="bg-white shadow-sm rounded-xl text-sky-700 hover:bg-sky-50 h-12 px-4 font-bold">
+              <ArrowLeft className="w-5 h-5 mr-2" /> Trở về
+            </Button>
+            <div>
+              <h1 className="text-2xl font-black text-sky-950">{assignment?.title}</h1>
+              <p className="text-slate-500 font-medium mt-1">Sĩ số nộp: {submissions.length}</p>
+            </div>
           </div>
         </div>
+
+        {/* CẢNH BÁO NẾU CHƯA TỚI HẠN NỘP VÀ CÓ BÀI CHỜ CHẤM */}
+        {!isPastDeadline && (
+          <div className="bg-amber-50 border border-amber-200 p-4 sm:p-5 rounded-2xl flex items-start gap-3 shadow-sm animate-in fade-in slide-in-from-top-4">
+             <Clock className="w-6 h-6 text-amber-500 mt-0.5 shrink-0" />
+             <div>
+                <h4 className="font-bold text-amber-800 text-lg">Chưa đến thời gian chấm bài!</h4>
+                <p className="text-sm text-amber-700 mt-1 leading-relaxed">
+                  Hạn nộp bài là <strong>{new Date(assignment.dueDate).toLocaleString('vi-VN')}</strong>. Để đảm bảo công bằng và tránh thất thoát điểm khi học sinh nộp lại bài, hệ thống đã tạm khóa chức năng chấm tự luận. Bạn có thể chấm bài ngay khi hết hạn nộp.
+                </p>
+             </div>
+          </div>
+        )}
 
         {/* DANH SÁCH BÀI NỘP */}
         <Card className="border-none shadow-sm rounded-3xl overflow-hidden bg-white">
@@ -100,10 +118,19 @@ const AssignmentGrades = () => {
                     </TableCell>
                     <TableCell className="text-right pr-6">
                       {sub.status === 'pending' ? (
-                        <Button onClick={() => goToGradePage(sub)} className="bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold shadow-sm h-10 px-5">
-                          <Edit3 className="w-4 h-4 mr-2"/> Chấm bài
-                        </Button>
+                        isPastDeadline ? (
+                          // ĐÃ QUA HẠN: CHO PHÉP CHẤM BÀI
+                          <Button onClick={() => goToGradePage(sub)} className="bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold shadow-sm h-10 px-5">
+                            <Edit3 className="w-4 h-4 mr-2"/> Chấm bài
+                          </Button>
+                        ) : (
+                          // CHƯA QUA HẠN: KHÓA NÚT
+                          <Button disabled className="bg-slate-100 text-slate-400 border border-slate-200 rounded-xl font-bold shadow-none h-10 px-4 cursor-not-allowed" title="Chưa hết hạn nộp bài nên chưa thể chấm">
+                            <Lock className="w-4 h-4 mr-2"/> Chưa tới hạn
+                          </Button>
+                        )
                       ) : (
+                        // BÀI ĐÃ CHẤM XONG: CHỈ XEM
                         <Button onClick={() => goToGradePage(sub)} variant="outline" className="text-sky-600 border-sky-200 hover:bg-sky-50 rounded-xl font-bold h-10 px-5">
                           <Eye className="w-4 h-4 mr-2"/> Xem bài
                         </Button>

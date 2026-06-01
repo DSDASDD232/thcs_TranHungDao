@@ -42,7 +42,6 @@ router.post("/submit", verifyToken, uploadSubmission.any(), async (req, res) => 
 
         const { assignmentId, studentAnswers } = req.body;
         
-        // Cần parse string JSON về dạng Array (do gửi bằng FormData có đính kèm File)
         let parsedAnswers = [];
         try {
             parsedAnswers = JSON.parse(studentAnswers);
@@ -62,27 +61,27 @@ router.post("/submit", verifyToken, uploadSubmission.any(), async (req, res) => 
             return res.status(400).json({ message: "⏳ Đã hết hạn nộp bài!" });
         }
 
-        // 3. Chống nộp 2 lần
-        const existingSubmission = await Submission.findOne({
+        // 3. XỬ LÝ NỘP BÀI LẠI (Cho phép nộp nhiều lần)
+        let existingSubmission = await Submission.findOne({
             assignment: assignmentId,
             student: req.user.id
         });
-        if (existingSubmission) {
-            return res.status(400).json({ message: "Bạn đã nộp bài này rồi, không thể nộp lại!" });
+
+        // Nếu đã có bài nộp và KHÔNG cho phép làm nhiều lần -> Chặn
+        if (existingSubmission && !assignment.allowMultipleSubmissions) {
+            return res.status(400).json({ message: "Em đã nộp bài này rồi, bài tập này không cho phép nộp lại!" });
         }
 
         // 4. BẮT ĐẦU CHẤM ĐIỂM
         let totalScore = 0;
         let processedAnswers = [];
-        let hasEssayQuestion = false; // Cờ theo dõi xem bài này có câu tự luận không
+        let hasEssayQuestion = false;
 
-        // Lấy dữ liệu gốc của tất cả câu hỏi
         const questionIds = assignment.questions.map(q => q.questionId);
         const questionsInDb = await Question.find({ _id: { $in: questionIds } });
 
         for (let ans of parsedAnswers) {
             const questionDoc = questionsInDb.find(q => q._id.toString() === ans.question);
-            // Lấy mức điểm tối đa của câu hỏi này từ Assignment
             const assignmentQuestion = assignment.questions.find(q => q.questionId.toString() === ans.question);
             const maxPoints = assignmentQuestion ? assignmentQuestion.points : 0;
 
@@ -93,8 +92,6 @@ router.post("/submit", verifyToken, uploadSubmission.any(), async (req, res) => 
             if (questionDoc) {
                 // TÌNH HUỐNG 1: CÂU HỎI TRẮC NGHIỆM -> MÁY CHẤM LIỀN
                 if (questionDoc.type === "multiple_choice") {
-                    
-                    // Parse options để lấy text tương ứng với A, B, C, D
                     let parsedOptions = [];
                     try {
                         parsedOptions = typeof questionDoc.options === 'string' ? JSON.parse(questionDoc.options) : questionDoc.options;
@@ -102,11 +99,9 @@ router.post("/submit", verifyToken, uploadSubmission.any(), async (req, res) => 
                         parsedOptions = questionDoc.options || [];
                     }
 
-                    // Tìm index tương ứng với A, B, C, D
                     const optIndex = ans.studentAnswer === 'A' ? 0 : ans.studentAnswer === 'B' ? 1 : ans.studentAnswer === 'C' ? 2 : ans.studentAnswer === 'D' ? 3 : -1;
                     let studentAnswerText = optIndex !== -1 ? parsedOptions[optIndex] : "";
                     
-                    // LOGIC CHẤM ĐIỂM: So khớp Text HOẶC so khớp A,B,C,D
                     if (
                         (studentAnswerText && questionDoc.correctAnswer && studentAnswerText.trim().toLowerCase() === questionDoc.correctAnswer.trim().toLowerCase()) ||
                         (ans.studentAnswer && ans.studentAnswer.toUpperCase() === questionDoc.correctAnswer.toUpperCase())
@@ -122,6 +117,12 @@ router.post("/submit", verifyToken, uploadSubmission.any(), async (req, res) => 
                     const imageFile = req.files.find(f => f.fieldname === `image_${ans.question}`);
                     if (imageFile) {
                         finalImageUrl = `/uploads/submissions/${imageFile.filename}`;
+                    } else if (existingSubmission) {
+                        // Nếu đang nộp lại và không upload ảnh mới, cố gắng lấy lại ảnh cũ
+                        const oldAns = existingSubmission.answers.find(a => a.question.toString() === ans.question);
+                        if (oldAns && oldAns.studentImage) {
+                            finalImageUrl = oldAns.studentImage;
+                        }
                     }
                 }
             }
@@ -129,12 +130,9 @@ router.post("/submit", verifyToken, uploadSubmission.any(), async (req, res) => 
             processedAnswers.push({
                 question: ans.question,
                 type: questionDoc ? questionDoc.type : "multiple_choice",
-                studentAnswer: ans.studentAnswer || "", // Text trả lời trắc nghiệm hoặc gõ tự luận
-                studentImage: finalImageUrl, // Link ảnh học sinh chụp lên (tự luận)
-                
-                // Hứng chuỗi Base64 từ GeoGebra và lưu thẳng vào Database
+                studentAnswer: ans.studentAnswer || "", 
+                studentImage: finalImageUrl, 
                 studentBase64Image: ans.studentBase64Image || "",
-                
                 isCorrect: isCorrect,
                 pointsAwarded: pointsAwarded,
                 maxPoints: maxPoints
@@ -144,22 +142,40 @@ router.post("/submit", verifyToken, uploadSubmission.any(), async (req, res) => 
         // 5. Xác định Trạng thái bài nộp
         const finalStatus = hasEssayQuestion ? "pending" : "graded";
 
-        const newSubmission = new Submission({
-            assignment: assignmentId,
-            student: req.user.id,
-            answers: processedAnswers, 
-            score: Number(totalScore.toFixed(2)), 
-            status: finalStatus
-        });
+        // 👉 NẾU ĐÃ NỘP RỒI VÀ ĐƯỢC PHÉP NỘP LẠI -> GHI ĐÈ
+        if (existingSubmission) {
+            existingSubmission.answers = processedAnswers;
+            existingSubmission.score = Number(totalScore.toFixed(2));
+            existingSubmission.status = finalStatus;
+            
+            await existingSubmission.save();
 
-        await newSubmission.save();
+            return res.status(200).json({
+                message: "✅ Cập nhật bài làm thành công!",
+                status: finalStatus,
+                score: finalStatus === "graded" ? existingSubmission.score : null, 
+                submission: existingSubmission
+            });
+        } 
+        // 👉 NẾU LÀ LẦN NỘP ĐẦU TIÊN
+        else {
+            const newSubmission = new Submission({
+                assignment: assignmentId,
+                student: req.user.id,
+                answers: processedAnswers, 
+                score: Number(totalScore.toFixed(2)), 
+                status: finalStatus
+            });
 
-        res.status(201).json({
-            message: "✅ Nộp bài thành công!",
-            status: finalStatus,
-            score: finalStatus === "graded" ? newSubmission.score : null, 
-            submission: newSubmission
-        });
+            await newSubmission.save();
+
+            return res.status(201).json({
+                message: "✅ Nộp bài thành công!",
+                status: finalStatus,
+                score: finalStatus === "graded" ? newSubmission.score : null, 
+                submission: newSubmission
+            });
+        }
 
     } catch (error) {
         console.error("Lỗi nộp bài:", error);
@@ -264,7 +280,7 @@ router.get("/my-submissions", verifyToken, async (req, res) => {
 router.get("/class/:classId/leaderboard", verifyToken, isTeacherOrAdmin, async (req, res) => {
     try {
         const classId = req.params.classId;
-        const { timeframe, subject, type } = req.query; // 👉 Đã thêm type (loại bài: homework / exam)
+        const { timeframe, subject, type } = req.query;
 
         const students = await User.find({ classId: classId, role: "student" }).select("fullName username");
         if (students.length === 0) return res.status(200).json({ leaderboard: [] });
@@ -287,7 +303,6 @@ router.get("/class/:classId/leaderboard", verifyToken, isTeacherOrAdmin, async (
             dateFilter = { createdAt: { $gte: firstDayOfYear } };
         }
 
-        // 👉 TẠO BỘ LỌC CHO ASSIGNMENT (THEO MÔN HỌC HOẶC LOẠI BÀI)
         let assignmentQuery = {};
         if (subject && subject !== "all") {
             assignmentQuery.subject = subject;
@@ -297,19 +312,17 @@ router.get("/class/:classId/leaderboard", verifyToken, isTeacherOrAdmin, async (
         }
 
         let submissionAssignmentFilter = {};
-        // Nếu có truyền subject hoặc type thì ta mới cần phải lọc ID của Assignment
         if (Object.keys(assignmentQuery).length > 0) {
             const matchedAssignments = await Assignment.find(assignmentQuery).select("_id");
             const assignmentIds = matchedAssignments.map(a => a._id);
             submissionAssignmentFilter = { assignment: { $in: assignmentIds } };
         }
 
-        // Tìm tất cả các bài nộp của học sinh, đã chấm điểm và thỏa mãn bộ lọc
         const submissions = await Submission.find({ 
             student: { $in: studentIds },
             status: "graded", 
             ...dateFilter,
-            ...submissionAssignmentFilter // 👉 Áp dụng bộ lọc bài tập/đề thi
+            ...submissionAssignmentFilter
         }).sort({ createdAt: -1 }); 
 
         let leaderboard = students.map(student => {
@@ -366,7 +379,6 @@ router.get("/detail/:id", verifyToken, async (req, res) => {
     try {
         const submissionId = req.params.id;
 
-        // Tìm Submission, populate Assignment và Question
         const submission = await Submission.findById(submissionId)
             .populate("assignment", "title subject dueDate")
             .populate("answers.question");
@@ -375,7 +387,6 @@ router.get("/detail/:id", verifyToken, async (req, res) => {
             return res.status(404).json({ message: "Không tìm thấy bài làm này!" });
         }
 
-        // Nếu là Học sinh, chỉ được xem bài của CHÍNH MÌNH
         if (req.user.role === "student" && submission.student.toString() !== req.user.id) {
             return res.status(403).json({ message: "Bạn không có quyền xem bài làm của người khác!" });
         }

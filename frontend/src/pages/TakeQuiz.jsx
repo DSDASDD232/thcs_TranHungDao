@@ -14,7 +14,7 @@ import {
   Clock, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight, Send, 
   Loader2, Image as ImageIcon, LayoutGrid, X, Trash2, Clock4, 
   GalleryVerticalEnd, SquareMousePointer, Map, Sparkles, PenTool, Lock, ArrowLeft,
-  Flag, Video, FileAudio
+  Flag, Video, FileAudio, RefreshCcw
 } from "lucide-react"; 
 
 import GeometryDrawing from "@/components/ui/GeometryDrawing";
@@ -439,6 +439,22 @@ const TakeQuiz = () => {
     }
   };
 
+  // 👉 HÀM XỬ LÝ KHI BẤM LÀM LẠI BÀI
+  const handleRetake = () => {
+      if (!window.confirm("Kết quả lần làm bài trước đã được lưu. Em muốn làm lại từ đầu chứ?")) return;
+      
+      setResult(null);
+      setIsTimeUp(false);
+      setCurrentQuestionIdx(0);
+      setCurrentPage(0);
+      
+      removeProgressFromDB(`quiz_${id}_${userId}`);
+      removeQuizCookie(id, userId);
+      
+      startQuiz(assignment);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleMapClick = (idx) => {
     if (viewMode === "single") {
         setCurrentQuestionIdx(idx);
@@ -514,11 +530,33 @@ const TakeQuiz = () => {
     <div className="min-h-screen bg-sky-50/50 flex items-center justify-center p-4 font-sans text-center">
       <Card className="max-w-md w-full p-8 sm:p-10 rounded-3xl shadow-2xl border-none bg-white">
         {result.status === 'pending' ? (
-          <><Clock4 className="w-20 h-20 sm:w-24 sm:h-24 text-amber-500 mx-auto mb-6 animate-pulse" /><h2 className="text-2xl sm:text-3xl font-black text-slate-800 mb-2">Đã nộp thành công!</h2><p className="text-slate-500 font-medium mb-6 leading-relaxed">Bài làm của em có phần Tự luận. Vui lòng chờ giáo viên chấm điểm nhé.</p></>
+          <>
+            <Clock4 className="w-20 h-20 sm:w-24 sm:h-24 text-amber-500 mx-auto mb-6 animate-pulse" />
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-800 mb-2">Đã nộp thành công!</h2>
+            <p className="text-slate-500 font-medium mb-6 leading-relaxed">Bài làm của em có phần Tự luận. Vui lòng chờ giáo viên chấm điểm nhé.</p>
+          </>
         ) : (
-          <><CheckCircle2 className="w-20 h-20 sm:w-24 sm:h-24 text-emerald-500 mx-auto mb-6" /><h2 className="text-2xl sm:text-3xl font-black text-slate-800">Kết quả thi</h2><div className="my-6 sm:my-8 bg-emerald-50 py-6 sm:py-8 rounded-3xl border border-emerald-100 shadow-inner"><span className="text-6xl sm:text-7xl font-black text-emerald-600">{result.score}</span><p className="font-bold text-emerald-500 mt-2 uppercase tracking-widest text-xs sm:text-sm">Điểm số</p></div></>
+          <>
+            <CheckCircle2 className="w-20 h-20 sm:w-24 sm:h-24 text-emerald-500 mx-auto mb-6" />
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-800">Kết quả thi</h2>
+            <div className="my-6 sm:my-8 bg-emerald-50 py-6 sm:py-8 rounded-3xl border border-emerald-100 shadow-inner">
+              <span className="text-6xl sm:text-7xl font-black text-emerald-600">{result.score}</span>
+              <p className="font-bold text-emerald-500 mt-2 uppercase tracking-widest text-xs sm:text-sm">Điểm số</p>
+            </div>
+          </>
         )}
-        <Button onClick={handleExit} className="w-full h-12 sm:h-14 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-base sm:text-lg shadow-lg shadow-sky-200 transition-all">Về trang chủ</Button>
+        
+        <div className="flex flex-col gap-3">
+            {/* 👉 HIỂN THỊ NÚT LÀM LẠI BÀI NẾU ALLOW MULTIPLE SUBMISSIONS */}
+            {assignment?.allowMultipleSubmissions && (
+                <Button onClick={handleRetake} variant="outline" className="w-full h-12 sm:h-14 rounded-2xl border-2 border-sky-500 text-sky-600 hover:bg-sky-50 font-black text-base sm:text-lg shadow-sm transition-all">
+                  <RefreshCcw className="w-5 h-5 mr-2" /> Làm lại bài
+                </Button>
+            )}
+            <Button onClick={handleExit} className="w-full h-12 sm:h-14 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-base sm:text-lg shadow-lg shadow-sky-200 transition-all">
+                Về trang chủ
+            </Button>
+        </div>
       </Card>
     </div>
   );

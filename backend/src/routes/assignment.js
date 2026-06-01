@@ -98,8 +98,8 @@ router.post("/extract-word", verifyToken, isTeacherOrAdmin, uploadWord.single("f
 // ==========================================================
 router.post("/create-manual", verifyToken, isTeacherOrAdmin, uploadCloud.any(), async (req, res) => {
     try {
-        // 👉 ĐÃ THÊM LẤY BIẾN assignmentType TỪ REQ.BODY
-        const { title, targetClass, subject, duration, dueDate, status, action, saveToBank, questionsData, password, semester, assignmentType } = req.body;
+        // 👉 ĐÃ THÊM LẤY BIẾN assignmentType VÀ allowMultipleSubmissions TỪ REQ.BODY
+        const { title, targetClass, subject, duration, dueDate, status, action, saveToBank, questionsData, password, semester, assignmentType, allowMultipleSubmissions } = req.body;
         
         const parsedQuestions = typeof questionsData === 'string' ? JSON.parse(questionsData) : questionsData;
         
@@ -176,7 +176,9 @@ router.post("/create-manual", verifyToken, isTeacherOrAdmin, uploadCloud.any(), 
             dueDate, 
             status: status || "published", 
             password: password || "", 
-            teacher: req.user.id
+            teacher: req.user.id,
+            // 👉 LƯU BIẾN LÀM NHIỀU LẦN VÀO DB (Ép kiểu boolean cho an toàn)
+            allowMultipleSubmissions: allowMultipleSubmissions === 'true' || allowMultipleSubmissions === true
         });
 
         await newAssignment.save();
@@ -193,7 +195,8 @@ router.post("/create-manual", verifyToken, isTeacherOrAdmin, uploadCloud.any(), 
 // ==========================================================
 router.post("/create", verifyToken, isTeacherOrAdmin, async (req, res) => {
     try {
-        const { title, description, targetClass, questions, status, startTime, dueDate, duration, semester, assignmentType } = req.body;
+        // 👉 ĐÃ THÊM BIẾN allowMultipleSubmissions
+        const { title, description, targetClass, questions, status, startTime, dueDate, duration, semester, assignmentType, allowMultipleSubmissions } = req.body;
         
         const formattedQuestions = typeof questions === 'string' ? JSON.parse(questions) : questions;
 
@@ -209,7 +212,9 @@ router.post("/create", verifyToken, isTeacherOrAdmin, async (req, res) => {
             startTime, 
             dueDate, 
             duration, 
-            teacher: req.user.id 
+            teacher: req.user.id,
+            // 👉 LƯU BIẾN LÀM NHIỀU LẦN VÀO DB
+            allowMultipleSubmissions: allowMultipleSubmissions === 'true' || allowMultipleSubmissions === true
         });
         
         await newAssignment.save();
@@ -351,8 +356,8 @@ router.delete("/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
 router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), async (req, res) => {
     try {
         const assignmentId = req.params.id;
-        // 👉 ĐÃ THÊM BIẾN assignmentType
-        const { title, targetClass, subject, duration, dueDate, status, saveToBank, questionsData, password, semester, assignmentType } = req.body;
+        // 👉 ĐÃ THÊM BIẾN assignmentType VÀ allowMultipleSubmissions
+        const { title, targetClass, subject, duration, dueDate, status, saveToBank, questionsData, password, semester, assignmentType, allowMultipleSubmissions } = req.body;
 
         const existingAssignment = await Assignment.findById(assignmentId);
         if (!existingAssignment) return res.status(404).json({ message: "Không tìm thấy bài tập!" });
@@ -457,6 +462,11 @@ router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asyn
 
         if (password !== undefined) existingAssignment.password = password; 
         existingAssignment.questions = questionsWithPoints;
+        
+        // 👉 CẬP NHẬT TRẠNG THÁI LÀM LẠI VÀO DATABASE NẾU CÓ TRUYỀN XUỐNG
+        if (allowMultipleSubmissions !== undefined) {
+            existingAssignment.allowMultipleSubmissions = allowMultipleSubmissions === 'true' || allowMultipleSubmissions === true;
+        }
 
         await existingAssignment.save();
 

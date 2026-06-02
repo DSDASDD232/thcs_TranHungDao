@@ -16,7 +16,7 @@ import {
   Loader2, Trash2, Edit, Search, Filter, FileCheck, 
   FileSpreadsheet, PenTool, Download, Trophy, BarChart, Calendar, Eye, 
   Menu, X, Key, Lock, Unlock, Library, Database, ChevronLeft, ChevronRight,
-  Settings, Save, UploadCloud
+  Settings, Save, UploadCloud, Sparkles
 } from "lucide-react";
 
 import AdminClassManagement from "./AdminClassManagement";
@@ -112,6 +112,7 @@ const normalizeText = (text) => {
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const fullName = localStorage.getItem("fullName") || "Quản trị viên";
+  const currentRole = localStorage.getItem("role");
   const accountFileRef = useRef(null);
 
   const [activeTab, setActiveTab] = useState("overview"); 
@@ -188,6 +189,7 @@ const AdminDashboard = () => {
 
   const getHeader = () => {
     const token = localStorage.getItem("token");
+    if (!token) return null;
     return { headers: { Authorization: `Bearer ${token}` } };
   };
 
@@ -195,6 +197,10 @@ const AdminDashboard = () => {
     setIsLoadingData(true);
     try {
       const config = getHeader();
+      if (!config) {
+        handleLogout();
+        return;
+      }
       const [statsRes, usersRes, classRes, subjectsRes, lbCountsRes] = await Promise.all([
         axios.get("/admin/stats", config),
         axios.get("/admin/users/recent", config),
@@ -219,15 +225,30 @@ const AdminDashboard = () => {
   };
 
   const fetchSubjectOptions = async () => {
+    const config = getHeader();
+    if (!config) {
+      handleLogout();
+      return;
+    }
+
     try {
-      const res = await axios.get("/admin/subjects", getHeader());
+      const res = await axios.get("/admin/subjects", config);
       setSubjectOptions(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error("Lỗi tải danh mục môn học:", error);
+      if (error.response?.status === 403 || error.response?.status === 401) handleLogout();
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  // Nếu không có token hoặc không phải admin, chuyển về login ngay.
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token || currentRole !== "admin") {
+      navigate("/login");
+      return;
+    }
+    fetchData();
+  }, []);
 
   // Khi vừa thêm môn ở tab "Tổ chuyên môn" xong chuyển qua "Tài khoản",
   // cần refresh lại danh mục môn để giáo viên chọn được môn mới ngay.
@@ -538,18 +559,28 @@ const AdminDashboard = () => {
   };
 
   const handleAccountFileChange = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (file) {
       setAccountFile(file);
       const reader = new FileReader();
       reader.onload = (evt) => {
-        const bstr = evt.target.result;
-        const wb = XLSX.read(bstr, { type: "binary" });
+        const data = new Uint8Array(evt.target.result);
+        const wb = XLSX.read(data, { type: "array" });
         const wsname = wb.SheetNames[0];
-        const data = XLSX.utils.sheet_to_json(wb.Sheets[wsname]);
-        setPreviewData(data);
+        const sheet = wb.Sheets[wsname];
+        const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+        setPreviewData(json);
       };
-      reader.readAsBinaryString(file);
+      reader.readAsArrayBuffer(file);
+    }
+  };
+
+  const handleAccountFileDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer?.files?.[0];
+    if (file) {
+      handleAccountFileChange({ target: { files: [file] } });
     }
   };
 
@@ -1387,8 +1418,8 @@ const AdminDashboard = () => {
           <DialogHeader><DialogTitle className="text-xl sm:text-2xl font-black text-sky-950">Thêm người dùng mới</DialogTitle></DialogHeader>
 
           <div className="flex bg-slate-100 rounded-xl w-full p-1 mt-4">
-            <button onClick={() => setCreateMethod("manual")} className={`flex-1 flex items-center justify-center gap-2 px-2 py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all ${createMethod === 'manual' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-sky-600'}`}><PenTool className="w-4 h-4"/> Nhập thủ công</button>
-            <button onClick={() => setCreateMethod("upload")} className={`flex-1 flex items-center justify-center gap-2 px-2 py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all ${createMethod === 'upload' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-sky-600'}`}><FileSpreadsheet className="w-4 h-4"/> Bằng Excel</button>
+            <button type="button" onClick={() => setCreateMethod("manual")} className={`flex-1 flex items-center justify-center gap-2 px-2 py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all ${createMethod === 'manual' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-sky-600'}`}><PenTool className="w-4 h-4"/> Nhập thủ công</button>
+            <button type="button" onClick={() => setCreateMethod("upload")} className={`flex-1 flex items-center justify-center gap-2 px-2 py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all ${createMethod === 'upload' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-sky-600'}`}><FileSpreadsheet className="w-4 h-4"/> Bằng Excel</button>
           </div>
 
           {createMethod === "manual" ? (
@@ -1485,8 +1516,8 @@ const AdminDashboard = () => {
           ) : (
             <div className="space-y-4 mt-4 overflow-y-auto pr-2">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-sky-50 p-4 rounded-xl gap-3 border border-sky-100">
-                <div><h4 className="font-bold text-sky-900 text-sm">1. Tải file mẫu</h4><p className="text-xs text-slate-500">File Excel có sẵn cột STT, Tên.</p></div>
-                <Button onClick={handleDownloadTemplate} variant="outline" className="bg-white border-sky-200 text-sky-600 hover:bg-sky-100 w-full sm:w-auto"><Download className="w-4 h-4 mr-2"/> Tải mẫu</Button>
+                  <div><h4 className="font-bold text-sky-900 text-sm">1. Tải file mẫu</h4><p className="text-xs text-slate-500">File Excel cần có cột tiêu đề: <strong>STT</strong> và <strong>Tên học sinh</strong> hoặc <strong>Họ và tên</strong> / <strong>Họ tên</strong>. Có thể thêm cột <strong>Năm sinh</strong>.</p></div>
+                  <Button type="button" onClick={handleDownloadTemplate} variant="outline" className="bg-white border-sky-200 text-sky-600 hover:bg-sky-100 w-full sm:w-auto"><Download className="w-4 h-4 mr-2"/> Tải mẫu</Button>
               </div>
 
               <div className="bg-sky-50/50 p-4 rounded-xl border border-sky-100">
@@ -1505,9 +1536,10 @@ const AdminDashboard = () => {
 
               <div className="bg-sky-50/50 p-4 rounded-xl border border-sky-100 text-center">
                 <h4 className="font-bold text-sky-900 text-sm mb-3"><UploadCloud className="w-4 h-4 inline mr-2"/>3. Kéo thả file Excel</h4>
-                <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if(f) handleAccountFileChange({target:{files:[f]}}); }} onClick={() => accountFileRef.current.click()} className={`border-2 border-dashed rounded-xl p-4 cursor-pointer flex flex-col items-center gap-2 ${accountFile ? 'border-sky-500 bg-sky-100' : 'border-slate-300 bg-white'}`}>
+                <p className="text-xs text-slate-500 mb-3">File cần có cột tiêu đề: <strong>STT</strong> và <strong>Tên học sinh</strong> hoặc <strong>Họ và tên</strong> / <strong>Họ tên</strong>. <br />Có thể thêm cột <strong>Năm sinh</strong> nếu muốn. Chỉ đọc sheet đầu tiên.</p>
+                <div onDragOver={(e) => { e.preventDefault(); }} onDragEnter={(e) => { e.preventDefault(); }} onDrop={handleAccountFileDrop} onClick={() => accountFileRef.current.click()} className={`border-2 border-dashed rounded-xl p-4 cursor-pointer flex flex-col items-center gap-2 ${accountFile ? 'border-sky-500 bg-sky-100' : 'border-slate-300 bg-white'}`}>
                   <input type="file" ref={accountFileRef} onChange={handleAccountFileChange} className="hidden" accept=".xlsx, .xls, .csv" />
-                  {accountFile ? <><FileSpreadsheet className="h-6 w-6 text-teal-600" /><p className="font-bold text-sky-900 text-sm">{accountFile.name}</p></> : <><UploadCloud className="h-6 w-6 text-sky-400" /><p className="text-xs font-bold text-slate-500">Bấm hoặc kéo thả file</p></>}
+                  {accountFile ? <><FileSpreadsheet className="h-6 w-6 text-teal-600" /><p className="font-bold text-sky-900 text-sm">{accountFile.name}</p></> : <><UploadCloud className="h-6 w-6 text-sky-400" /><p className="text-xs font-bold text-slate-500">Bấm hoặc kéo thả file ở đây</p></>}
                 </div>
               </div>
 
@@ -1524,7 +1556,7 @@ const AdminDashboard = () => {
                 </div>
               )}
 
-              <Button onClick={handleUploadExcel} disabled={previewData.length === 0 || !uploadClassId || loading} className="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold h-12 rounded-xl">
+              <Button type="button" onClick={handleUploadExcel} disabled={previewData.length === 0 || !uploadClassId || loading} className="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold h-12 rounded-xl">
                 {loading ? <Loader2 className="animate-spin w-5 h-5 mr-2" /> : <Sparkles className="w-5 h-5 mr-2" />} Tạo {previewData.length} tài khoản
               </Button>
             </div>

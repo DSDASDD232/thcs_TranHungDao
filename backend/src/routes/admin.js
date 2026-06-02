@@ -724,14 +724,16 @@ router.get("/subjects", verifyToken, async (req, res) => {
 router.post("/subjects", verifyToken, isAdmin, async (req, res) => {
     try {
         const { name, department } = req.body;
+        // Bắt lỗi nếu thiếu department
         if (!name || !department) return res.status(400).json({ message: "Vui lòng nhập tên môn và chọn Tổ chuyên môn!" });
 
         const existing = await Subject.findOne({ name: name.trim() });
         if (existing) return res.status(400).json({ message: "Môn học này đã tồn tại trong hệ thống!" });
 
+        // Tạo môn học mới kèm department
         const newSubject = new Subject({ 
             name: name.trim(),
-            department: department 
+            department: department // Thêm dòng này
         });
         
         await newSubject.save();

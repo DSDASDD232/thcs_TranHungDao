@@ -1,8 +1,19 @@
 import express from "express";
+import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken"; 
 import User from "../models/User.js";
+import Class from "../models/Class.js";
+import Subject from "../models/Subject.js";
 import { verifyToken } from "../middleware/auth.js"; // <--- Bổ sung middleware để xác thực
+
+const hasSpecialChar = (password) => /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password);
+
+const removeAccents = (str) => {
+    if (!str) return "";
+    // Chuẩn hóa, bỏ dấu, và xóa các ký tự không phải chữ/số để làm username an toàn
+    return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').replace(/[^a-zA-Z0-9]/g, '');
+};
 
 const router = express.Router();
 
@@ -11,7 +22,7 @@ const router = express.Router();
 // ==========================================
 router.post("/register", async (req, res) => {
     try {
-        const { username, password, fullName, role, grade, classId, subject, assignedClasses } = req.body;
+        const { username, password, fullName, role, grade, classId, subject, assignedClasses, department, subjects, qualification, status, phone, address, note } = req.body;
 
         // Kiểm tra xem tài khoản này đã tồn tại trong DB chưa
         const userExists = await User.findOne({ username });
@@ -19,9 +30,43 @@ router.post("/register", async (req, res) => {
             return res.status(400).json({ message: "Tên đăng nhập đã tồn tại! Vui lòng chọn tên khác." });
         }
 
+        if (!password) {
+            return res.status(400).json({ message: "Mật khẩu không được để trống." });
+        }
+        if (!hasSpecialChar(password)) {
+            return res.status(400).json({ message: "Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt." });
+        }
+
         // Mã hóa mật khẩu (Băm 10 vòng)
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
+
+        let normalizedSubjects = Array.isArray(subjects)
+            ? subjects
+            : (typeof subjects === "string" ? subjects.split(",").map(s => s.trim()).filter(Boolean) : []);
+
+        if (role === "teacher") {
+            if (department) {
+                const allowedSubjects = await Subject.find({ department }).select("name");
+                const allowedSubjectNames = new Set(allowedSubjects.map(s => s.name));
+                const invalidSubjects = normalizedSubjects.filter(s => !allowedSubjectNames.has(s));
+                if (invalidSubjects.length > 0) {
+                    return res.status(400).json({
+                        message: `Môn không hợp lệ với tổ ${department}: ${invalidSubjects.join(", ")}`
+                    });
+                }
+            } else {
+                normalizedSubjects = [];
+            }
+        }
+
+        // Validate phone: tùy chọn, nếu nhập thì phải là số 1-15 ký tự
+        const phoneStr = String(phone ?? "").trim();
+        if (phoneStr !== "" && !/^\d{1,15}$/.test(phoneStr)) {
+            return res.status(400).json({
+                message: "Số điện thoại nếu nhập thì là số (1-15 ký tự), không được nhập chữ."
+            });
+        }
 
         // Tạo User mới
         const newUser = new User({
@@ -32,7 +77,14 @@ router.post("/register", async (req, res) => {
             grade,
             classId: classId || null,
             subject,
-            assignedClasses: assignedClasses || [] 
+            assignedClasses: assignedClasses || [],
+            department: department || "",
+            subjects: normalizedSubjects,
+            qualification: qualification || "",
+            status: status || "active",
+            phone: phoneStr,
+            address: address || "",
+            note: note || "",
         });
         await newUser.save();
 

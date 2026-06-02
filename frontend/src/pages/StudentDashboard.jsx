@@ -42,6 +42,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   BookOpen,
   LogOut,
@@ -60,7 +61,10 @@ import {
   FileX,
   Lock,
   Printer,
-  RefreshCcw // 👉 Đã thêm icon RefreshCcw cho nút Làm lại
+  RefreshCcw,
+  UserCircle,
+  Key,
+  Save
 } from "lucide-react";
 
 const CustomDateInput = ({ label, value, onChange }) => {
@@ -863,6 +867,12 @@ const StudentDashboard = () => {
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
 
+  // 👉 THÊM STATE CHO CHỈNH SỬA PROFILE
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [profileForm, setProfileForm] = useState({ fullName: '', phone: '', address: '' });
+  const [passwordData, setPasswordData] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -877,6 +887,12 @@ const StudentDashboard = () => {
           .catch(() => null);
         if (profileRes && profileRes.data) {
           setProfile(profileRes.data);
+          // Set dữ liệu sẵn cho form profile
+          setProfileForm({
+              fullName: profileRes.data.fullName || "",
+              phone: profileRes.data.phone || "",
+              address: profileRes.data.address || "",
+          });
         }
 
         const [assignmentsRes, submissionsRes] = await Promise.all([
@@ -894,20 +910,20 @@ const StudentDashboard = () => {
         setAllAssignmentsForRef(allAssignments);
 
         const submittedAssignmentIds = mySubmissions.map(
-          (sub) => sub.assignment?._id || sub.assignment,
+          (sub) => String(sub.assignment?._id || sub.assignment)
         );
         const now = new Date();
 
         const pending = [];
         const overdueMocks = [];
 
-        // 👉 ĐÃ THÊM LOGIC KIỂM TRA CHO PHÉP LÀM NHIỀU LẦN (allowMultipleSubmissions)
         allAssignments.forEach((a) => {
-          const isSubmitted = submittedAssignmentIds.includes(a._id);
+          const isSubmitted = submittedAssignmentIds.includes(String(a._id));
           const isPastDue = new Date(a.dueDate) < now;
+          
+          const isAllowMultiple = a.allowMultipleSubmissions === true || a.allowMultipleSubmissions === "true";
 
           if (!isSubmitted) {
-            // Chưa nộp lần nào
             if (isPastDue) {
               overdueMocks.push({
                 _id: a._id + "_overdue",
@@ -921,9 +937,7 @@ const StudentDashboard = () => {
               pending.push(a);
             }
           } else {
-            // Đã nộp
-            if (a.allowMultipleSubmissions && !isPastDue) {
-              // Vẫn còn hạn và cho phép nộp nhiều lần -> Thêm vào tab "Cần làm" với cờ isRetakeable
+            if (isAllowMultiple && !isPastDue) {
               pending.push({ ...a, isRetakeable: true });
             }
           }
@@ -1141,6 +1155,54 @@ const StudentDashboard = () => {
     setIsPrinting(false);
   };
 
+  // 👉 HÀM CẬP NHẬT PROFILE CÁ NHÂN & ĐỔI MẬT KHẨU
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    if (passwordData.newPassword && passwordData.newPassword !== passwordData.confirmPassword) {
+      return alert("Mật khẩu mới và xác nhận mật khẩu không khớp!");
+    }
+    
+    if (passwordData.newPassword && passwordData.newPassword.length > 0) {
+        if (passwordData.newPassword.length < 6) return alert("Mật khẩu mới phải có ít nhất 6 ký tự!");
+        if (!/[!@#$%^&*(),.?":{}|<>]/.test(passwordData.newPassword)) {
+          return alert("Mật khẩu mới phải chứa ít nhất một ký tự đặc biệt (!@#$%^&*(),.?\":{}|<>).");
+        }
+    }
+    
+    setIsUpdatingProfile(true);
+    try {
+      const payload = {
+        fullName: profileForm.fullName,
+        phone: profileForm.phone,
+        address: profileForm.address,
+      };
+
+      if (passwordData.oldPassword && passwordData.newPassword) {
+          payload.oldPassword = passwordData.oldPassword;
+          payload.newPassword = passwordData.newPassword;
+      }
+
+      const res = await axios.put('/auth/update-my-profile', payload, {
+         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      });
+      
+      alert("✅ Lưu thông tin thành công!");
+      localStorage.setItem("fullName", res.data.user.fullName); 
+      setProfile(res.data.user);
+      setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+      setIsEditProfileOpen(false);
+
+      if (passwordData.newPassword) {
+          alert("Bạn vừa đổi mật khẩu, hệ thống sẽ tự động đăng xuất.");
+          handleLogout();
+      }
+    } catch (error) {
+      alert(error.response?.data?.message || "Lỗi khi cập nhật thông tin!");
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50/50 font-sans text-slate-800">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
@@ -1167,7 +1229,12 @@ const StudentDashboard = () => {
                     : "Chưa phân lớp"}
               </p>
             </div>
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-sky-100 flex items-center justify-center text-sky-600 font-bold border-2 border-sky-200 shrink-0">
+            {/* 👉 BẤM VÀO AVATAR ĐỂ MỞ MODAL SỬA THÔNG TIN */}
+            <div 
+               onClick={() => setIsEditProfileOpen(true)}
+               className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-sky-100 flex items-center justify-center text-sky-600 font-bold border-2 border-sky-200 shrink-0 cursor-pointer hover:bg-sky-200 transition-colors"
+               title="Sửa thông tin cá nhân"
+            >
               {fullName.charAt(0).toUpperCase()}
             </div>
             <Button
@@ -1182,6 +1249,88 @@ const StudentDashboard = () => {
           </div>
         </div>
       </header>
+
+      {/* 👉 MODAL CHỈNH SỬA THÔNG TIN CÁ NHÂN (HỌC SINH) */}
+      <Dialog open={isEditProfileOpen} onOpenChange={setIsEditProfileOpen}>
+        <DialogContent className="sm:max-w-[500px] w-[95%] rounded-3xl border-none p-6 bg-white shadow-2xl">
+            <DialogHeader>
+                <DialogTitle className="text-xl font-bold flex items-center gap-2 text-sky-700 pb-2 border-b border-sky-100">
+                    <UserCircle className="h-5 w-5" /> Thông tin cá nhân & Bảo mật
+                </DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleUpdateProfile} className="space-y-4 pt-2">
+                <div>
+                    <label className="text-sm font-bold text-slate-600 mb-1 block">Họ và tên</label>
+                    <Input 
+                        value={profileForm.fullName} 
+                        onChange={(e) => setProfileForm({...profileForm, fullName: e.target.value})} 
+                        required 
+                        className="h-11 rounded-xl bg-white border-slate-200 focus-visible:ring-sky-500 font-bold" 
+                    />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label className="text-sm font-bold text-slate-600 mb-1 block">Số điện thoại</label>
+                        <Input
+                            className="h-11 rounded-xl bg-white border-slate-200 focus-visible:ring-sky-500"
+                            value={profileForm.phone}
+                            inputMode="numeric"
+                            maxLength={15}
+                            onChange={(e) => {
+                                const digitsOnly = String(e.target.value).replace(/[^0-9]/g, "").slice(0, 15);
+                                setProfileForm((prev) => ({ ...prev, phone: digitsOnly }));
+                            }}
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm font-bold text-slate-600 mb-1 block">Địa chỉ</label>
+                        <Input 
+                            className="h-11 rounded-xl bg-white border-slate-200 focus-visible:ring-sky-500"
+                            value={profileForm.address}
+                            onChange={(e) => setProfileForm({...profileForm, address: e.target.value})}
+                        />
+                    </div>
+                </div>
+                
+                <div className="bg-amber-50/50 p-4 rounded-2xl border border-amber-100 mt-2">
+                    <label className="text-sm font-bold text-amber-700 flex items-center gap-1 mb-3 border-b border-amber-100 pb-2">
+                        <Key className="w-4 h-4"/> Đổi mật khẩu
+                    </label>
+                    <div className="space-y-3">
+                        <Input 
+                            type="password" 
+                            placeholder="Mật khẩu cũ (hiện tại)..."
+                            className="h-11 rounded-xl bg-white border-amber-200 focus-visible:ring-amber-500"
+                            value={passwordData.oldPassword}
+                            onChange={(e) => setPasswordData({...passwordData, oldPassword: e.target.value})}
+                        />
+                        <Input 
+                            type="password" 
+                            placeholder="Mật khẩu mới..."
+                            className="h-11 rounded-xl bg-white border-amber-200 focus-visible:ring-amber-500"
+                            value={passwordData.newPassword}
+                            onChange={(e) => setPasswordData({...passwordData, newPassword: e.target.value})}
+                        />
+                        <Input 
+                            type="password" 
+                            placeholder="Xác nhận mật khẩu mới..."
+                            className="h-11 rounded-xl bg-white border-amber-200 focus-visible:ring-amber-500"
+                            value={passwordData.confirmPassword}
+                            onChange={(e) => setPasswordData({...passwordData, confirmPassword: e.target.value})}
+                        />
+                    </div>
+                    <p className="text-[10px] text-amber-600 mt-2 font-medium">*Bỏ trống nếu không muốn đổi mật khẩu. (MK cần chứa số/chữ và ký tự đặc biệt)</p>
+                </div>
+
+                <div className="pt-2 flex justify-end gap-2">
+                    <Button type="button" variant="ghost" onClick={() => setIsEditProfileOpen(false)} className="rounded-xl font-bold h-11 text-slate-500">Đóng</Button>
+                    <Button type="submit" disabled={isUpdatingProfile} className="h-11 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-bold px-6">
+                        {isUpdatingProfile ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Save className="w-4 h-4 mr-2" />} Lưu thay đổi
+                    </Button>
+                </div>
+            </form>
+        </DialogContent>
+      </Dialog>
 
       <main className="max-w-6xl mx-auto px-4 py-6 sm:py-8 lg:py-12">
         <div className="bg-sky-500 rounded-3xl p-6 sm:p-8 lg:p-10 text-white shadow-lg shadow-sky-200 mb-6 sm:mb-8 relative overflow-hidden">
@@ -1253,7 +1402,6 @@ const StudentDashboard = () => {
                       >
                         <CardHeader className="pb-3 border-b border-slate-50 p-5 sm:p-6">
                           <div className="flex justify-between items-start mb-3 gap-2">
-                            {/* 👉 ĐÃ CẬP NHẬT GIAO DIỆN BADGE NẾU ĐƯỢC LÀM LẠI */}
                             <Badge className={`border-0 shadow-none font-bold px-3 py-1 text-xs whitespace-nowrap ${assig.isRetakeable ? 'bg-amber-100 text-amber-700' : 'bg-sky-50 text-sky-600'}`}>
                               {assig.isRetakeable ? "Có thể làm lại" : "Đang mở"}
                             </Badge>
@@ -1296,7 +1444,6 @@ const StudentDashboard = () => {
                           </div>
                         </CardContent>
                         <CardFooter className="pt-0 pb-5 px-5 sm:px-6">
-                          {/* 👉 ĐÃ ĐỔI NÚT NẾU ĐƯỢC LÀM LẠI */}
                           <Button
                             onClick={() => navigate(`/take-quiz/${assig._id}`)}
                             className={`w-full h-11 sm:h-12 rounded-xl font-black text-sm sm:text-base shadow-sm transition-all active:scale-95 text-white ${assig.isRetakeable ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-200' : 'bg-sky-500 hover:bg-sky-600 shadow-sky-200'}`}

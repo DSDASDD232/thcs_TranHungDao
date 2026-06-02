@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "../lib/axios";
 import ExcelJS from 'exceljs';
 import jsPDF from "jspdf";
@@ -22,7 +22,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Loader2, UserCog, Search, Download, Layers, Unlock, Save, Plus, X, BookOpen, ShieldAlert, Lock, Filter } from "lucide-react";
+import { Loader2, UserCog, Search, Download, Layers, Unlock, Save, Plus, X, BookOpen, ShieldAlert, Lock, Filter, ChevronLeft, ChevronRight } from "lucide-react";
 
 // ================== CÁC HÀM XUẤT FILE (WORD, PDF) ==================
 
@@ -243,13 +243,15 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
 
   const [subjectList, setSubjectList] = useState([]);
   const [newSubjectName, setNewSubjectName] = useState("");
-  const [newSubjectDept, setNewSubjectDept] = useState("KHTN");
+  const [newSubjectDept, setNewSubjectDept] = useState("Chọn Tổ");
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
   const [isSubjectEditMode, setIsSubjectEditMode] = useState(false);
 
   const [editingTeacherId, setEditingTeacherId] = useState(null);
+  const [selectedTeacherRowId, setSelectedTeacherRowId] = useState(null);
   const [tempEditData, setTempEditData] = useState({ department: "", subjects: [] });
   const [isSavingTeacher, setIsSavingTeacher] = useState(false);
+  const tableScrollRef = useRef(null);
   
   const [isExportingPDF, setIsExportingPDF] = useState(false);
 
@@ -278,6 +280,7 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
           await axios.post("/admin/subjects", { name: newSubjectName, department: newSubjectDept }, getHeader());
           setNewSubjectName("");
           await fetchSubjects();
+          await fetchData();
       } catch (error) {
           alert(error.response?.data?.message || "Lỗi thêm môn học!");
       } finally {
@@ -344,14 +347,36 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
   // Filter dữ liệu bảng
   const filteredTeachers = teachersList.filter(t => {
     const term = searchTerm.toLowerCase();
-    const matchName = !searchTerm || (t.fullName && t.fullName.toLowerCase().includes(term)) || (t.username && t.username.toLowerCase().includes(term));
-    const matchDept = searchDept === "all" || t.department === searchDept;
-    
     const subs = getTeacherSubjects(t);
+    const matchName = !searchTerm
+      || (t.fullName && t.fullName.toLowerCase().includes(term))
+      || (t.username && t.username.toLowerCase().includes(term))
+      || subs.some((sub) => String(sub).toLowerCase().includes(term));
+    const matchDept = searchDept === "all" || t.department === searchDept;
     const matchSubject = searchSubject === "all" || subs.includes(searchSubject);
 
     return matchName && matchDept && matchSubject;
   });
+
+  const handleHorizontalScroll = (direction) => {
+    const wrapper = tableScrollRef.current;
+    if (!wrapper) return;
+    const el = wrapper.querySelector('[data-slot="table-container"]');
+    if (!el) return;
+
+    const maxScrollLeft = el.scrollWidth - el.clientWidth;
+    if (maxScrollLeft <= 0) return;
+
+    const scrollAmount = Math.max(120, Math.floor(el.clientWidth * 0.3));
+    const nextLeft = direction === "left"
+      ? Math.max(0, el.scrollLeft - scrollAmount)
+      : Math.min(maxScrollLeft, el.scrollLeft + scrollAmount);
+
+    el.scrollTo({
+      left: nextLeft,
+      behavior: "smooth",
+    });
+  };
 
   const getExportData = () => {
     return filteredTeachers.map((t, idx) => {
@@ -496,15 +521,15 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
     <div className="space-y-6">
       
       {/* 1. KHU VỰC THỐNG KÊ SỐ LƯỢNG GIÁO VIÊN THEO TỔ */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        <Card className="bg-white border-blue-100 shadow-sm rounded-3xl overflow-hidden flex flex-col">
-          <div className="bg-gradient-to-r from-blue-500 to-blue-400 p-5 text-white flex justify-between items-center">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full">
+        <Card className="bg-white border-blue-100 shadow-sm rounded-3xl overflow-hidden flex flex-col h-full">
+          <div className="bg-gradient-to-r from-blue-500 to-blue-400 p-5 text-white flex justify-between items-center min-h-[95px]">
              <div>
                 <h3 className="text-xl font-black flex items-center gap-2"><Layers className="w-6 h-6 opacity-80" /> TỔ KHOA HỌC TỰ NHIÊN</h3>
                 <p className="text-blue-100 font-medium text-sm mt-1">Đang có {khtnCount} giáo viên</p>
              </div>
           </div>
-          <CardContent className="p-5 flex-1 flex flex-col bg-slate-50/30">
+          <CardContent className="p-5 flex-1 flex flex-col bg-slate-50/30 min-h-[150px]">
             <div className="flex-1">
               <p className="text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider">Danh sách môn học</p>
               <div className="flex flex-wrap gap-2">
@@ -524,14 +549,14 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
           </CardContent>
         </Card>
 
-        <Card className="bg-white border-orange-100 shadow-sm rounded-3xl overflow-hidden flex flex-col">
-          <div className="bg-gradient-to-r from-orange-500 to-orange-400 p-5 text-white flex justify-between items-center">
+        <Card className="bg-white border-orange-100 shadow-sm rounded-3xl overflow-hidden flex flex-col h-full">
+          <div className="bg-gradient-to-r from-orange-500 to-orange-400 p-5 text-white flex justify-between items-center min-h-[95px]">
              <div>
                 <h3 className="text-xl font-black flex items-center gap-2"><Layers className="w-6 h-6 opacity-80" /> TỔ KHOA HỌC XÃ HỘI</h3>
                 <p className="text-orange-100 font-medium text-sm mt-1">Đang có {khxhCount} giáo viên</p>
              </div>
           </div>
-          <CardContent className="p-5 flex-1 flex flex-col bg-slate-50/30">
+          <CardContent className="p-5 flex-1 flex flex-col bg-slate-50/30 min-h-[150px]"> 
             <div className="flex-1">
               <p className="text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider">Danh sách môn học</p>
               <div className="flex flex-wrap gap-2">
@@ -553,11 +578,12 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
       </div>
 
       {/* FORM THÊM MÔN & NÚT MỞ KHÓA XÓA MÔN */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-          <div className="flex flex-col sm:flex-row w-full lg:w-auto items-start sm:items-center gap-4">
-            <div className="flex items-center gap-2 text-slate-600 font-bold shrink-0">
+      <div className="flex items-center gap-2 text-slate-600 font-bold shrink-0">
                <BookOpen className="w-5 h-5 text-sky-500" /> Quản lý danh mục Môn:
             </div>
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row w-full lg:w-auto items-start sm:items-center gap-4">
+        
             <div className="flex w-full sm:w-auto gap-2">
                <Select value={newSubjectDept} onValueChange={setNewSubjectDept}>
                   <SelectTrigger className="w-[140px] bg-slate-50 font-bold"><SelectValue /></SelectTrigger>
@@ -610,26 +636,29 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
           </div>
 
           {/* BỘ LỌC BẢNG GIÁO VIÊN */}
-          <div className="flex flex-wrap md:flex-nowrap gap-3 pt-2">
+          <div className="flex flex-wrap md:flex-nowrap gap-3 pt-5">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input 
-                placeholder="Tìm tên hoặc tài khoản GV..." 
+                placeholder="Tìm tên hoặc tài khoản" 
                 className="pl-10 h-10 rounded-xl bg-white border-slate-200"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+            <CardTitle className="text-lg font-bold h- text-slate-800 flex items-center gap-3">
+              <Search className="w-4 h-4 text-slate-500" /> Lọc theo tiêu chí
+            </CardTitle>
 
             <Select value={searchDept} onValueChange={setSearchDept}>
                <SelectTrigger className="h-10 w-[150px] bg-white border-slate-200 rounded-xl font-medium">
                   <div className="flex items-center">
                     <Filter className="w-4 h-4 mr-2 text-slate-400 shrink-0" />
-                    <SelectValue placeholder="Tất cả tổ" />
+                    <SelectValue placeholder="all" />
                   </div>
                </SelectTrigger>
                <SelectContent>
-                  <SelectItem value="all">Tất cả tổ</SelectItem>
+                  <SelectItem value="all">all</SelectItem>
                   <SelectItem value="KHTN">Tổ KHTN</SelectItem>
                   <SelectItem value="KHXH">Tổ KHXH</SelectItem>
                </SelectContent>
@@ -639,11 +668,11 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
                <SelectTrigger className="h-10 w-[160px] bg-white border-slate-200 rounded-xl font-medium">
                   <div className="flex items-center">
                     <Filter className="w-4 h-4 mr-2 text-slate-400 shrink-0" />
-                    <SelectValue placeholder="Tất cả môn" />
+                    <SelectValue placeholder="all" />
                   </div>
                </SelectTrigger>
                <SelectContent>
-                  <SelectItem value="all">Tất cả môn</SelectItem>
+                  <SelectItem value="all">all</SelectItem>
                   {subjectList.map(sub => (
                     <SelectItem key={sub._id} value={sub.name}>{sub.name}</SelectItem>
                   ))}
@@ -652,31 +681,43 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
           </div>
         </CardHeader>
         
-        <div className="overflow-x-auto p-4">
-          <Table className="min-w-[900px]">
+        <div ref={tableScrollRef} className="overflow-x-auto p-4">
+          <Table className="min-w-[1400px] border border-slate-200 rounded-xl [&_th]:border [&_th]:border-slate-200 [&_td]:border [&_td]:border-slate-200">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-12 text-center font-bold text-slate-500">STT</TableHead>
                 <TableHead className="font-bold text-slate-500 w-56">Thông tin Giáo viên</TableHead>
                 <TableHead className="font-bold text-slate-500 w-44">Tổ chuyên môn</TableHead>
                 <TableHead className="font-bold text-slate-500">Môn giảng dạy</TableHead>
+                <TableHead className="font-bold text-slate-500 w-56">Lớp đang phụ trách</TableHead>
                 <TableHead className="font-bold text-slate-500 text-right w-32 pr-4">Thao tác</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredTeachers.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-10 text-slate-500">Không tìm thấy giáo viên nào phù hợp.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center py-10 text-slate-500">Không tìm thấy giáo viên nào phù hợp.</TableCell></TableRow>
               ) : (
                 filteredTeachers.map((teacher, index) => {
                   const isAssigned = teacher.assignedClasses && teacher.assignedClasses.length > 0;
                   const isEditing = editingTeacherId === teacher._id;
+                  const isRowSelected = selectedTeacherRowId === teacher._id;
                   const teacherSubs = isEditing ? tempEditData.subjects : getTeacherSubjects(teacher);
                   const teacherDept = isEditing ? tempEditData.department : teacher.department;
                   
                   const availableSubjects = teacherDept === 'KHTN' ? khtnSubjects : teacherDept === 'KHXH' ? khxhSubjects : [];
 
                   return (
-                    <TableRow key={teacher._id} className={`transition-colors ${isEditing ? 'bg-sky-50/50' : 'hover:bg-slate-50/50'}`}>
+                    <TableRow
+                      key={teacher._id}
+                      onClick={() => setSelectedTeacherRowId(teacher._id)}
+                      className={`cursor-pointer transition-colors ${
+                        isRowSelected
+                          ? '!bg-fuchsia-200 [&>td]:!bg-fuchsia-200 [&>td]:text-slate-800'
+                          : isEditing
+                            ? 'bg-sky-50/50'
+                            : 'hover:bg-slate-50/50'
+                      }`}
+                    >
                       <TableCell className="text-center font-bold text-slate-400 align-top pt-5">{index + 1}</TableCell>
                       
                       <TableCell className="align-top pt-4">
@@ -729,7 +770,7 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
                                     onClick={() => toggleSubjectSelect(sub.name)}
                                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
                                       isSelected
-                                        ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                                        ? "bg-blue-600 text-white border-red-600 shadow-sm"
                                         : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100 disabled:opacity-50"
                                     }`}
                                   >
@@ -755,13 +796,27 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
                         )}
                       </TableCell>
 
+                      <TableCell className="align-top pt-4">
+                        <div className="max-w-[300px]">
+                          {teacher.assignedClasses && teacher.assignedClasses.length > 0 ? (
+                            teacher.assignedClasses.map((cls, idx) => (
+                              <Badge key={idx} variant="outline" className="bg-slate-100 text-slate-700 border-slate-200 text-[11px]">
+                                {cls.name || cls}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-xs text-slate-400 italic">Chưa có lớp</span>
+                          )}
+                        </div>
+                      </TableCell>
+
                       <TableCell className="align-top pt-3 pr-4 text-right">
                         {isEditing ? (
                           <div className="flex flex-col gap-1 items-end">
                             <Button 
                               onClick={() => handleSaveTeacher(teacher._id)} 
                               disabled={isSavingTeacher}
-                              className="h-9 bg-emerald-500 hover:bg-emerald-600 text-white font-bold w-[110px]"
+                              className="h-9 bg-emerald-500 hover:bg-emerald-600 text-white font-bold w-[110px]" //chinh mau button mo khoa mon
                             >
                               {isSavingTeacher ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4 mr-1.5"/> Lưu & Khóa</>}
                             </Button>
@@ -771,7 +826,7 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
                           <Button 
                             onClick={() => handleOpenEdit(teacher)} 
                             variant="outline" 
-                            className="h-9 border-sky-200 text-sky-600 hover:bg-sky-50 font-bold w-[110px]"
+                            className="h-9 border-sky-200 text-sky-600 hover:bg-sky-50 font-bold w-[110px]" //mau cua mon khi chon
                           >
                             <Unlock className="w-4 h-4 mr-1.5" /> Mở khóa
                           </Button>
@@ -783,6 +838,24 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
               )}
             </TableBody>
           </Table>
+        </div>
+        <div className="px-4 pb-4 flex items-center justify-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => handleHorizontalScroll("left")}
+            className="h-9 rounded-lg"
+          >
+            <ChevronLeft className="w-4 h-4 mr-1" /> Trái
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => handleHorizontalScroll("right")}
+            className="h-9 rounded-lg"
+          >
+            Phải <ChevronRight className="w-4 h-4 ml-1" />
+          </Button>
         </div>
       </Card>
     </div>

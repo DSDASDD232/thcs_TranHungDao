@@ -30,6 +30,19 @@ const userSchema = new mongoose.Schema(
             required: true,
         },
 
+        // ==========================================
+        // 👉 THÊM MỚI: CÁC TRƯỜNG THÔNG TIN CÁ NHÂN (PROFILE)
+        // ==========================================
+        phone: { 
+            type: String, 
+            default: "" 
+        },
+        address: { 
+            type: String, 
+            default: "" 
+        },
+       
+
         // --- CÁC TRƯỜNG THÔNG TIN MỞ RỘNG TÙY THEO ROLE ---
         
         // Dành cho Học sinh (Lưu Khối, ví dụ: "6", "7", "8", "9")
@@ -59,7 +72,7 @@ const userSchema = new mongoose.Schema(
         },
 
         // =========================================================================
-        // 👉 THÊM MỚI: PHÂN BỔ TỔ CHUYÊN MÔN LỚN VÀ ĐA MÔN HỌC CHO GIÁO VIÊN
+        // PHÂN BỔ TỔ CHUYÊN MÔN LỚN VÀ ĐA MÔN HỌC CHO GIÁO VIÊN
         // =========================================================================
         
         // Lưu Tổ lớn: Chỉ nhận giá trị "KHTN", "KHXH" hoặc trống ""

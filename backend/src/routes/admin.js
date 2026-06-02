@@ -1,56 +1,28 @@
 import express from "express";
-import mongoose from "mongoose"; 
+import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken"; 
 import User from "../models/User.js";
-import Class from "../models/Class.js"; 
-import Question from "../models/Question.js";
+import Class from "../models/Class.js";
+import Subject from "../models/Subject.js";
 import Assignment from "../models/Assignment.js";
 import Submission from "../models/Submission.js";
-import { verifyToken, isAdmin } from "../middleware/auth.js";
+import Question from "../models/Question.js";
+import { verifyToken, isAdmin } from "../middleware/auth.js"; 
 import multer from "multer";
-import xlsx from "xlsx";
-import bcrypt from "bcryptjs"; 
-import Subject from "../models/Subject.js";
-import fs from "fs"; 
+import fs from "fs";
 
-const router = express.Router();
 // Cấu hình Multer lưu file tạm cho Restore và memoryStorage cho import Excel
 const upload = multer({ dest: 'uploads/temp_backups/' });
-const excelUpload = multer({ storage: multer.memoryStorage() });
 
-// ==========================================
-// HÀM HỖ TRỢ: Lọc thời gian (Năm, Tháng, Tuần)
-// ==========================================
-const buildDateFilter = (year, month, week) => {
-    if (!year) return {};
-    let startDate, endDate;
-    const y = parseInt(year);
+const hasSpecialChar = (password) => /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password);
 
-    if (!month || month === "all") {
-        // Lọc cả năm
-        startDate = new Date(y, 0, 1);
-        endDate = new Date(y, 11, 31, 23, 59, 59, 999);
-    } else {
-        const m = parseInt(month) - 1; // Trong JS tháng bắt đầu từ 0
-        if (!week || week === "all") {
-            // Lọc cả tháng
-            startDate = new Date(y, m, 1);
-            endDate = new Date(y, m + 1, 0, 23, 59, 59, 999);
-        } else {
-            // Lọc theo tuần
-            const w = parseInt(week);
-            const startDay = (w - 1) * 7 + 1;
-            let endDay = w * 7;
-            const lastDayOfMonth = new Date(y, m + 1, 0).getDate();
-            
-            if (endDay > lastDayOfMonth || w === 5) {
-                endDay = lastDayOfMonth;
-            }
-            startDate = new Date(y, m, startDay);
-            endDate = new Date(y, m, endDay, 23, 59, 59, 999);
-        }
-    }
-    return { createdAt: { $gte: startDate, $lte: endDate } };
+const removeAccents = (str) => {
+    if (!str) return "";
+    return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').replace(/[^a-zA-Z0-9]/g, '');
 };
+
+const router = express.Router();
 
 // ==========================================
 // 1. [GET] Lấy thống kê tổng quan toàn trường
@@ -220,11 +192,6 @@ router.post("/users/import-json", verifyToken, isAdmin, async (req, res) => {
         let failedCount = 0;
         let generatedAccounts = []; 
 
-        const removeAccents = (str) => {
-            if (!str) return "";
-            return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
-        };
-
         const salt = await bcrypt.genSalt(10);
         const defaultHashedPassword = await bcrypt.hash("1", salt);
 
@@ -294,12 +261,13 @@ router.delete("/users/:id", verifyToken, isAdmin, async (req, res) => {
 });
 
 // ==========================================
-// 7. [PUT] CẬP NHẬT TÀI KHOẢN
+// 7. [PUT] CẬP NHẬT TÀI KHOẢN (Bao gồm Role, Class, Department, Môn và Cả PROFILE)
 // ==========================================
 router.put("/users/:id", verifyToken, isAdmin, async (req, res) => {
     try {
         const userId = req.params.id;
-        const { fullName, role, grade, classId, assignedClasses, isLocked, password, subject, department, subjects } = req.body;
+        // 👉 ĐÃ FIX: GỠ BỎ dateOfBirth VÀ gender
+        const { fullName, role, grade, classId, assignedClasses, isLocked, password, subject, department, subjects, qualification, status, phone, address, note } = req.body;
         
         const existingUser = await User.findById(userId);
         if (!existingUser) return res.status(404).json({ message: "Không tìm thấy người dùng!" });
@@ -308,6 +276,7 @@ router.put("/users/:id", verifyToken, isAdmin, async (req, res) => {
 
         if (existingUser.role === "teacher") {
             const isAssigned = existingUser.assignedClasses && existingUser.assignedClasses.length > 0;
+            const targetDepartment = department !== undefined ? department : existingUser.department;
 
             if (department !== undefined) {
                 if (existingUser.department !== department && isAssigned) {
@@ -319,29 +288,57 @@ router.put("/users/:id", verifyToken, isAdmin, async (req, res) => {
             }
 
             if (subjects !== undefined) {
-                updateFields.subjects = subjects;
+                const normalizedSubjects = Array.isArray(subjects) ? subjects : (typeof subjects === "string" ? subjects.split(",").map(s => s.trim()).filter(Boolean) : []);
+
+                if (targetDepartment) {
+                    const allowedSubjects = await Subject.find({ department: targetDepartment }).select("name");
+                    const allowedSubjectNames = new Set(allowedSubjects.map(s => s.name));
+                    const invalidSubjects = normalizedSubjects.filter(s => !allowedSubjectNames.has(s));
+                    if (invalidSubjects.length > 0) {
+                        return res.status(400).json({
+                            message: `Môn không hợp lệ với tổ ${targetDepartment}: ${invalidSubjects.join(", ")}`
+                        });
+                    }
+                }
+                updateFields.subjects = targetDepartment ? normalizedSubjects : [];
             }
 
-            if (subject !== undefined) {
-                updateFields.subject = subject;
-            }
+            if (subject !== undefined) updateFields.subject = subject;
+            if (qualification !== undefined) updateFields.qualification = qualification;
         }
 
+        // Cập nhật thông tin Profile chung
         if (fullName) updateFields.fullName = fullName;
         if (role) updateFields.role = role;
         if (grade !== undefined) updateFields.grade = grade;
+        if (status !== undefined) updateFields.status = status;
+        if (address !== undefined) updateFields.address = address;
+        if (note !== undefined) updateFields.note = note;
+
+        // Xử lý số điện thoại
+        if (phone !== undefined) {
+            const phoneStr = String(phone).trim();
+            if (phoneStr === "") {
+                updateFields.phone = "";
+            } else if (!/^\d{1,15}$/.test(phoneStr)) {
+                return res.status(400).json({ message: "Số điện thoại nếu nhập thì là số (1-15 ký tự), không được nhập chữ." });
+            } else {
+                updateFields.phone = phoneStr;
+            }
+        }
         
+        // Cập nhật liên quan đến lớp
         if (role === "student") {
             if (classId !== undefined) updateFields.classId = classId || null;
             updateFields.$unset = { assignedClasses: "" }; 
-        } 
-        else if (role === "teacher") {
+        } else if (role === "teacher") {
             if (assignedClasses) updateFields.assignedClasses = assignedClasses;
             updateFields.classId = null; 
         }
 
         if (isLocked !== undefined) updateFields.isLocked = isLocked;
 
+        // Cập nhật mật khẩu nếu Admin yêu cầu đổi
         if (password) {
             const salt = await bcrypt.genSalt(10);
             updateFields.password = await bcrypt.hash(password, salt);
@@ -361,46 +358,123 @@ router.put("/users/:id", verifyToken, isAdmin, async (req, res) => {
 });
 
 // ======================================================================
-// 8. [GET] BẢNG XẾP HẠNG THI ĐUA TỔNG CỦA CÁC LỚP
+// 8. [GET] BẢNG XẾP HẠNG THI ĐUA CÁC LỚP
 // ======================================================================
 router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
     try {
-        const { year, month, week, grade } = req.query;
+        const { timeframe, grade, year, month, day, startDate, endDate } = req.query;
+        const getDaysInMonthUtc = (y, mZeroBased) => new Date(Date.UTC(y, mZeroBased + 1, 0)).getUTCDate();
 
         let classQuery = {};
-        if (grade && grade !== 'all') {
+        if (grade && grade !== 'all' && grade !== "") {
             classQuery.grade = grade;
         }
         const classes = await Class.find(classQuery);
 
-        // Sử dụng bộ lọc thời gian mới
-        const dateFilter = buildDateFilter(year, month, week);
+        let dateFilter = {};
+        const now = new Date();
+        if (startDate && endDate) {
+            const start = new Date(startDate);
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            dateFilter = { createdAt: { $gte: start, $lte: end } };
+        } else if (timeframe === 'week') {
+            const firstDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + 1));
+            firstDayOfWeek.setHours(0, 0, 0, 0);
+            dateFilter = { createdAt: { $gte: firstDayOfWeek } };
+        } else if (timeframe === 'month') {
+            const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            firstDayOfMonth.setHours(0, 0, 0, 0);
+            dateFilter = { createdAt: { $gte: firstDayOfMonth } };
+        } else if (timeframe === 'year') {
+            const firstDayOfYear = new Date(now.getFullYear(), 0, 1);
+            firstDayOfYear.setHours(0, 0, 0, 0);
+            dateFilter = { createdAt: { $gte: firstDayOfYear } };
+        } else if (year && year !== 'all') {
+            const y = parseInt(year, 10);
+            if (!isNaN(y)) {
+                if (month && month !== 'all') {
+                    const m = parseInt(month, 10) - 1;
+                    if (!isNaN(m) && m >= 0 && m <= 11) {
+                        if (day && day !== 'all') {
+                            const d = parseInt(day, 10);
+                            const maxDay = getDaysInMonthUtc(y, m);
+                            if (!isNaN(d) && d >= 1 && d <= maxDay) {
+                                const startDate = new Date(Date.UTC(y, m, d, 0, 0, 0, 0));
+                                const endDate = new Date(Date.UTC(y, m, d, 23, 59, 59, 999));
+                                dateFilter = { createdAt: { $gte: startDate, $lte: endDate } };
+                            } else {
+                                return res.status(200).json({ leaderboard: [] });
+                            }
+                        } else {
+                            const startDate = new Date(Date.UTC(y, m, 1, 0, 0, 0, 0));
+                            const endDate = new Date(Date.UTC(y, m + 1, 0, 23, 59, 59, 999));
+                            dateFilter = { createdAt: { $gte: startDate, $lte: endDate } };
+                        }
+                    }
+                } else {
+                    const startDate = new Date(Date.UTC(y, 0, 1, 0, 0, 0, 0));
+                    const endDate = new Date(Date.UTC(y, 11, 31, 23, 59, 59, 999));
+                    dateFilter = { createdAt: { $gte: startDate, $lte: endDate } };
+                }
+            }
+        }
+
+        console.log("📊 Leaderboard Filter:", { year, month, day, dateFilter });
 
         let leaderboard = await Promise.all(classes.map(async (cls) => {
-            const students = await User.find({ classId: cls._id, role: 'student' }).select('_id');
+            const students = await User.find({ classId: cls._id, role: 'student' }).select('_id fullName leaderboardOverride');
             const studentIds = students.map(s => s._id);
 
             const submissions = await Submission.find({
                 student: { $in: studentIds },
+                status: "graded",
                 ...dateFilter
             });
 
-            const totalTests = submissions.length;
-            const totalScore = submissions.reduce((sum, sub) => sum + (sub.score || 0), 0);
-            
-            const averageScore = totalTests > 0 ? (totalScore / totalTests).toFixed(2) : 0;
+            const submissionsByStudent = submissions.reduce((map, sub) => {
+                const key = String(sub.student);
+                if (!map[key]) map[key] = [];
+                map[key].push(sub);
+                return map;
+            }, {});
+
+            let totalTests = 0;
+            let weightedScoreSum = 0;
+            let effectiveWeight = 0;
+
+            students.forEach((student) => {
+                const studentSubs = submissionsByStudent[String(student._id)] || [];
+                const computedTotalTests = studentSubs.length;
+                const computedAverageScore = computedTotalTests > 0 ? studentSubs.reduce((sum, sub) => sum + sub.score, 0) / computedTotalTests : 0;
+
+                const override = student.leaderboardOverride || {};
+                const hasComputedDataInRange = computedTotalTests > 0;
+                const useOverrideInRange = hasComputedDataInRange && override.isOverridden;
+                const finalTotalTests = useOverrideInRange && override.totalTests !== null && override.totalTests !== undefined ? override.totalTests : computedTotalTests;
+                const finalAverageScore = useOverrideInRange && override.averageScore !== null && override.averageScore !== undefined ? override.averageScore : computedAverageScore;
+
+                totalTests += finalTotalTests;
+
+                const weightForAverage = finalTotalTests > 0 ? finalTotalTests : (override.averageScore !== null && override.averageScore !== undefined ? 1 : 0);
+                weightedScoreSum += finalAverageScore * weightForAverage;
+                effectiveWeight += weightForAverage;
+            });
+
+            const averageScore = effectiveWeight > 0 ? parseFloat((weightedScoreSum / effectiveWeight).toFixed(2)) : 0;
 
             return {
                 _id: cls._id,
                 className: cls.name,
                 grade: cls.grade,
                 studentCount: students.length,
+                studentNames: students.map(s => s.fullName),
                 totalTests,
-                averageScore: parseFloat(averageScore)
+                averageScore,
+                effectiveTests: effectiveWeight,
             };
         }));
-
-        leaderboard = leaderboard.filter(cls => cls.totalTests > 0);
 
         leaderboard.sort((a, b) => {
             if (b.averageScore !== a.averageScore) return b.averageScore - a.averageScore;
@@ -415,60 +489,228 @@ router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
 });
 
 // ======================================================================
-// 9. [GET] CHI TIẾT THI ĐUA CỦA HỌC SINH TRONG 1 LỚP CỤ THỂ
+// 8.1 [GET] LẤY CÁC NĂM CÓ DỮ LIỆU THI ĐUA
 // ======================================================================
-router.get("/leaderboard/class/:classId", verifyToken, isAdmin, async (req, res) => {
+router.get("/leaderboard/years", verifyToken, isAdmin, async (req, res) => {
+    try {
+        const years = await Submission.aggregate([
+            { $match: { createdAt: { $type: "date" } } },
+            {
+                $group: {
+                    _id: { $year: "$createdAt" }
+                }
+            },
+            { $sort: { _id: 1 } }
+        ]);
+
+        const availableYears = years
+            .map(item => String(item._id))
+            .filter(Boolean);
+
+        res.status(200).json({ years: availableYears });
+    } catch (error) {
+        console.error("Lỗi lấy danh sách năm thi đua:", error);
+        res.status(500).json({ message: "Lỗi server", error });
+    }
+});
+
+// ======================================================================
+// [GET] LẤY THỐNG KÊ LỚP VÀ SỐ HỌC SINH THEO KHỐI (KHÔNG XEM HOẠT ĐỘNG)
+// ======================================================================
+router.get("/leaderboard/stats", verifyToken, isAdmin, async (req, res) => {
+    try {
+        const grades = ["6", "7", "8", "9"];
+
+        const gradeStats = await Promise.all(grades.map(async (g) => {
+            const classes = await Class.find({ grade: g }).select("_id name grade");
+            const classIds = classes.map(c => c._id);
+            const studentCount = await User.countDocuments({ role: 'student', classId: { $in: classIds } });
+            return {
+                grade: g,
+                classes: classes.length,
+                students: studentCount
+            };
+        }));
+
+        const totalClasses = gradeStats.reduce((s, g) => s + g.classes, 0);
+        const totalStudents = gradeStats.reduce((s, g) => s + g.students, 0);
+
+        res.status(200).json({ totalClasses, totalStudents, grades: gradeStats });
+    } catch (error) {
+        console.error("Lỗi lấy thống kê lớp/học sinh:", error);
+        res.status(500).json({ message: "Lỗi server", error });
+    }
+});
+
+// ======================================================================
+// 9. [GET] LẤY CHI TIẾT THI ĐUA HỌC SINH TRONG 1 LỚP (CHO ADMIN GHI ĐÈ)
+// ======================================================================
+router.get("/leaderboard/class/:classId/students", verifyToken, isAdmin, async (req, res) => {
     try {
         const { classId } = req.params;
-        const { year, month, week } = req.query;
+        const { timeframe, subject, year, month, day, startDate, endDate } = req.query;
+        const getDaysInMonthUtc = (y, mZeroBased) => new Date(Date.UTC(y, mZeroBased + 1, 0)).getUTCDate();
 
-        // 1. Tìm tất cả học sinh thuộc lớp này
-        const students = await User.find({ classId: classId, role: 'student' }).select('fullName username');
-
-        if (!students || students.length === 0) {
-            return res.json({ students: [] });
+        const classInfo = await Class.findById(classId).select("name grade");
+        if (!classInfo) {
+            return res.status(404).json({ message: "Không tìm thấy lớp học!" });
         }
 
-        // 2. Lấy ID học sinh và xây dựng bộ lọc thời gian
+        const students = await User.find({ classId: classId, role: "student" }).select("fullName username leaderboardOverride");
+        if (students.length === 0) {
+            return res.status(200).json({ classInfo, students: [] });
+        }
         const studentIds = students.map(s => s._id);
-        const dateFilter = buildDateFilter(year, month, week);
 
-        // 3. Truy vấn các bài tập đã nộp của các học sinh này trong khoảng thời gian trên
+        let dateFilter = {};
+        const now = new Date();
+        if (startDate && endDate) {
+            const start = new Date(startDate);
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            dateFilter = { createdAt: { $gte: start, $lte: end } };
+        } else if (timeframe === 'week') {
+            const firstDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + 1));
+            firstDayOfWeek.setHours(0, 0, 0, 0);
+            dateFilter = { createdAt: { $gte: firstDayOfWeek } };
+        } else if (timeframe === 'month') {
+            const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            dateFilter = { createdAt: { $gte: firstDayOfMonth } };
+        } else if (year && year !== 'all') {
+            const y = parseInt(year, 10);
+            if (!isNaN(y)) {
+                if (month && month !== 'all') {
+                    const m = parseInt(month, 10) - 1;
+                    if (!isNaN(m) && m >= 0 && m <= 11) {
+                        if (day && day !== 'all') {
+                            const d = parseInt(day, 10);
+                            const maxDay = getDaysInMonthUtc(y, m);
+                            if (!isNaN(d) && d >= 1 && d <= maxDay) {
+                                const start = new Date(Date.UTC(y, m, d, 0, 0, 0, 0));
+                                const end = new Date(Date.UTC(y, m, d, 23, 59, 59, 999));
+                                dateFilter = { createdAt: { $gte: start, $lte: end } };
+                            } else {
+                                return res.status(200).json({ classInfo, students: [] });
+                            }
+                        } else {
+                            const start = new Date(Date.UTC(y, m, 1, 0, 0, 0, 0));
+                            const end = new Date(Date.UTC(y, m + 1, 0, 23, 59, 59, 999));
+                            dateFilter = { createdAt: { $gte: start, $lte: end } };
+                        }
+                    }
+                } else {
+                    const start = new Date(Date.UTC(y, 0, 1, 0, 0, 0, 0));
+                    const end = new Date(Date.UTC(y, 11, 31, 23, 59, 59, 999));
+                    dateFilter = { createdAt: { $gte: start, $lte: end } };
+                }
+            }
+        }
+
+        let assignmentFilter = {};
+        if (subject && subject !== "all") {
+            const assignmentsOfSubject = await Assignment.find({ subject: subject }).select("_id");
+            const assignmentIds = assignmentsOfSubject.map(a => a._id);
+            assignmentFilter = { assignment: { $in: assignmentIds } };
+        }
+
         const submissions = await Submission.find({
             student: { $in: studentIds },
-            ...dateFilter
+            status: "graded",
+            ...dateFilter,
+            ...assignmentFilter
         });
 
-        // 4. Map dữ liệu để tính toán tổng bài nộp & điểm TB cho từng cá nhân
         const studentStats = students.map(student => {
-            const studentSubs = submissions.filter(sub => String(sub.student) === String(student._id));
-            const totalTests = studentSubs.length;
-            
-            let averageScore = 0;
-            if (totalTests > 0) {
-                const totalScore = studentSubs.reduce((sum, sub) => sum + Number(sub.score || 0), 0);
-                averageScore = (totalScore / totalTests).toFixed(2);
+            const studentSubs = submissions.filter(sub => sub.student.toString() === student._id.toString());
+            const computedTotalScore = studentSubs.reduce((sum, sub) => sum + sub.score, 0);
+            const computedAverageScore = studentSubs.length > 0 ? parseFloat((computedTotalScore / studentSubs.length).toFixed(1)) : 0;
+
+            const computed = {
+                totalTests: studentSubs.length,
+                averageScore: computedAverageScore,
+            };
+
+            const final = { ...computed };
+            const overridden = { totalTests: false, averageScore: false };
+
+            const hasComputedDataInRange = computed.totalTests > 0;
+            if (hasComputedDataInRange && student.leaderboardOverride?.isOverridden) {
+                if (student.leaderboardOverride.totalTests !== null) {
+                    final.totalTests = student.leaderboardOverride.totalTests;
+                    overridden.totalTests = true;
+                }
+                if (student.leaderboardOverride.averageScore !== null) {
+                    final.averageScore = student.leaderboardOverride.averageScore;
+                    overridden.averageScore = true;
+                }
             }
 
             return {
                 _id: student._id,
                 fullName: student.fullName,
                 username: student.username,
-                totalTests: totalTests,
-                averageScore: parseFloat(averageScore)
+                computed,
+                final,    
+                overridden, 
+                note: student.leaderboardOverride?.note || "",
             };
         });
 
-        res.status(200).json({ students: studentStats });
+        studentStats.sort((a, b) => {
+            if (b.final.averageScore !== a.final.averageScore) {
+                return b.final.averageScore - a.final.averageScore;
+            }
+            return b.final.totalTests - a.final.totalTests;
+        });
 
+        res.status(200).json({ classInfo, students: studentStats });
     } catch (error) {
-        console.error("Lỗi API chi tiết thi đua lớp:", error);
-        res.status(500).json({ message: "Lỗi máy chủ", error: error.message });
+        console.error("Lỗi lấy chi tiết thi đua lớp cho admin:", error);
+        res.status(500).json({ message: "Lỗi server", error });
+    }
+});
+
+// ======================================================================
+// 10. [PUT] CẬP NHẬT ĐIỂM THI ĐUA CỦA HỌC SINH (ADMIN GHI ĐÈ)
+// ======================================================================
+router.put("/leaderboard/class/:classId/students/:studentId", verifyToken, isAdmin, async (req, res) => {
+    try {
+        const { studentId } = req.params;
+        const { totalTests, averageScore, note, resetOverride } = req.body;
+
+        let updateFields = {};
+        if (resetOverride) {
+            updateFields = {
+                "leaderboardOverride.totalTests": null,
+                "leaderboardOverride.averageScore": null,
+                "leaderboardOverride.note": "",
+                "leaderboardOverride.isOverridden": false,
+            };
+        } else {
+            updateFields = {
+                "leaderboardOverride.totalTests": totalTests !== undefined ? totalTests : null,
+                "leaderboardOverride.averageScore": averageScore !== undefined ? averageScore : null,
+                "leaderboardOverride.note": note !== undefined ? note : "",
+                "leaderboardOverride.isOverridden": true,
+            };
+        }
+
+        const updatedStudent = await User.findByIdAndUpdate(studentId, updateFields, { new: true });
+
+        if (!updatedStudent) {
+            return res.status(404).json({ message: "Không tìm thấy học sinh!" });
+        }
+
+        res.status(200).json({ message: "Cập nhật chỉ số thi đua thành công!", student: updatedStudent });
+    } catch (error) {
+        console.error("Lỗi cập nhật chỉ số thi đua học sinh:", error);
+        res.status(500).json({ message: "Lỗi server", error });
     }
 });
 
 // ==========================================
-// 10. [GET & POST & DELETE] MÔN HỌC (SUBJECTS)
+// [MÔN HỌC] 
 // ==========================================
 router.get("/subjects", verifyToken, async (req, res) => {
     try {

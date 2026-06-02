@@ -20,7 +20,7 @@ import {
   BookOpen, FileQuestion, LogOut, CheckSquare, School,
   Loader2, PlusCircle, Trash2, Pencil, Image as ImageIcon, X,
   UserCircle, Users, CheckCircle2, ArrowUpDown, Menu, Trophy, History, Database, Search, Filter,
-  CalendarClock, Calendar, Lock, AlertCircle, FileCheck, Clock, Eye, Download, Sparkles, Medal, BarChart, Eraser, PenTool, ArrowRight, FolderOpen, Video, FileAudio, Sigma
+  CalendarClock, Calendar, Lock, AlertCircle, FileCheck, Clock, Eye, Download, Sparkles, Medal, BarChart, Eraser, PenTool, ArrowRight, FolderOpen, Video, FileAudio, Sigma, Settings, Key, Save, Edit
 } from "lucide-react";
 
 import RichTextEditor from "@/components/ui/RichTextEditor";
@@ -327,7 +327,7 @@ const MyClassesTab = ({ isLoadingData, filteredClasses, allClasses, classStatsMa
 );
 
 // ==========================================
-// 2. TAB BẢNG THI ĐUA (ĐÃ FIX LỖI ĐÈ CHỮ VÀ TIẾNG ANH)
+// 2. TAB BẢNG THI ĐUA 
 // ==========================================
 const LeaderboardTab = ({ 
   leaderboardTimeFilter, setLeaderboardTimeFilter, 
@@ -352,11 +352,11 @@ const LeaderboardTab = ({
       </div>
       <div className="flex flex-wrap gap-2 w-full xl:w-auto overflow-x-auto pb-2 sm:pb-0">
         
-        {/* 👉 ĐÃ FIX TIẾNG ANH: Sử dụng text thủ công thay thế SelectValue */}
+        {/* 👉 ĐÃ FIX HIỂN THỊ TEXT Ở CÁC BỘ LỌC */}
         <Select value={leaderboardTypeFilter} onValueChange={setLeaderboardTypeFilter}>
-          <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-amber-50 min-w-[180px] border-none font-bold text-amber-800 shadow-sm">
+          <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-amber-50 min-w-[180px] border-none font-bold text-amber-800 shadow-sm [&>span]:truncate">
              <span className="truncate">
-               {leaderboardTypeFilter === 'all' ? 'Tất cả bài làm' : leaderboardTypeFilter === 'homework' ? 'Bài Tập Về Nhà' : 'Đề Kiểm Tra'}
+                {leaderboardTypeFilter === 'all' ? 'Tất cả bài làm' : leaderboardTypeFilter === 'homework' ? 'Bài Tập Về Nhà' : 'Đề Kiểm Tra'}
              </span>
           </SelectTrigger>
           <SelectContent position="popper" className="bg-white z-50">
@@ -367,9 +367,9 @@ const LeaderboardTab = ({
         </Select>
 
         <Select value={leaderboardSubjectFilter} onValueChange={setLeaderboardSubjectFilter}>
-          <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[160px] border-none font-bold text-sky-800 shadow-sm">
+          <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[160px] border-none font-bold text-sky-800 shadow-sm [&>span]:truncate">
              <span className="truncate">
-               {leaderboardSubjectFilter === 'all' ? 'Tất cả môn của tôi' : `Môn: ${leaderboardSubjectFilter}`}
+                {leaderboardSubjectFilter === 'all' ? 'Tất cả môn của tôi' : `Môn: ${leaderboardSubjectFilter}`}
              </span>
           </SelectTrigger>
           <SelectContent position="popper" className="bg-white z-50">
@@ -381,13 +381,10 @@ const LeaderboardTab = ({
         </Select>
 
         <Select value={leaderboardTimeFilter} onValueChange={setLeaderboardTimeFilter}>
-          <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[160px] border-none font-bold text-sky-800 shadow-sm">
-            <div className="flex items-center gap-2 truncate">
-              <Calendar className="w-4 h-4 shrink-0" />
-              <span className="truncate">
+          <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[160px] border-none font-bold text-sky-800 shadow-sm [&>span]:truncate">
+            <span className="truncate">
                 {leaderboardTimeFilter === 'all' ? 'Tất cả thời gian' : leaderboardTimeFilter === 'week' ? 'Tuần này' : leaderboardTimeFilter === 'month' ? 'Tháng này' : 'Năm nay'}
-              </span>
-            </div>
+            </span>
           </SelectTrigger>
           <SelectContent position="popper" className="bg-white z-50">
             <SelectItem value="all">Tất cả thời gian</SelectItem>
@@ -398,12 +395,9 @@ const LeaderboardTab = ({
         </Select>
         
         <Select value={selectedLeaderboardClass || ""} onValueChange={setSelectedLeaderboardClass}>
-          <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 border-none font-bold text-sky-800 shadow-sm min-w-[140px]">
+          <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 border-none font-bold text-sky-800 shadow-sm min-w-[140px] [&>span]:truncate">
              <span className="truncate">
-               {selectedLeaderboardClass ? (() => { 
-                 const matched = allClasses.find(c => String(c._id) === String(selectedLeaderboardClass)); 
-                 return matched ? `Lớp ${matched.name}` : "Đang tải..."; 
-               })() : "-- Chọn lớp --"}
+                {selectedLeaderboardClass ? (allClasses.find(c => String(c._id) === String(selectedLeaderboardClass))?.name ? `Lớp ${allClasses.find(c => String(c._id) === String(selectedLeaderboardClass))?.name}` : "Đang tải...") : "-- Chọn lớp --"}
              </span>
           </SelectTrigger>
           <SelectContent position="popper" className="bg-white z-50">
@@ -477,7 +471,7 @@ const LeaderboardTab = ({
 )};
 
 // ==========================================
-// 3. TAB BÀI TẬP ĐÃ GIAO (ĐÃ FIX TÍNH TOÁN SĨ SỐ THỰC TẾ)
+// 3. TAB BÀI TẬP ĐÃ GIAO
 // ==========================================
 const AssignmentsTab = ({ isLoadingData, assignments, allClasses, handleDeleteAssignment, openDeadlineModal, openPasswordModal }) => {
   const navigate = useNavigate();
@@ -523,7 +517,6 @@ const AssignmentsTab = ({ isLoadingData, assignments, allClasses, handleDeleteAs
                 const submittedCount = assignment.submittedCount || 0;
                 const pendingCount = assignment.pendingCount || 0;
                 
-                // 👉 ĐÃ FIX: Tính toán sĩ số thực tế từ danh sách lớp (allClasses)
                 const classObj = allClasses?.find(c => c.name === assignment.targetClass);
                 const totalStudents = assignment.totalStudents || (classObj?.studentCount || 0);
                 
@@ -655,6 +648,8 @@ const TeacherDashboard = () => {
   const [teacherProfile, setTeacherProfile] = useState(null);
   const [allClasses, setAllClasses] = useState([]);
 
+  // LƯU LẠI CLASS ĐANG XEM ĐỂ DÙNG KHI CẬP NHẬT XONG HỌC SINH
+  const [currentViewClassId, setCurrentViewClassId] = useState(null);
   const [isStudentListOpen, setIsStudentListOpen] = useState(false);
   const [classStudents, setClassStudents] = useState([]);
   const [selectedClassName, setSelectedClassName] = useState("");
@@ -664,6 +659,17 @@ const TeacherDashboard = () => {
   const [selectedStudentDetails, setSelectedStudentDetails] = useState(null);
   const [studentHistory, setStudentHistory] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  // STATE CHO CHỈNH SỬA HỌC SINH TỪ GIÁO VIÊN
+  const [isEditStudentModalOpen, setIsEditStudentModalOpen] = useState(false);
+  const [selectedStudentForEdit, setSelectedStudentForEdit] = useState(null);
+  const [editStudentForm, setEditStudentForm] = useState({ fullName: '', phone: '', address: '', newPassword: '' });
+  const [isUpdatingStudent, setIsUpdatingStudent] = useState(false);
+
+  // STATE CHO CÀI ĐẶT THÔNG TIN CÁ NHÂN CỦA GIÁO VIÊN
+  const [profileForm, setProfileForm] = useState({ fullName: '', phone: '', address: '' });
+  const [passwordData, setPasswordData] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
   const [leaderboardData, setLeaderboardData] = useState([]);
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(false);
@@ -711,6 +717,12 @@ const TeacherDashboard = () => {
 
       const primarySubject = getPrimarySubject(tProfile);
       setLeaderboardSubjectFilter(primarySubject || "all"); 
+      
+      setProfileForm({
+          fullName: tProfile.fullName || "",
+          phone: tProfile.phone || "",
+          address: tProfile.address || "",
+      });
 
     } catch (error) { console.error("Lỗi tải dữ liệu:", error); } finally { setIsLoadingData(false); }
   };
@@ -785,6 +797,7 @@ const TeacherDashboard = () => {
   };
 
   const handleViewStudentList = async (classId, className) => {
+    setCurrentViewClassId(classId); 
     setSelectedClassName(className); setClassStudents([]); setStudentSearchQuery(""); setStudentSortOption("name"); setIsStudentListOpen(true);
     try {
       const studentsRes = await axios.get(`/classes/${classId}/students`, getHeader());
@@ -810,6 +823,91 @@ const TeacherDashboard = () => {
       const res = await axios.get(`/submissions/student/${student._id}`, getHeader());
       setStudentHistory(res.data.submissions || []);
     } catch (error) {} finally { setIsLoadingHistory(false); }
+  };
+
+  const openEditStudentModal = (student) => {
+      setSelectedStudentForEdit(student);
+      setEditStudentForm({
+          fullName: student.fullName || "",
+          phone: student.phone || "",
+          address: student.address || "",
+          newPassword: ""
+      });
+      setIsEditStudentModalOpen(true);
+  };
+
+  const handleUpdateStudent = async (e) => {
+      e.preventDefault();
+      
+      if (editStudentForm.newPassword && editStudentForm.newPassword.length > 0) {
+          if (editStudentForm.newPassword.length < 6) return alert("Mật khẩu mới phải có ít nhất 6 ký tự!");
+          if (!/[!@#$%^&*(),.?":{}|<>]/.test(editStudentForm.newPassword)) {
+            return alert("Mật khẩu mới phải chứa ít nhất một ký tự đặc biệt (!@#$%^&*(),.?\":{}|<>).");
+          }
+      }
+
+      setIsUpdatingStudent(true);
+      try {
+          const payload = {
+              fullName: editStudentForm.fullName,
+              phone: editStudentForm.phone,
+              address: editStudentForm.address,
+              newPassword: editStudentForm.newPassword
+          };
+
+          await axios.put(`/teacher/update-student/${selectedStudentForEdit._id}`, payload, getHeader());
+          alert("✅ Cập nhật thông tin học sinh thành công!");
+          setIsEditStudentModalOpen(false);
+          if (currentViewClassId) {
+              await handleViewStudentList(currentViewClassId, selectedClassName);
+          }
+      } catch (error) {
+          alert(error.response?.data?.message || "Lỗi khi cập nhật thông tin học sinh!");
+      } finally {
+          setIsUpdatingStudent(false);
+      }
+  };
+
+  const handleUpdateTeacherProfile = async (e) => {
+    e.preventDefault();
+    if (passwordData.newPassword && passwordData.newPassword !== passwordData.confirmPassword) {
+      return alert("Mật khẩu mới và xác nhận mật khẩu không khớp!");
+    }
+    
+    if (passwordData.newPassword && passwordData.newPassword.length > 0) {
+        if (passwordData.newPassword.length < 6) return alert("Mật khẩu mới phải có ít nhất 6 ký tự!");
+        if (!/[!@#$%^&*(),.?":{}|<>]/.test(passwordData.newPassword)) {
+          return alert("Mật khẩu mới phải chứa ít nhất một ký tự đặc biệt (!@#$%^&*(),.?\":{}|<>).");
+        }
+    }
+    
+    setIsUpdatingProfile(true);
+    try {
+      const payload = {
+        fullName: profileForm.fullName,
+        phone: profileForm.phone,
+        address: profileForm.address,
+      };
+
+      if (passwordData.oldPassword && passwordData.newPassword) {
+          payload.oldPassword = passwordData.oldPassword;
+          payload.newPassword = passwordData.newPassword;
+      }
+
+      const res = await axios.put('/auth/update-my-profile', payload, getHeader());
+      
+      alert("✅ Lưu thông tin thành công!");
+      localStorage.setItem("fullName", res.data.user.fullName); 
+      setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+      if (passwordData.newPassword) {
+          alert("Bạn vừa đổi mật khẩu, vui lòng đăng nhập lại.");
+          handleLogout();
+      }
+    } catch (error) {
+      alert(error.response?.data?.message || "Lỗi khi cập nhật thông tin!");
+    } finally {
+      setIsUpdatingProfile(false);
+    }
   };
 
   const handleExportClassReport = (classId, className) => {
@@ -922,6 +1020,8 @@ const TeacherDashboard = () => {
           <Button onClick={() => {handleMenuClick("leaderboard"); if(!selectedLeaderboardClass && teacherProfile?.assignedClasses?.length > 0) setSelectedLeaderboardClass(String(teacherProfile.assignedClasses[0]._id || teacherProfile.assignedClasses[0]));}} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'leaderboard' ? 'bg-amber-500 text-white shadow-md shadow-amber-200' : 'hover:bg-amber-50 hover:text-amber-600 text-slate-500'}`}><Trophy className="mr-3 h-5 w-5" /> Bảng thi đua</Button>
           <Button onClick={() => handleMenuClick("assignments")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'assignments' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'hover:bg-sky-50 hover:text-sky-600 text-slate-500'}`}><CheckSquare className="mr-3 h-5 w-5" /> Bài tập đã giao</Button>
           <Button onClick={() => navigate("/teacher/question-bank")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all hover:bg-sky-50 hover:text-sky-600 text-slate-500`}><Database className="mr-3 h-5 w-5" /> Kho câu hỏi</Button>
+          
+          <Button onClick={() => handleMenuClick("settings")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all mt-4 ${activeTab === 'settings' ? 'bg-slate-800 text-white shadow-md shadow-slate-300' : 'text-slate-500 hover:bg-slate-200 hover:text-slate-800'}`}><Settings className="mr-3 h-5 w-5" /> Thông tin & Bảo mật</Button>
         </nav>
         <div className="p-5 border-t border-sky-50">
           <Button onClick={handleLogout} variant="ghost" className="w-full text-rose-500 hover:bg-rose-50 hover:text-rose-600 font-bold h-11 rounded-xl">
@@ -956,9 +1056,9 @@ const TeacherDashboard = () => {
           </div>
         </header>
 
-        {/* MODAL DANH SÁCH LỚP */}
+        {/* MODAL DANH SÁCH LỚP VÀ CHỈNH SỬA HỌC SINH */}
         <Dialog open={isStudentListOpen} onOpenChange={setIsStudentListOpen}>
-          <DialogContent className="sm:max-w-[700px] w-[95%] rounded-3xl border-none p-4 sm:p-6">
+          <DialogContent className="sm:max-w-[900px] w-[95%] rounded-3xl border-none p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle className="text-xl sm:text-2xl font-black text-sky-950 flex items-center gap-2">
                 <UserCircle className="w-6 h-6 text-sky-500"/> Danh sách Lớp {selectedClassName}
@@ -967,22 +1067,26 @@ const TeacherDashboard = () => {
             <div className="flex flex-col sm:flex-row gap-3 mt-4 mb-2">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input placeholder="Tìm theo tên học sinh..." className="pl-10 h-11 rounded-xl bg-slate-50 border-sky-100" value={studentSearchQuery} onChange={(e) => setStudentSearchQuery(e.target.value)} />
+                <Input placeholder="Tìm theo tên hoặc mã học sinh..." className="pl-10 h-11 rounded-xl bg-slate-50 border-sky-100" value={studentSearchQuery} onChange={(e) => setStudentSearchQuery(e.target.value)} />
               </div>
               
               <Select value={studentSortOption} onValueChange={setStudentSortOption}>
-                <SelectTrigger className="h-11 rounded-xl bg-sky-50 border-sky-100 font-bold text-sky-800 sm:w-[180px] [&>span]:truncate">
-                  <div className="flex items-center gap-2">
-                    <ArrowUpDown className="w-4 h-4 shrink-0" />
-                    <SelectValue placeholder="Sắp xếp" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent position="popper" className="bg-white z-50">
-                  <SelectItem value="name">Tên A-Z</SelectItem>
-                  <SelectItem value="most_submissions">Nộp nhiều nhất</SelectItem>
-                  <SelectItem value="latest_submission">Nộp gần nhất</SelectItem>
-                </SelectContent>
-              </Select>
+  <SelectTrigger className="h-11 rounded-xl bg-sky-50 border-sky-100 font-bold text-sky-800 sm:w-[180px] [&>span]:truncate">
+    <div className="flex items-center gap-2">
+      <ArrowUpDown className="w-4 h-4 shrink-0" />
+      <span className="truncate">
+        {studentSortOption === 'name' ? 'Tên A-Z' : 
+         studentSortOption === 'most_submissions' ? 'Nộp nhiều nhất' : 
+         studentSortOption === 'latest_submission' ? 'Nộp gần nhất' : 'Sắp xếp'}
+      </span>
+    </div>
+  </SelectTrigger>
+  <SelectContent position="popper" className="bg-white z-50">
+    <SelectItem value="name">Tên A-Z</SelectItem>
+    <SelectItem value="most_submissions">Nộp nhiều nhất</SelectItem>
+    <SelectItem value="latest_submission">Nộp gần nhất</SelectItem>
+  </SelectContent>
+</Select>
             </div>
             <div className="max-h-[50vh] overflow-y-auto mt-2">
               {classStudents.length === 0 ? (
@@ -992,14 +1096,16 @@ const TeacherDashboard = () => {
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-sky-100">
-                  <Table className="min-w-[500px]">
+                  <Table className="min-w-[850px]">
                     <TableHeader className="bg-sky-50 sticky top-0 z-10">
                       <TableRow>
                         <TableHead className="font-bold text-sky-800 w-12 text-center">STT</TableHead>
-                        <TableHead className="font-bold text-sky-800">Họ và Tên</TableHead>
-                        <TableHead className="font-bold text-sky-800 text-center">Đã nộp</TableHead>
-                        <TableHead className="font-bold text-sky-800 text-right pr-4">Điểm TB</TableHead>
-                        <TableHead className="font-bold text-sky-800 text-center w-24">Hành động</TableHead>
+                        <TableHead className="font-bold text-sky-800 min-w-[150px]">Họ và Tên</TableHead>
+                        <TableHead className="font-bold text-sky-800 text-center min-w-[120px]">SĐT</TableHead>
+                        <TableHead className="font-bold text-sky-800 min-w-[150px]">Địa chỉ</TableHead>
+                        <TableHead className="font-bold text-sky-800 text-center w-24">Đã nộp</TableHead>
+                        <TableHead className="font-bold text-sky-800 text-center w-24">Điểm TB</TableHead>
+                        <TableHead className="font-bold text-sky-800 text-center w-[160px]">Hành động</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1012,14 +1118,30 @@ const TeacherDashboard = () => {
                         })
                         .map((student, idx) => (
                         <TableRow key={student._id} className="hover:bg-sky-50/50">
-                          <TableCell className="font-medium text-slate-400 text-center">{idx + 1}</TableCell>
-                          <TableCell className="font-bold text-sky-900">{student.fullName}</TableCell>
-                          <TableCell className="text-center">
+                          <TableCell className="font-medium text-slate-400 text-center align-middle">{idx + 1}</TableCell>
+                          <TableCell className="align-middle">
+                            <p className="font-bold text-sky-900">{student.fullName}</p>
+                            <p className="text-xs text-sky-600">Tên TK: {student.username}</p>
+                          </TableCell>
+                          <TableCell className="text-center align-middle font-medium text-slate-600">
+                             {student.phone || "-"}
+                          </TableCell>
+                          <TableCell className="align-middle text-slate-600 text-sm">
+                             {student.address || "-"}
+                          </TableCell>
+                          <TableCell className="text-center align-middle">
                             <Badge className="bg-teal-50 text-teal-700 shadow-none border-0">{student.totalTests || 0} bài</Badge>
                           </TableCell>
-                          <TableCell className="text-right pr-4 font-black text-sky-600">{student.averageScore || "-"}</TableCell>
-                          <TableCell className="text-center">
-                             <Button onClick={() => handleViewStudentDetails(student)} variant="outline" size="sm" className="h-8 text-sky-600 border-sky-200 hover:bg-sky-50 font-bold">Chi tiết</Button>
+                          <TableCell className="text-center pr-4 font-black text-sky-600 align-middle">{student.averageScore || "-"}</TableCell>
+                          <TableCell className="text-center align-middle">
+                              <div className="flex justify-center items-center gap-2">
+                                 <Button onClick={() => openEditStudentModal(student)} variant="outline" size="sm" className="h-8 px-2.5 text-amber-600 border-amber-200 hover:bg-amber-50 font-bold">
+                                    <Edit className="w-3.5 h-3.5 mr-1" /> Sửa
+                                 </Button>
+                                 <Button onClick={() => handleViewStudentDetails(student)} variant="outline" size="sm" className="h-8 px-2.5 text-sky-600 border-sky-200 hover:bg-sky-50 font-bold">
+                                    Chi tiết
+                                 </Button>
+                              </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1029,6 +1151,74 @@ const TeacherDashboard = () => {
               )}
             </div>
           </DialogContent>
+        </Dialog>
+
+        {/* 👉 MODAL SỬA THÔNG TIN HỌC SINH (DÀNH CHO GIÁO VIÊN) */}
+        <Dialog open={isEditStudentModalOpen} onOpenChange={setIsEditStudentModalOpen}>
+            <DialogContent className="sm:max-w-[500px] w-[95%] rounded-3xl border-none p-6 bg-white shadow-2xl">
+                <DialogHeader>
+                    <DialogTitle className="text-xl font-bold flex items-center gap-2 text-amber-700 pb-2 border-b border-amber-100">
+                        <Edit className="h-5 w-5" /> Sửa thông tin Học sinh
+                    </DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleUpdateStudent} className="space-y-4 pt-2">
+                    <div>
+                        <label className="text-sm font-bold text-slate-600 mb-1 block">Tên Đăng Nhập (Mã HS)</label>
+                        <Input value={selectedStudentForEdit?.username || ""} disabled className="h-11 rounded-xl bg-slate-50 text-slate-500" />
+                    </div>
+                    <div>
+                        <label className="text-sm font-bold text-slate-600 mb-1 block">Họ và tên</label>
+                        <Input 
+                            value={editStudentForm.fullName} 
+                            onChange={(e) => setEditStudentForm({...editStudentForm, fullName: e.target.value})} 
+                            required 
+                            className="h-11 rounded-xl bg-white border-amber-200 focus-visible:ring-amber-500" 
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm font-bold text-slate-600 mb-1 block">Số điện thoại</label>
+                        <Input
+                            className="h-11 rounded-xl bg-white border-amber-200 focus-visible:ring-amber-500"
+                            value={editStudentForm.phone}
+                            inputMode="numeric"
+                            maxLength={15}
+                            onChange={(e) => {
+                                const digitsOnly = String(e.target.value).replace(/[^0-9]/g, "").slice(0, 15);
+                                setEditStudentForm((prev) => ({ ...prev, phone: digitsOnly }));
+                            }}
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm font-bold text-slate-600 mb-1 block">Địa chỉ</label>
+                        <Input 
+                            className="h-11 rounded-xl bg-white border-amber-200 focus-visible:ring-amber-500"
+                            value={editStudentForm.address}
+                            onChange={(e) => setEditStudentForm({...editStudentForm, address: e.target.value})}
+                        />
+                    </div>
+                    
+                    <div className="bg-rose-50/50 p-4 rounded-2xl border border-rose-100 mt-2">
+                        <label className="text-sm font-bold text-rose-700 flex items-center gap-1 mb-2">
+                            <Key className="w-4 h-4"/> Đặt lại mật khẩu (Nếu cần)
+                        </label>
+                        <Input 
+                            type="password" 
+                            placeholder="Nhập mật khẩu mới..."
+                            className="h-11 rounded-xl bg-white border-rose-200 focus-visible:ring-rose-500"
+                            value={editStudentForm.newPassword}
+                            onChange={(e) => setEditStudentForm({...editStudentForm, newPassword: e.target.value})}
+                        />
+                        <p className="text-[10px] text-rose-500 mt-1 font-medium">*Bỏ trống nếu không muốn đổi mật khẩu. (MK cần chứa số/chữ và ký tự đặc biệt)</p>
+                    </div>
+
+                    <div className="pt-2 flex justify-end gap-2">
+                        <Button type="button" variant="ghost" onClick={() => setIsEditStudentModalOpen(false)} className="rounded-xl font-bold h-11 text-slate-500">Hủy</Button>
+                        <Button type="submit" disabled={isUpdatingStudent} className="h-11 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold px-6">
+                            {isUpdatingStudent ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Save className="w-4 h-4 mr-2" />} Lưu
+                        </Button>
+                    </div>
+                </form>
+            </DialogContent>
         </Dialog>
 
         <Dialog open={!!selectedStudentDetails} onOpenChange={(open) => { if (!open) setSelectedStudentDetails(null); }}>
@@ -1216,11 +1406,112 @@ const TeacherDashboard = () => {
           <AssignmentsTab 
             isLoadingData={isLoadingData} 
             assignments={assignments} 
-            allClasses={allClasses} // Đã thêm props này để map sĩ số
+            allClasses={allClasses}
             handleDeleteAssignment={handleDeleteAssignment} 
             openDeadlineModal={openDeadlineModal}
             openPasswordModal={handleOpenPasswordModal} 
           />
+        )}
+
+        {/* 👉 TAB CÀI ĐẶT THÔNG TIN CÁ NHÂN VÀ ĐỔI MẬT KHẨU CHO GIÁO VIÊN */}
+        {activeTab === "settings" && (
+          <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300">
+            <Card className="border-slate-100 shadow-sm rounded-3xl bg-white overflow-hidden max-w-4xl mx-auto">
+                <CardHeader className="bg-sky-50/50 border-b border-sky-100">
+                    <CardTitle className="text-xl font-bold text-sky-900 flex items-center gap-2">
+                        <UserCircle className="w-6 h-6 text-sky-600" /> Thông tin cá nhân & Bảo mật
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 sm:p-8">
+                    <form onSubmit={handleUpdateTeacherProfile} className="space-y-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-slate-700">Họ và tên</label>
+                                <Input 
+                                    required 
+                                    value={profileForm.fullName} 
+                                    onChange={e => setProfileForm({...profileForm, fullName: e.target.value})} 
+                                    className="h-12 rounded-xl bg-slate-50 border-sky-100 focus-visible:ring-sky-500 font-bold text-sky-900" 
+                                    placeholder="Nhập họ và tên..." 
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-slate-700">Số điện thoại</label>
+                                <Input 
+                                    inputMode="numeric"
+                                    maxLength={15}
+                                    value={profileForm.phone} 
+                                    onChange={e => setProfileForm({...profileForm, phone: e.target.value.replace(/[^0-9]/g, "")})} 
+                                    className="h-12 rounded-xl bg-slate-50 border-sky-100 focus-visible:ring-sky-500 font-medium" 
+                                    placeholder="Nhập số điện thoại..." 
+                                />
+                            </div>
+                            <div className="space-y-2 sm:col-span-2">
+                                <label className="text-sm font-bold text-slate-700">Địa chỉ</label>
+                                <Input 
+                                    value={profileForm.address} 
+                                    onChange={e => setProfileForm({...profileForm, address: e.target.value})} 
+                                    className="h-12 rounded-xl bg-slate-50 border-sky-100 focus-visible:ring-sky-500 font-medium" 
+                                    placeholder="Nhập địa chỉ chi tiết..." 
+                                />
+                            </div>
+                        </div>
+
+                        <div className="border-t border-slate-100 pt-6 mt-2 space-y-6">
+                            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                <Key className="w-5 h-5 text-amber-500" /> Đổi mật khẩu
+                            </h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-slate-700">Mật khẩu hiện tại</label>
+                                    <Input 
+                                        type="password" 
+                                        value={passwordData.oldPassword} 
+                                        onChange={e => setPasswordData({...passwordData, oldPassword: e.target.value})} 
+                                        className="h-12 rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-amber-500" 
+                                        placeholder="Nhập mật khẩu cũ..." 
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-slate-700">Mật khẩu mới</label>
+                                    <Input 
+                                        type="password" 
+                                        value={passwordData.newPassword} 
+                                        onChange={e => setPasswordData({...passwordData, newPassword: e.target.value})} 
+                                        className="h-12 rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-amber-500" 
+                                        placeholder="Nhập mật khẩu mới..." 
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-slate-700">Xác nhận mật khẩu</label>
+                                    <Input 
+                                        type="password" 
+                                        value={passwordData.confirmPassword} 
+                                        onChange={e => setPasswordData({...passwordData, confirmPassword: e.target.value})} 
+                                        className="h-12 rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-amber-500" 
+                                        placeholder="Nhập lại mật khẩu mới..." 
+                                    />
+                                </div>
+                            </div>
+                            <p className="text-xs text-amber-600 font-medium italic">
+                                *Chỉ điền vào khu vực này nếu bạn muốn đổi mật khẩu. Mật khẩu mới cần tối thiểu 6 ký tự và chứa ít nhất 1 ký tự đặc biệt.
+                            </p>
+                        </div>
+                        
+                        <div className="pt-2 flex justify-end">
+                            <Button 
+                                type="submit" 
+                                disabled={isUpdatingProfile} 
+                                className="w-full sm:w-auto px-8 h-12 bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl shadow-md shadow-sky-200 active:scale-95 text-base"
+                            >
+                                {isUpdatingProfile ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Save className="w-5 h-5 mr-2" />}
+                                Lưu thông tin
+                            </Button>
+                        </div>
+                    </form>
+                </CardContent>
+            </Card>
+          </div>
         )}
 
       </main>

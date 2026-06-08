@@ -352,8 +352,8 @@ const LeaderboardTab = ({
       </div>
       <div className="flex flex-wrap gap-2 w-full xl:w-auto overflow-x-auto pb-2 sm:pb-0">
         
-        {/* 👉 ĐÃ FIX HIỂN THỊ TEXT Ở CÁC BỘ LỌC */}
-        <Select value={leaderboardTypeFilter} onValueChange={setLeaderboardTypeFilter}>
+        {/* 👉 ĐÃ FIX HIỂN THỊ TEXT Ở CÁC BỘ LỌC VÀ ADD FALLBACK ĐỂ TRÁNH LỖI UNCONTROLLED */}
+        <Select value={leaderboardTypeFilter || "all"} onValueChange={setLeaderboardTypeFilter}>
           <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-amber-50 min-w-[180px] border-none font-bold text-amber-800 shadow-sm [&>span]:truncate">
              <span className="truncate">
                 {leaderboardTypeFilter === 'all' ? 'Tất cả bài làm' : leaderboardTypeFilter === 'homework' ? 'Bài Tập Về Nhà' : 'Đề Kiểm Tra'}
@@ -366,7 +366,7 @@ const LeaderboardTab = ({
           </SelectContent>
         </Select>
 
-        <Select value={leaderboardSubjectFilter} onValueChange={setLeaderboardSubjectFilter}>
+        <Select value={leaderboardSubjectFilter || "all"} onValueChange={setLeaderboardSubjectFilter}>
           <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[160px] border-none font-bold text-sky-800 shadow-sm [&>span]:truncate">
              <span className="truncate">
                 {leaderboardSubjectFilter === 'all' ? 'Tất cả môn của tôi' : `Môn: ${leaderboardSubjectFilter}`}
@@ -380,7 +380,7 @@ const LeaderboardTab = ({
           </SelectContent>
         </Select>
 
-        <Select value={leaderboardTimeFilter} onValueChange={setLeaderboardTimeFilter}>
+        <Select value={leaderboardTimeFilter || "all"} onValueChange={setLeaderboardTimeFilter}>
           <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[160px] border-none font-bold text-sky-800 shadow-sm [&>span]:truncate">
             <span className="truncate">
                 {leaderboardTimeFilter === 'all' ? 'Tất cả thời gian' : leaderboardTimeFilter === 'week' ? 'Tuần này' : leaderboardTimeFilter === 'month' ? 'Tháng này' : 'Năm nay'}
@@ -894,7 +894,8 @@ const TeacherDashboard = () => {
           payload.newPassword = passwordData.newPassword;
       }
 
-      const res = await axios.put('/auth/update-my-profile', payload, getHeader());
+      // 👉 ĐÃ FIX URL API Ở ĐÂY 
+      const res = await axios.put('/auth/profile', payload, getHeader());
       
       alert("✅ Lưu thông tin thành công!");
       localStorage.setItem("fullName", res.data.user.fullName); 
@@ -1070,7 +1071,7 @@ const TeacherDashboard = () => {
                 <Input placeholder="Tìm theo tên hoặc mã học sinh..." className="pl-10 h-11 rounded-xl bg-slate-50 border-sky-100" value={studentSearchQuery} onChange={(e) => setStudentSearchQuery(e.target.value)} />
               </div>
               
-              <Select value={studentSortOption} onValueChange={setStudentSortOption}>
+              <Select value={studentSortOption || "name"} onValueChange={setStudentSortOption}>
   <SelectTrigger className="h-11 rounded-xl bg-sky-50 border-sky-100 font-bold text-sky-800 sm:w-[180px] [&>span]:truncate">
     <div className="flex items-center gap-2">
       <ArrowUpDown className="w-4 h-4 shrink-0" />

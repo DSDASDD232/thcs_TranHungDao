@@ -6,30 +6,27 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { 
     ArrowLeft, Loader2, CheckCircle2, MessageSquareText, 
-    AlertCircle, Clock, BookOpen, PenTool, XCircle, Video, FileAudio
+    AlertCircle, Clock, BookOpen, PenTool, XCircle, Video, FileAudio,
+    FileCheck, CalendarDays // 👉 Import thêm icon
 } from "lucide-react"; 
 
-// 👉 IMPORT THÊM KATEX ĐỂ RENDER CÔNG THỨC TOÁN
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
 // ==========================================
-// HÀM DỊCH MÃ LATEX THÀNH CÔNG THỨC TOÁN HỌC (ĐÃ ÉP KÍCH THƯỚC TO)
+// HÀM DỊCH MÃ LATEX THÀNH CÔNG THỨC TOÁN HỌC
 // ==========================================
 const renderLatexContent = (htmlString) => {
   if (!htmlString) return "";
   
-  // Xử lý công thức Toán block $$...$$
   let parsedHtml = htmlString.replace(/\$\$([\s\S]*?)\$\$/g, (match, math) => {
     try {
-      // Dùng \displaystyle để ép phân số to ra, kết hợp displayMode: false để giữ nó trên cùng 1 dòng
       return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false });
     } catch (e) {
       return match;
     }
   });
 
-  // Xử lý công thức Toán inline $...$ (nếu có)
   parsedHtml = parsedHtml.replace(/\$([^\$]+)\$/g, (match, math) => {
     try {
       return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false });
@@ -68,9 +65,6 @@ const StudentSubmissionDetail = () => {
     return `${hours}:${mins} - ${day}/${month}/${year}`;
   };
 
-  // ==========================================
-  // HÀM XỬ LÝ LINK YOUTUBE VÀ GOOGLE DRIVE
-  // ==========================================
   const getYoutubeEmbedUrl = (url) => {
     if (!url) return "";
     if (url.includes("youtube.com/watch?v=")) return url.replace("watch?v=", "embed/").split("&")[0];
@@ -126,17 +120,19 @@ const StudentSubmissionDetail = () => {
 
   if (!submission) return null;
 
+  // 👉 XÁC ĐỊNH LOẠI BÀI VÀ HỌC KỲ
+  const isExam = submission.assignment?.assignmentType === 'exam';
+  const typeLabel = isExam ? "Đề Thi" : "Bài Tập";
+  const semesterLabel = submission.assignment?.semester;
+
   return (
     <div className="min-h-screen bg-slate-50/80 font-sans pb-24 relative selection:bg-sky-200">
         
-        {/* ===================================== */}
-        {/* BACKGROUND HEADER (ĐÃ THU GỌN CHIỀU CAO) */}
-        {/* ===================================== */}
+        {/* BACKGROUND HEADER */}
         <div className="absolute top-0 left-0 w-full h-[240px] bg-gradient-to-br from-sky-600 via-blue-600 to-indigo-700 z-0">
             <div className="absolute inset-0 bg-white/10" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.15) 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
         </div>
 
-        {/* ĐÃ THU GỌN MAX-WIDTH CÒN max-w-4xl */}
         <div className="max-w-4xl mx-auto px-4 sm:px-6 relative z-10 pt-6 sm:pt-8">
             
             <Button variant="link" onClick={() => navigate(-1)} className="text-white/80 hover:text-white mb-3 -ml-4 text-sm font-bold transition-all">
@@ -144,7 +140,7 @@ const StudentSubmissionDetail = () => {
             </Button>
 
             {/* ===================================== */}
-            {/* CARD THÔNG TIN TỔNG QUAN BO TRÒN VỪA PHẢI */}
+            {/* CARD THÔNG TIN TỔNG QUAN */}
             {/* ===================================== */}
             <Card className="rounded-3xl border-0 shadow-lg shadow-blue-900/10 bg-white/95 backdrop-blur-xl mb-8 overflow-hidden">
                 <div className="flex flex-col md:flex-row">
@@ -156,11 +152,25 @@ const StudentSubmissionDetail = () => {
                             </div>
                             <span className="font-bold text-sky-600 tracking-wide uppercase text-xs">Kết quả làm bài</span>
                         </div>
-                        <h1 className="text-2xl sm:text-3xl font-black text-slate-800 leading-tight mb-3">
+                        <h1 className="text-2xl sm:text-3xl font-black text-slate-800 leading-tight mb-4">
                             {submission.assignment?.title || "Bài tập đã bị xóa"}
                         </h1>
-                        <div className="flex flex-wrap items-center gap-3 text-slate-500 font-medium">
-                            <span className="flex items-center bg-slate-100 px-3 py-1 rounded-md text-xs font-bold">
+                        
+                        {/* 👉 BỔ SUNG PHÂN LOẠI & HỌC KỲ VÀO ĐÂY */}
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-slate-500 font-medium">
+                            <Badge className={`px-3 py-1.5 text-xs font-bold border-0 shadow-sm ${isExam ? 'bg-indigo-100 text-indigo-700' : 'bg-sky-100 text-sky-700'}`}>
+                                {isExam ? <FileCheck className="w-3.5 h-3.5 mr-1" /> : <BookOpen className="w-3.5 h-3.5 mr-1" />}
+                                {typeLabel}
+                            </Badge>
+
+                            {semesterLabel && (
+                                <Badge variant="outline" className="px-3 py-1.5 text-xs font-bold bg-white text-slate-600 border-slate-200 shadow-sm">
+                                    <CalendarDays className="w-3.5 h-3.5 mr-1 text-slate-400" />
+                                    {semesterLabel}
+                                </Badge>
+                            )}
+
+                            <span className="flex items-center bg-slate-100 px-3 py-1.5 rounded-full text-xs font-bold text-slate-600">
                                 <Clock className="w-3.5 h-3.5 mr-1.5 text-slate-400"/> Nộp lúc: {formatDateVN(submission.createdAt)}
                             </span>
                         </div>
@@ -205,8 +215,15 @@ const StudentSubmissionDetail = () => {
             <div className="space-y-5 sm:space-y-6">
                 {submission.answers.map((ans, idx) => {
                     const q = ans.question;
+                    if (!q) return null;
+
                     const isMultipleChoice = q.type === 'multiple_choice';
                     const isCorrectOverall = ans.pointsAwarded === ans.maxPoints;
+
+                    // 👉 GỘP CHUNG LOGIC HIỂN THỊ LỜI GIẢI (CẢ TRẮC NGHIỆM LẪN TỰ LUẬN ĐỀU DÙNG ĐƯỢC)
+                    const explanationText = q.explanation || q.essayAnswerText;
+                    const explanationImage = q.essayAnswerImageUrl;
+                    const hasExplanation = explanationText || explanationImage;
 
                     return (
                         <div key={idx} className={`bg-white border shadow-sm rounded-2xl overflow-hidden transition-all hover:shadow-md ${isCorrectOverall ? 'border-slate-200' : 'border-slate-200'}`}>
@@ -228,7 +245,7 @@ const StudentSubmissionDetail = () => {
                                 </div>
                             </div>
 
-                            {/* 👉 Nội dung Đề bài (ĐÃ BỌC RENDER LATEX) */}
+                            {/* 👉 Nội dung Đề bài */}
                             <div className="p-5 sm:p-6 space-y-5">
                                 <div className="space-y-3">
                                     <div 
@@ -238,7 +255,7 @@ const StudentSubmissionDetail = () => {
                                     {q.imageUrl && <img src={getImageUrl(q.imageUrl)} className="max-w-full max-h-64 rounded-xl shadow-sm border border-slate-200 object-contain" alt="Đề bài" />}
                                 </div>
 
-                                {/* 👉 Bổ sung Video (nếu có) vào phần bài làm */}
+                                {/* Video đề bài (nếu có) */}
                                 {q?.videoUrl && (
                                   <div className="w-full bg-slate-50/50 border border-slate-100 rounded-xl p-4 flex justify-center mb-4">
                                      {(q.videoUrl.includes("youtube.com") || q.videoUrl.includes("youtu.be")) ? (
@@ -302,19 +319,16 @@ const StudentSubmissionDetail = () => {
                                                 let badge = null;
                                                 
                                                 if (isMyAnswer && isCorrectAnswer) {
-                                                    // Chọn đúng
                                                     boxClass = "border-emerald-500 bg-emerald-50 shadow-sm"; 
                                                     textClass = "text-emerald-800 font-bold";
                                                     letterBoxClass = "bg-emerald-500 text-white border-transparent";
                                                     icon = <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0"/>;
                                                 } else if (isMyAnswer && !isCorrectAnswer) {
-                                                    // Chọn sai
                                                     boxClass = "border-rose-400 bg-rose-50 shadow-sm"; 
                                                     textClass = "text-rose-800 font-bold";
                                                     letterBoxClass = "bg-rose-500 text-white border-transparent";
                                                     icon = <XCircle className="w-5 h-5 text-rose-600 shrink-0"/>;
                                                 } else if (!isMyAnswer && isCorrectAnswer) {
-                                                    // Đáp án đúng mà hs không chọn
                                                     boxClass = "border-emerald-500 border-dashed bg-emerald-50/50"; 
                                                     textClass = "text-emerald-700 font-bold";
                                                     letterBoxClass = "bg-emerald-100 text-emerald-600 border-emerald-200";
@@ -328,7 +342,6 @@ const StudentSubmissionDetail = () => {
                                                             <div className={`w-8 h-8 flex items-center justify-center rounded-full text-sm font-black shrink-0 ${letterBoxClass}`}>
                                                                 {letter}
                                                             </div>
-                                                            {/* 👉 BỌC RENDER LATEX CHO ĐÁP ÁN A,B,C,D */}
                                                             <div 
                                                                 className={`text-sm sm:text-base ${textClass} q-content-view leading-snug`}
                                                                 dangerouslySetInnerHTML={{ __html: renderLatexContent(opt) }}
@@ -354,7 +367,6 @@ const StudentSubmissionDetail = () => {
                                         </div>
                                         <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm min-h-[80px]">
                                             {ans.studentAnswer ? (
-                                                /* 👉 BỌC RENDER LATEX CHO BÀI LÀM TỰ LUẬN */
                                                 <div className="text-slate-800 font-medium q-content-view text-base leading-relaxed" dangerouslySetInnerHTML={{ __html: renderLatexContent(ans.studentAnswer) }} />
                                             ) : (
                                                 <div className="flex flex-col items-center justify-center h-full opacity-60 py-3">
@@ -371,31 +383,33 @@ const StudentSubmissionDetail = () => {
                                     </div>
                                 )}
 
-                                {/* HƯỚNG DẪN GIẢI CỦA GIÁO VIÊN */}
-                                {submission.status === 'graded' && (q.essayAnswerText || q.essayAnswerImageUrl) && (
-                                    <div className="mt-6 bg-emerald-50/50 p-4 sm:p-5 rounded-xl border border-emerald-100 relative overflow-hidden">
-                                        <div className="flex items-center gap-2 mb-3">
-                                            <CheckCircle2 className="w-4 h-4 text-emerald-600"/>
-                                            <h3 className="font-bold text-emerald-800 text-sm uppercase tracking-wide">Hướng dẫn giải</h3>
+                                {/* 👉 HƯỚNG DẪN GIẢI / ĐÁP ÁN CHI TIẾT (TỐI ƯU GIAO DIỆN) */}
+                                {submission.status === 'graded' && hasExplanation && (
+                                    <div className="mt-6 bg-emerald-50/80 p-5 rounded-2xl border border-emerald-100 shadow-sm relative overflow-hidden">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                                                <CheckCircle2 className="w-5 h-5 text-emerald-600"/>
+                                            </div>
+                                            <h3 className="font-black text-emerald-800 text-sm uppercase tracking-wider">Hướng dẫn giải / Đáp án</h3>
                                         </div>
                                         
-                                        {q.essayAnswerText && (
-                                            <div className="bg-white p-4 rounded-xl border border-emerald-50 shadow-sm q-content-view">
-                                                {/* 👉 BỌC RENDER LATEX CHO LỜI GIẢI */}
+                                        {explanationText && (
+                                            <div className="bg-white p-4 sm:p-5 rounded-xl border border-emerald-100/50 shadow-sm q-content-view">
                                                 <div 
-                                                    className="text-emerald-950 font-medium leading-relaxed text-sm sm:text-base" 
-                                                    dangerouslySetInnerHTML={{ __html: renderLatexContent(q.essayAnswerText) }} 
+                                                    className="text-slate-700 font-medium leading-relaxed text-sm sm:text-base" 
+                                                    dangerouslySetInnerHTML={{ __html: renderLatexContent(explanationText) }} 
                                                 />
                                             </div>
                                         )}
                                         
-                                        {q.essayAnswerImageUrl && (
-                                            <div className="mt-3 text-center">
-                                                <img src={getImageUrl(q.essayAnswerImageUrl)} className="max-h-[300px] mx-auto rounded-xl border border-emerald-100 shadow-sm bg-white object-contain" alt="Ảnh đáp án" />
+                                        {explanationImage && (
+                                            <div className="mt-4 text-center">
+                                                <img src={getImageUrl(explanationImage)} className="max-h-[350px] mx-auto rounded-xl border border-emerald-200/50 shadow-sm bg-white object-contain p-1.5" alt="Ảnh đáp án" />
                                             </div>
                                         )}
                                     </div>
                                 )}
+
                             </div>
                         </div>
                     )

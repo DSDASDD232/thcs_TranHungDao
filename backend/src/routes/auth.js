@@ -22,7 +22,7 @@ const router = express.Router();
 // ==========================================
 router.post("/register", async (req, res) => {
     try {
-        const { username, password, fullName, role, grade, classId, subject, assignedClasses, department, subjects, qualification, status, phone, address, note } = req.body;
+        const { username, password, fullName, role, grade, classId, subject, assignedClasses, department, subjects, qualification, departmentPosition, status, phone, address, note } = req.body;
 
         // Kiểm tra xem tài khoản này đã tồn tại trong DB chưa
         const userExists = await User.findOne({ username });
@@ -45,6 +45,8 @@ router.post("/register", async (req, res) => {
             ? subjects
             : (typeof subjects === "string" ? subjects.split(",").map(s => s.trim()).filter(Boolean) : []);
 
+        let teacherPosition = "";
+
         if (role === "teacher") {
             if (department) {
                 const allowedSubjects = await Subject.find({ department }).select("name");
@@ -58,13 +60,26 @@ router.post("/register", async (req, res) => {
             } else {
                 normalizedSubjects = [];
             }
+
+            const validPositions = ["Tổ trưởng", "Tổ phó", "Giáo viên thường"];
+            teacherPosition = department
+                ? (validPositions.includes(String(departmentPosition || "").trim())
+                    ? String(departmentPosition).trim()
+                    : "Giáo viên thường")
+                : "";
         }
 
-        // Validate phone: tùy chọn, nếu nhập thì phải là số 1-15 ký tự
         const phoneStr = String(phone ?? "").trim();
+        const addressStr = String(address ?? "").trim();
+        if (role === "student" || role === "teacher") {
+            const roleLabel = role === "teacher" ? "Giáo viên" : "Học sinh";
+            if (!phoneStr || !addressStr) {
+                return res.status(400).json({ message: `${roleLabel} phải có Số điện thoại và Địa chỉ.` });
+            }
+        }
         if (phoneStr !== "" && !/^\d{1,15}$/.test(phoneStr)) {
             return res.status(400).json({
-                message: "Số điện thoại nếu nhập thì là số (1-15 ký tự), không được nhập chữ."
+                message: "Số điện thoại phải là số (1-15 ký tự), không được nhập chữ."
             });
         }
 
@@ -80,10 +95,11 @@ router.post("/register", async (req, res) => {
             assignedClasses: assignedClasses || [],
             department: department || "",
             subjects: normalizedSubjects,
-            qualification: qualification || "",
+            qualification: role === "teacher" ? (qualification || "Đại học") : (qualification || ""),
+            departmentPosition: teacherPosition,
             status: status || "active",
             phone: phoneStr,
-            address: address || "",
+            address: addressStr,
             note: note || "",
         });
         await newUser.save();
@@ -166,56 +182,72 @@ router.get("/me", verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 👉 [MỚI] API TỰ CẬP NHẬT PROFILE VÀ ĐỔI MẬT KHẨU
-// Dành cho cả Admin, Teacher và Student tự sửa thông tin của chính mình
+// [PUT] Cập nhật thông tin cá nhân & đổi mật khẩu (tùy chọn)
 // ==========================================
-router.put("/update-my-profile", verifyToken, async (req, res) => {
+router.put("/profile", verifyToken, async (req, res) => {
     try {
-        const { fullName, phone, address, oldPassword, newPassword } = req.body;
+        const { fullName, phone, address, oldPassword, newPassword, confirmPassword } = req.body;
         const user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ message: "Không tìm thấy người dùng" });
 
-        if (!user) return res.status(404).json({ message: "Không tìm thấy tài khoản!" });
+        const updateFields = {};
 
-        // 1. Nếu người dùng muốn đổi mật khẩu
-        if (oldPassword && newPassword) {
-            // Kiểm tra mật khẩu cũ có khớp không
-            const isMatch = await bcrypt.compare(oldPassword, user.password);
-            if (!isMatch) {
-                return res.status(400).json({ message: "Mật khẩu cũ không chính xác!" });
+        if (fullName !== undefined) {
+            const name = String(fullName).trim();
+            if (!name) return res.status(400).json({ message: "Họ và tên không được để trống." });
+            updateFields.fullName = name;
+        }
+
+        if (phone !== undefined) {
+            const phoneStr = String(phone).trim();
+            if (phoneStr !== "" && !/^\d{1,15}$/.test(phoneStr)) {
+                return res.status(400).json({ message: "Số điện thoại nếu nhập thì là số (1-15 ký tự), không được nhập chữ." });
             }
+            updateFields.phone = phoneStr;
+        }
 
-            // Kiểm tra tính hợp lệ của mật khẩu mới
+        if (address !== undefined) {
+            updateFields.address = String(address).trim();
+        }
+
+        const wantsPasswordChange = Boolean(oldPassword || newPassword || confirmPassword);
+        if (wantsPasswordChange) {
+            if (!oldPassword || !newPassword || !confirmPassword) {
+                return res.status(400).json({ message: "Vui lòng nhập đầy đủ mật khẩu hiện tại, mật khẩu mới và xác nhận mật khẩu." });
+            }
+            if (newPassword !== confirmPassword) {
+                return res.status(400).json({ message: "Mật khẩu mới và xác nhận mật khẩu không khớp!" });
+            }
+            if (newPassword.length < 6) {
+                return res.status(400).json({ message: "Mật khẩu mới phải có ít nhất 6 ký tự!" });
+            }
             if (!hasSpecialChar(newPassword)) {
                 return res.status(400).json({ message: "Mật khẩu mới phải chứa ít nhất 1 ký tự đặc biệt." });
             }
 
-            // Mã hóa mật khẩu mới
+            const isMatch = await bcrypt.compare(oldPassword, user.password);
+            if (!isMatch) {
+                return res.status(400).json({ message: "Mật khẩu hiện tại không đúng!" });
+            }
+
             const salt = await bcrypt.genSalt(10);
-            user.password = await bcrypt.hash(newPassword, salt);
+            updateFields.password = await bcrypt.hash(newPassword, salt);
         }
 
-        // 2. Cập nhật các thông tin cá nhân
-        if (fullName !== undefined && fullName.trim() !== "") user.fullName = fullName;
-        
-        // Validation cho số điện thoại (1-15 ký tự số)
-        const phoneStr = String(phone ?? "").trim();
-        if (phoneStr !== "" && !/^\d{1,15}$/.test(phoneStr)) {
-            return res.status(400).json({ message: "Số điện thoại nếu nhập thì là số (1-15 ký tự), không được nhập chữ." });
-        }
-        if (phone !== undefined) user.phone = phoneStr;
+        const updatedUser = await User.findByIdAndUpdate(
+            req.user.id,
+            updateFields,
+            { returnDocument: "after" }
+        ).select("-password");
 
-        if (address !== undefined) user.address = address;
-
-        await user.save();
-
-        // Trả về user mới (Loại bỏ trường password cho an toàn)
-        const updatedUser = user.toObject();
-        delete updatedUser.password;
-
-        res.status(200).json({ message: "✅ Cập nhật thông tin thành công!", user: updatedUser });
+        res.status(200).json({
+            message: wantsPasswordChange ? "Cập nhật thông tin và đổi mật khẩu thành công!" : "Cập nhật thông tin thành công!",
+            user: updatedUser,
+            passwordChanged: wantsPasswordChange,
+        });
     } catch (error) {
-        console.error("Lỗi cập nhật profile cá nhân:", error);
-        res.status(500).json({ message: "Lỗi server khi cập nhật", error: error.message });
+        console.error("Lỗi cập nhật profile:", error);
+        res.status(500).json({ message: "Lỗi server", error });
     }
 });
 

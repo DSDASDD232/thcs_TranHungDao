@@ -1,28 +1,21 @@
 import express from "express";
-import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken"; 
+import mongoose from "mongoose"; 
 import User from "../models/User.js";
-import Class from "../models/Class.js";
-import Subject from "../models/Subject.js";
+import Class from "../models/Class.js"; 
+import Question from "../models/Question.js";
 import Assignment from "../models/Assignment.js";
 import Submission from "../models/Submission.js";
-import Question from "../models/Question.js";
-import { verifyToken, isAdmin } from "../middleware/auth.js"; 
+import { verifyToken, isAdmin } from "../middleware/auth.js";
 import multer from "multer";
-import fs from "fs";
-
-// Cấu hình Multer lưu file tạm cho Restore và memoryStorage cho import Excel
-const upload = multer({ dest: 'uploads/temp_backups/' });
-
-const hasSpecialChar = (password) => /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password);
-
-const removeAccents = (str) => {
-    if (!str) return "";
-    return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').replace(/[^a-zA-Z0-9]/g, '');
-};
+import xlsx from "xlsx";
+import bcrypt from "bcryptjs"; 
+import Subject from "../models/Subject.js";
+import fs from "fs"; 
 
 const router = express.Router();
+// Cấu hình Multer lưu file tạm cho Restore và memoryStorage cho import Excel
+const upload = multer({ dest: 'uploads/temp_backups/' });
+const excelUpload = multer({ storage: multer.memoryStorage() });
 
 // ==========================================
 // 1. [GET] Lấy thống kê tổng quan toàn trường
@@ -178,6 +171,24 @@ router.get("/users/recent", verifyToken, isAdmin, async (req, res) => {
     }
 });
 
+// ==========================================
+// [GET] Lấy chi tiết một tài khoản
+// ==========================================
+router.get("/users/:id", verifyToken, isAdmin, async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id)
+            .populate("classId", "name grade")
+            .populate("assignedClasses", "name");
+        if (!user) {
+            return res.status(404).json({ message: "Không tìm thấy tài khoản." });
+        }
+        res.status(200).json(user);
+    } catch (error) {
+        console.error("Lỗi lấy chi tiết tài khoản:", error);
+        res.status(500).json({ message: "Lỗi server", error });
+    }
+});
+
 // ======================================================================
 // 5. [POST] TẠO TÀI KHOẢN HỌC SINH TỪ FILE EXCEL
 // ======================================================================
@@ -189,54 +200,143 @@ router.post("/users/import-json", verifyToken, isAdmin, async (req, res) => {
         }
 
         let successCount = 0;
+        let duplicateCount = 0;
         let failedCount = 0;
-        let generatedAccounts = []; 
+        let generatedAccounts = [];
+        const errors = [];
+        const duplicates = [];
+
+        const removeAccents = (str) => {
+            if (!str) return "";
+            return str
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/đ/g, 'd')
+                .replace(/Đ/g, 'D');
+        };
+
+        const normalizeImportKey = (key) => {
+            if (!key) return "";
+            return String(key)
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase()
+                .trim();
+        };
+
+        const normalizeRow = (rawRow) => {
+            const normalized = {};
+            Object.entries(rawRow).forEach(([key, value]) => {
+                const normalizedKey = normalizeImportKey(key);
+                if (['stt', 'so thu tu', 'sott'].includes(normalizedKey)) normalized['STT'] = value;
+                else if (['ten hoc sinh', 'ho va ten', 'ho ten', 'ho', 'ten', 'ho va ten', 'ho ten'].includes(normalizedKey)) normalized['Tên học sinh'] = value;
+                else if (['nam sinh', 'namsinh', 'year'].includes(normalizedKey)) normalized['Năm sinh'] = value;
+                else if (['so dien thoai', 'sodienthoai', 'sdt', 'phone', 'dien thoai', 'dienthoai'].includes(normalizedKey)) normalized['Số điện thoại'] = value;
+                else if (['dia chi', 'diachi', 'address'].includes(normalizedKey)) normalized['Địa chỉ'] = value;
+                else normalized[key] = value;
+            });
+            return normalized;
+        };
+
+        const existingStudents = await User.find({ role: 'student', classId })
+            .select('fullName phone username')
+            .lean();
+
+        const existingStudentKeys = new Set(
+            existingStudents.map((u) => `${removeAccents(String(u.fullName || '')).toLowerCase()}|${String(u.phone || '').trim()}`)
+        );
+
+        const generateUsernameBase = (fullName, className, stt) => {
+            const nameParts = String(fullName || '').trim().split(' ').filter(Boolean);
+            const firstName = nameParts.length > 0 ? nameParts[nameParts.length - 1] : String(fullName || '').trim();
+            const cleanFirstName = removeAccents(firstName).toLowerCase().replace(/\s+/g, '');
+            const cleanClassName = String(className || '').toLowerCase().replace(/\s+/g, '');
+            const paddedStt = String(stt || '').padStart(2, '0');
+            return `${cleanFirstName}${cleanClassName}${paddedStt}`;
+        };
+
+        const generateUniqueUsername = async (baseUsername) => {
+            let username = baseUsername;
+            let suffix = 1;
+            while (await User.exists({ username })) {
+                username = `${baseUsername}${suffix}`;
+                suffix++;
+            }
+            return username;
+        };
 
         const salt = await bcrypt.genSalt(10);
-        const defaultHashedPassword = await bcrypt.hash("1", salt);
+        const defaultHashedPassword = await bcrypt.hash('1', salt);
+        const newStudentKeys = new Set();
 
         for (let i = 0; i < students.length; i++) {
-            const row = students[i];
-            const sttRaw = row["STT"] || row["stt"] || row["Stt"];
-            const fullNameRaw = row["Tên học sinh"] || row["Họ và tên"] || row["Họ tên"] || row["Họ Tên"]; 
+            const row = normalizeRow(students[i]);
+            const sttRaw = row['STT'] || row['stt'] || row['Stt'] || i + 1;
+            const fullNameRaw = String(row['Tên học sinh'] || row['Họ và tên'] || row['Họ tên'] || row['Họ Tên'] || '').trim();
+            const phoneRaw = String(row['Số điện thoại'] || row['SDT'] || row['Phone'] || row['phone'] || '').trim();
+            const addressRaw = String(row['Địa chỉ'] || row['Dia chi'] || row['Address'] || row['address'] || '').trim();
+            const yearRaw = String(row['Năm sinh'] || row['Nam sinh'] || row['year'] || '').trim();
 
-            if (!fullNameRaw) { failedCount++; continue; }
+            const missingFields = [];
+            if (!fullNameRaw) missingFields.push('Họ tên');
+            if (!phoneRaw) missingFields.push('SĐT');
+            if (!addressRaw) missingFields.push('Địa chỉ');
 
-            const nameParts = fullNameRaw.trim().split(" ");
-            const firstName = nameParts[nameParts.length - 1]; 
-            const cleanFirstName = removeAccents(firstName).toLowerCase();
-            const paddedStt = String(sttRaw || (i + 1)).padStart(2, '0');
-            const cleanClassName = className.toLowerCase().replace(/\s+/g, ''); 
+            if (missingFields.length > 0) {
+                failedCount++;
+                const excelRow = i + 2;
+                errors.push({ row: excelRow, message: `Dòng ${excelRow} thiếu thông tin bắt buộc` });
+                continue;
+            }
 
-            const username = `${cleanFirstName}${cleanClassName}${paddedStt}`;
+            const studentKey = `${removeAccents(fullNameRaw).toLowerCase()}|${phoneRaw}`;
+            if (existingStudentKeys.has(studentKey) || newStudentKeys.has(studentKey)) {
+                duplicateCount++;
+                duplicates.push({ row: i + 2, message: `Học sinh ${fullNameRaw} - ${phoneRaw} đã tồn tại trong lớp` });
+                continue;
+            }
+
+            newStudentKeys.add(studentKey);
+            const usernameBase = generateUsernameBase(fullNameRaw, className, sttRaw);
+            const username = await generateUniqueUsername(usernameBase);
 
             try {
-                const userExists = await User.findOne({ username });
-                if (!userExists) {
-                    const newUser = new User({
-                        fullName: fullNameRaw.trim(),
-                        username: username,
-                        password: defaultHashedPassword,
-                        role: "student",
-                        classId: classId,
-                        grade: grade || className.replace(/\D/g, '').substring(0, 1) 
-                    });
-                    await newUser.save();
-                    successCount++;
-                    generatedAccounts.push({ "STT": paddedStt, "Họ và Tên": fullNameRaw.trim(), "Tài Khoản": username, "Mật Khẩu": "1" });
-                } else { failedCount++; }
-            } catch (err) { failedCount++; }
+                const newUser = new User({
+                    fullName: fullNameRaw,
+                    username,
+                    password: defaultHashedPassword,
+                    role: 'student',
+                    classId,
+                    grade: grade || String(className).replace(/\D/g, '').substring(0, 1),
+                    phone: phoneRaw,
+                    address: addressRaw,
+                });
+                await newUser.save();
+                successCount++;
+                generatedAccounts.push({ 'STT': String(sttRaw).padStart(2, '0'), 'Họ và Tên': fullNameRaw, 'Tài Khoản': username, 'Mật Khẩu': '1' });
+            } catch (err) {
+                failedCount++;
+                errors.push({ row: i + 1, message: `Lỗi tạo tài khoản cho dòng ${i + 1}` });
+            }
         }
 
-        res.status(200).json({ message: "Hoàn tất!", successCount, failedCount, accounts: generatedAccounts });
+        res.status(200).json({
+            message: 'Hoàn tất!',
+            successCount,
+            duplicateCount,
+            failedCount,
+            errors,
+            duplicates,
+            accounts: generatedAccounts,
+        });
     } catch (error) {
-        console.error("Lỗi import excel:", error);
-        res.status(500).json({ message: "Lỗi server", error });
+        console.error('Lỗi import excel:', error);
+        res.status(500).json({ message: 'Lỗi server', error });
     }
 });
 
 // ==========================================
-// 6. [DELETE] XÓA TÀI KHOẢN VÀ BÀI NỘP LIÊN QUAN
+// 6. [DELETE] XÓÓ TÀI KHOẢN VÀ BÀI NỘP LIÊN QUAN
 // ==========================================
 router.delete("/users/:id", verifyToken, isAdmin, async (req, res) => {
     try {
@@ -260,14 +360,22 @@ router.delete("/users/:id", verifyToken, isAdmin, async (req, res) => {
     }
 });
 
+const TEACHER_POSITIONS = ["Tổ trưởng", "Tổ phó", "Giáo viên thường"];
+
+const normalizeDepartmentPosition = (department, position) => {
+    if (!department) return "";
+    const pos = String(position ?? "").trim();
+    if (TEACHER_POSITIONS.includes(pos)) return pos;
+    return "Giáo viên thường";
+};
+
 // ==========================================
-// 7. [PUT] CẬP NHẬT TÀI KHOẢN (Bao gồm Role, Class, Department, Môn và Cả PROFILE)
+// 7. [PUT] CẬP NHẬT TÀI KHOẢN (ĐÃ UPDATE HỖ TRỢ ĐA MÔN HỌC)
 // ==========================================
 router.put("/users/:id", verifyToken, isAdmin, async (req, res) => {
     try {
         const userId = req.params.id;
-        // 👉 ĐÃ FIX: GỠ BỎ dateOfBirth VÀ gender
-        const { fullName, role, grade, classId, assignedClasses, isLocked, password, subject, department, subjects, qualification, status, phone, address, note } = req.body;
+        const { fullName, role, grade, classId, assignedClasses, isLocked, password, subject, department, subjects, qualification, departmentPosition, status, phone, address, note } = req.body;
         
         const existingUser = await User.findById(userId);
         if (!existingUser) return res.status(404).json({ message: "Không tìm thấy người dùng!" });
@@ -300,22 +408,31 @@ router.put("/users/:id", verifyToken, isAdmin, async (req, res) => {
                         });
                     }
                 }
+
                 updateFields.subjects = targetDepartment ? normalizedSubjects : [];
             }
 
-            if (subject !== undefined) updateFields.subject = subject;
-            if (qualification !== undefined) updateFields.qualification = qualification;
+            if (subject !== undefined) {
+                updateFields.subject = subject;
+            }
+
+            if (qualification !== undefined) {
+                updateFields.qualification = qualification || "Đại học";
+            }
+
+            const deptForPos = department !== undefined ? department : existingUser.department;
+            if (departmentPosition !== undefined || department !== undefined) {
+                updateFields.departmentPosition = normalizeDepartmentPosition(
+                    deptForPos,
+                    departmentPosition !== undefined ? departmentPosition : existingUser.departmentPosition
+                );
+            }
         }
 
-        // Cập nhật thông tin Profile chung
         if (fullName) updateFields.fullName = fullName;
         if (role) updateFields.role = role;
         if (grade !== undefined) updateFields.grade = grade;
         if (status !== undefined) updateFields.status = status;
-        if (address !== undefined) updateFields.address = address;
-        if (note !== undefined) updateFields.note = note;
-
-        // Xử lý số điện thoại
         if (phone !== undefined) {
             const phoneStr = String(phone).trim();
             if (phoneStr === "") {
@@ -326,19 +443,50 @@ router.put("/users/:id", verifyToken, isAdmin, async (req, res) => {
                 updateFields.phone = phoneStr;
             }
         }
+        if (address !== undefined) updateFields.address = address;
+        if (note !== undefined) updateFields.note = note;
+
+        const targetRole = role || existingUser.role;
+        if (targetRole === "student" || targetRole === "teacher") {
+            const finalPhone = phone !== undefined ? String(phone).trim() : String(existingUser.phone || "").trim();
+            const finalAddress = address !== undefined ? String(address).trim() : String(existingUser.address || "").trim();
+            const roleLabel = targetRole === "teacher" ? "Giáo viên" : "Học sinh";
+            if (!finalPhone || !finalAddress) {
+                return res.status(400).json({ message: `${roleLabel} phải có Số điện thoại và Địa chỉ.` });
+            }
+            if (!/^\d{1,15}$/.test(finalPhone)) {
+                return res.status(400).json({ message: "Số điện thoại phải là số (1-15 ký tự), không được nhập chữ." });
+            }
+        }
         
-        // Cập nhật liên quan đến lớp
-        if (role === "student") {
-            if (classId !== undefined) updateFields.classId = classId || null;
-            updateFields.$unset = { assignedClasses: "" }; 
-        } else if (role === "teacher") {
+        const incomingClassId = (classId && typeof classId === 'object') ? (classId._id || classId) : classId;
+
+        if (targetRole === "student") {
+            if (incomingClassId !== undefined) {
+                if (incomingClassId) {
+                    if (!mongoose.Types.ObjectId.isValid(incomingClassId)) {
+                        return res.status(400).json({ message: "Lớp học không hợp lệ. Vui lòng chọn lại lớp." });
+                    }
+                    const selectedClass = await Class.findById(incomingClassId);
+                    if (!selectedClass) {
+                        return res.status(400).json({ message: "Lớp học không hợp lệ. Vui lòng chọn lại lớp." });
+                    }
+                    updateFields.classId = incomingClassId;
+                    updateFields.grade = selectedClass.grade;
+                } else {
+                    updateFields.classId = null;
+                }
+            }
+            updateFields.$unset = { assignedClasses: "" };
+            updateFields.departmentPosition = "";
+        } 
+        else if (targetRole === "teacher") {
             if (assignedClasses) updateFields.assignedClasses = assignedClasses;
             updateFields.classId = null; 
         }
 
         if (isLocked !== undefined) updateFields.isLocked = isLocked;
 
-        // Cập nhật mật khẩu nếu Admin yêu cầu đổi
         if (password) {
             const salt = await bcrypt.genSalt(10);
             updateFields.password = await bcrypt.hash(password, salt);
@@ -401,6 +549,7 @@ router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
                             const d = parseInt(day, 10);
                             const maxDay = getDaysInMonthUtc(y, m);
                             if (!isNaN(d) && d >= 1 && d <= maxDay) {
+                                // Sử dụng UTC để tránh vấn đề timezone
                                 const startDate = new Date(Date.UTC(y, m, d, 0, 0, 0, 0));
                                 const endDate = new Date(Date.UTC(y, m, d, 23, 59, 59, 999));
                                 dateFilter = { createdAt: { $gte: startDate, $lte: endDate } };
@@ -408,12 +557,14 @@ router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
                                 return res.status(200).json({ leaderboard: [] });
                             }
                         } else {
+                            // Nguyên tháng - lấy từ ngày 1 đến cuối tháng
                             const startDate = new Date(Date.UTC(y, m, 1, 0, 0, 0, 0));
                             const endDate = new Date(Date.UTC(y, m + 1, 0, 23, 59, 59, 999));
                             dateFilter = { createdAt: { $gte: startDate, $lte: endDate } };
                         }
                     }
                 } else {
+                    // Nguyên năm - lấy từ 1/1 đến 31/12
                     const startDate = new Date(Date.UTC(y, 0, 1, 0, 0, 0, 0));
                     const endDate = new Date(Date.UTC(y, 11, 31, 23, 59, 59, 999));
                     dateFilter = { createdAt: { $gte: startDate, $lte: endDate } };
@@ -519,6 +670,7 @@ router.get("/leaderboard/years", verifyToken, isAdmin, async (req, res) => {
 // ======================================================================
 router.get("/leaderboard/stats", verifyToken, isAdmin, async (req, res) => {
     try {
+        // Aggregate classes and student counts per grade
         const grades = ["6", "7", "8", "9"];
 
         const gradeStats = await Promise.all(grades.map(async (g) => {
@@ -650,13 +802,14 @@ router.get("/leaderboard/class/:classId/students", verifyToken, isAdmin, async (
                 _id: student._id,
                 fullName: student.fullName,
                 username: student.username,
-                computed,
-                final,    
-                overridden, 
+                computed, // Điểm hệ thống tính
+                final,    // Điểm cuối cùng (sau khi áp dụng ghi đè)
+                overridden, // Cờ cho biết trường nào bị ghi đè
                 note: student.leaderboardOverride?.note || "",
             };
         });
 
+        // Sắp xếp theo điểm trung bình cuối cùng (final.averageScore) giảm dần, sau đó là số bài làm (final.totalTests) giảm dần
         studentStats.sort((a, b) => {
             if (b.final.averageScore !== a.final.averageScore) {
                 return b.final.averageScore - a.final.averageScore;
@@ -710,7 +863,7 @@ router.put("/leaderboard/class/:classId/students/:studentId", verifyToken, isAdm
 });
 
 // ==========================================
-// [MÔN HỌC] 
+// [MÔN HỌC] - ĐÃ SỬA LẠI ĐỂ NHẬN DEPARTMENT
 // ==========================================
 router.get("/subjects", verifyToken, async (req, res) => {
     try {

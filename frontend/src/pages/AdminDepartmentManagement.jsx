@@ -389,6 +389,7 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
         "Tài khoản": t.username,
         "Họ và tên": t.fullName,
         "Tổ chuyên môn": t.department === "KHTN" ? "Tổ KHTN" : t.department === "KHXH" ? "Tổ KHXH" : "Chưa phân tổ",
+        "Chức vụ trong tổ": t.departmentPosition === "Tổ trưởng" || t.departmentPosition === "Tổ phó" ? t.departmentPosition : (t.departmentPosition || "Giáo viên thường"),
         "Môn giảng dạy": subs.length > 0 ? subs.join(", ") : "Chưa đăng ký môn",
         "Lớp đang phụ trách": assignedStr
       };
@@ -687,6 +688,7 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
               <TableRow>
                 <TableHead className="w-12 text-center font-bold text-slate-500">STT</TableHead>
                 <TableHead className="font-bold text-slate-500 w-56">Thông tin Giáo viên</TableHead>
+                <TableHead className="font-bold text-slate-500 w-32 text-center">Chức vụ</TableHead>
                 <TableHead className="font-bold text-slate-500 w-44">Tổ chuyên môn</TableHead>
                 <TableHead className="font-bold text-slate-500">Môn giảng dạy</TableHead>
                 <TableHead className="font-bold text-slate-500 w-56">Lớp đang phụ trách</TableHead>
@@ -695,7 +697,7 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
             </TableHeader>
             <TableBody>
               {filteredTeachers.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-10 text-slate-500">Không tìm thấy giáo viên nào phù hợp.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center py-10 text-slate-500">Không tìm thấy giáo viên nào phù hợp.</TableCell></TableRow>
               ) : (
                 filteredTeachers.map((teacher, index) => {
                   const isAssigned = teacher.assignedClasses && teacher.assignedClasses.length > 0;
@@ -712,7 +714,7 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
                       onClick={() => setSelectedTeacherRowId(teacher._id)}
                       className={`cursor-pointer transition-colors ${
                         isRowSelected
-                          ? '!bg-fuchsia-200 [&>td]:!bg-fuchsia-200 [&>td]:text-slate-800'
+                          ? '!bg-blue-50 [&>td]:!bg-blue-50 [&>td]:text-slate-800'
                           : isEditing
                             ? 'bg-sky-50/50'
                             : 'hover:bg-slate-50/50'
@@ -723,6 +725,16 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
                       <TableCell className="align-top pt-4">
                          <p className="font-bold text-slate-700">{teacher.fullName}</p>
                          <p className="text-sky-600 font-medium text-xs mt-0.5">{teacher.username}</p>
+                      </TableCell>
+
+                      <TableCell className="align-top pt-4 text-center">
+                        {teacher.departmentPosition === "Tổ trưởng" ? (
+                          <Badge className="bg-violet-100 text-violet-800 text-xs font-bold shadow-none border-0">Tổ trưởng</Badge>
+                        ) : teacher.departmentPosition === "Tổ phó" ? (
+                          <Badge className="bg-purple-100 text-purple-800 text-xs font-bold shadow-none border-0">Tổ phó</Badge>
+                        ) : (
+                          <Badge className="bg-slate-100 text-slate-700 text-xs font-bold shadow-none border-0">Giáo viên thường</Badge>
+                        )}
                       </TableCell>
                       
                       <TableCell className="align-top pt-4">

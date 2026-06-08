@@ -84,7 +84,6 @@ router.post("/extract-word", verifyToken, isTeacherOrAdmin, uploadWord.single("f
 // ==========================================================
 router.post("/add", verifyToken, isTeacherOrAdmin, uploadCloud.any(), async (req, res) => {
     try {
-        // 👉 ĐÃ THÊM BIẾN folderName VÀ examName, LOẠI BỎ questionSet
         const { content, subject, difficulty, grade, type, options, correctAnswer, folderName, examName, essayAnswerText, semester } = req.body;
 
         if (!content || !type) {
@@ -141,8 +140,8 @@ router.post("/add", verifyToken, isTeacherOrAdmin, uploadCloud.any(), async (req
             imageUrl: finalImageUrl, 
             teacher: req.user.id,
             isBank: true,
-            folderName: finalFolderName, // 👉 CẬP NHẬT CẤU TRÚC MỚI
-            examName: finalExamName,     // 👉 CẬP NHẬT CẤU TRÚC MỚI
+            folderName: finalFolderName, 
+            examName: finalExamName,     
             essayAnswerText: essayAnswerText || "",
             essayAnswerImageUrl: finalEssayAnswerImageUrl
         });
@@ -161,7 +160,6 @@ router.post("/add", verifyToken, isTeacherOrAdmin, uploadCloud.any(), async (req
 // ======================================================================
 router.post("/create-exam-questions", verifyToken, isTeacherOrAdmin, uploadCloud.any(), async (req, res) => {
     try {
-        // 👉 ĐÃ THAY ĐỔI: Nhận folderName và examName từ Frontend gửi lên
         const { folderName, examName, subject, grade, questionsData, semester } = req.body;
         
         const finalFolderName = folderName ? folderName.trim() : "Thư mục chung";
@@ -182,7 +180,7 @@ router.post("/create-exam-questions", verifyToken, isTeacherOrAdmin, uploadCloud
 
         const existingDbQuestions = await Question.find({
             teacher: req.user.id,
-            folderName: finalFolderName, // 👉 Kiểm tra trùng lặp trong đúng Đề và Thư mục
+            folderName: finalFolderName, 
             examName: finalExamName
         }).select('content').lean();
 
@@ -219,8 +217,8 @@ router.post("/create-exam-questions", verifyToken, isTeacherOrAdmin, uploadCloud
                 subject: finalSubject,
                 grade: finalGrade,
                 semester: q.semester || semester || "1",
-                folderName: finalFolderName, // 👉 CẬP NHẬT
-                examName: finalExamName,     // 👉 CẬP NHẬT
+                folderName: finalFolderName, 
+                examName: finalExamName,     
                 teacher: req.user.id,
                 imageUrl: imageUrl,
                 points: q.points || 0,
@@ -244,10 +242,11 @@ router.post("/create-exam-questions", verifyToken, isTeacherOrAdmin, uploadCloud
 // ==========================================================
 router.get("/all", verifyToken, isTeacherOrAdmin, async (req, res) => {
     try {
+        // Lấy tất cả câu hỏi được đánh dấu là trong kho chung
         const queryFilter = { isBank: true };
-        if (req.user.role === "teacher") {
-            queryFilter.teacher = req.user.id;
-        }
+        
+        // 👉 ĐÃ FIX: Xóa điều kiện giới hạn ID giáo viên ở đây
+        // Mọi giáo viên đều có thể lấy danh sách kho câu hỏi chung để hiển thị trong React
 
         const questions = await Question.find(queryFilter)
             .sort({ createdAt: -1 }) 
@@ -299,7 +298,6 @@ router.put("/update/:id", verifyToken, isTeacherOrAdmin, uploadCloud.any(), asyn
             updateData.correctAnswer = "";
         }
 
-        // Cấu trúc ...req.body đã tự động hứng biến `semester`, `folderName`, `examName` từ Frontend nếu có truyền lên
         const updatedQuestion = await Question.findByIdAndUpdate(
             req.params.id, 
             updateData, 

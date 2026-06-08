@@ -14,7 +14,7 @@ import {
   ArrowLeft, UploadCloud, CheckCircle, CheckCircle2, AlertTriangle, Eraser,
   Sparkles, FileText, Loader2, Image as ImageIcon, ListChecks, Layers,
   PenTool, Database, Calculator, Save, Search, Eye, Trash2, PlusCircle, ArrowRight, FolderOpen, Lock,
-  Calendar, Video, FileAudio, Sigma, X, BookOpen, FileCheck, History // Thêm History icon
+  Calendar, Video, FileAudio, Sigma, X, BookOpen, FileCheck, History
 } from "lucide-react";
 
 import RichTextEditor from "@/components/ui/RichTextEditor";
@@ -249,7 +249,7 @@ const CreateAssignment = () => {
     dueDate_date: getDefaultDate(), 
     dueDate_time: getDefaultTime(),
     password: "",
-    allowMultipleSubmissions: false // 👉 THÊM BIẾN MỚI: Mặc định Tắt làm nhiều lần
+    allowMultipleSubmissions: false
   });
 
   const [hasPassword, setHasPassword] = useState(false);
@@ -344,7 +344,7 @@ const CreateAssignment = () => {
           password: data.password || "",
           semester: data.semester || "1",
           assignmentType: data.assignmentType || currentAssignmentType,
-          allowMultipleSubmissions: data.allowMultipleSubmissions || false // 👉 Load data cũ
+          allowMultipleSubmissions: data.allowMultipleSubmissions || false 
         });
 
         if (data.password) setHasPassword(true);
@@ -548,11 +548,13 @@ const CreateAssignment = () => {
   const roundedTotal = Math.round(totalPoints * 100) / 100; 
   const isPointsValid = roundedTotal === 10; 
 
+  // 👉 HÀM RÓT CÂU HỎI ĐÃ ĐƯỢC CHỈNH SỬA (CHỈ LẤY ĐỦ SỐ LƯỢNG SLOT TRỐNG)
   const fillEmptySlots = (importedQs) => {
     let newManuals = [...manualQuestions];
     let updatedPoints = { ...questionPoints };
     let filledCount = 0;
     let duplicateCount = 0;
+    let skippedFullCount = 0; // Biến đếm số câu bị bỏ qua do hết chỗ
     
     const stripHtml = (html) => {
       let tmp = document.createElement("DIV");
@@ -566,48 +568,52 @@ const CreateAssignment = () => {
       const impQ = importedQs[i];
       const normalizedContent = stripHtml(impQ.content).trim().toLowerCase();
 
+      // Kiểm tra trùng lặp nội dung
       if (existingContents.has(normalizedContent)) {
           duplicateCount++; continue; 
       }
 
+      // Tìm một slot (khung) đang TRỐNG và CÙNG LOẠI (Trắc nghiệm/Tự luận)
       let targetSlotIndex = newManuals.findIndex(slot => slot.type === impQ.type && stripHtml(slot.content).trim() === "");
 
-      let parsedOptions = [];
-      if (Array.isArray(impQ.options) && impQ.options.length > 0) {
-          parsedOptions = impQ.options;
-      }
-      
-      let correctKey = impQ.correctAnswer || "A";
-
-      const payloadToInject = {
-        content: impQ.content || "",
-        videoUrl: impQ.videoUrl || "",
-        videoFile: null, videoPreviewUrl: "",
-        options: impQ.type === 'multiple_choice' ? parsedOptions : [],
-        correctAnswer: correctKey,
-        difficulty: impQ.difficulty || "medium",
-        previewUrl: impQ.previewUrl || "",
-        essayAnswerText: impQ.essayAnswerText || "",
-      };
-
       if (targetSlotIndex !== -1) {
+          // 👉 Nếu TÌM THẤY khung trống -> Rót dữ liệu vào
+          let parsedOptions = [];
+          if (Array.isArray(impQ.options) && impQ.options.length > 0) {
+              parsedOptions = impQ.options;
+          }
+          
+          let correctKey = impQ.correctAnswer || "A";
+
+          const payloadToInject = {
+            content: impQ.content || "",
+            videoUrl: impQ.videoUrl || "",
+            videoFile: null, videoPreviewUrl: "",
+            options: impQ.type === 'multiple_choice' ? parsedOptions : [],
+            correctAnswer: correctKey,
+            difficulty: impQ.difficulty || "medium",
+            previewUrl: impQ.previewUrl || "",
+            essayAnswerText: impQ.essayAnswerText || "",
+          };
+
           existingContents.add(normalizedContent);
           newManuals[targetSlotIndex] = { ...newManuals[targetSlotIndex], ...payloadToInject };
+          filledCount++;
       } else {
-          existingContents.add(normalizedContent);
-          const newTempId = `appended_${Date.now()}_${Math.random()}`;
-          newManuals.push({ tempId: newTempId, type: impQ.type || "multiple_choice", ...payloadToInject });
-          updatedPoints[newTempId] = impQ.points || 0; 
+          // 👉 Nếu KHÔNG TÌM THẤY khung trống -> Bỏ qua và tăng biến đếm
+          skippedFullCount++;
       }
-      filledCount++;
     }
 
     setManualQuestions(newManuals);
     setQuestionPoints(updatedPoints);
     recalculatePoints(newManuals, updatedPoints); 
     
-    let alertMsg = `✅ Đã rót thành công ${filledCount} câu vào Form trực tiếp.`;
-    if (duplicateCount > 0) alertMsg += `\n⚠️ Bỏ qua ${duplicateCount} câu do đã bị trùng lặp.`;
+    // Tạo câu thông báo chi tiết cho giáo viên
+    let alertMsg = `✅ Đã rót thành công ${filledCount} câu vào Khung.`;
+    if (duplicateCount > 0) alertMsg += `\n⚠️ Bỏ qua ${duplicateCount} câu do đã bị trùng lặp nội dung.`;
+    if (skippedFullCount > 0) alertMsg += `\n❌ Bỏ qua ${skippedFullCount} câu do số lượng Khung trực tiếp đã đầy (hoặc không khớp loại).`;
+    
     alert(alertMsg);
   };
 
@@ -824,7 +830,6 @@ const CreateAssignment = () => {
       formData.append("startDate", finalStartDateISO);
       formData.append("dueDate", finalDueDateISO);
       formData.append("status", actionType); 
-      // 👉 Gửi cài đặt Làm bài nhiều lần
       formData.append("allowMultipleSubmissions", newAssignment.allowMultipleSubmissions);
 
       if (hasPassword && newAssignment.password.trim() !== "") {
@@ -1393,7 +1398,6 @@ const CreateAssignment = () => {
                             </SelectContent>
                           </Select>
                           
-                          {/* 👉 BỘ LỌC THEO HỌC KỲ CHO KHO CÂU HỎI */}
                           <Select value={bankSemester} onValueChange={setBankSemester}>
                             <SelectTrigger className="h-10 w-[150px] bg-white border-sky-200 font-bold text-sky-700">
                               <span className="truncate">{bankSemester === 'all' ? 'Tất cả Học kỳ' : bankSemester === 'Cả năm' ? 'Cả năm' : `Học kỳ ${bankSemester}`}</span>

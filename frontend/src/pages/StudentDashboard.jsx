@@ -140,10 +140,12 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
 
   sheet.columns = [
     { width: 8 },  
-    { width: 45 }, 
+    { width: 35 }, 
     { width: 15 }, 
+    { width: 12 }, 
+    { width: 20 }, 
     { width: 25 }, 
-    { width: 25 }, 
+    { width: 20 }, 
   ];
 
   sheet.addRow(["", "UBND HUYỆN THỦY NGUYÊN", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"]);
@@ -151,8 +153,8 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
 
   sheet.mergeCells("B1:C1");
   sheet.mergeCells("B2:C2");
-  sheet.mergeCells("D1:E1");
-  sheet.mergeCells("D2:E2");
+  sheet.mergeCells("D1:G1");
+  sheet.mergeCells("D2:G2");
 
   try {
     const logoResponse = await fetch(schoolLogo);
@@ -182,7 +184,7 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
 
   sheet.addRow([]);
   const titleRow = sheet.addRow([reportTitle.toUpperCase()]);
-  sheet.mergeCells("A4:E4");
+  sheet.mergeCells("A4:G4");
   titleRow.height = 40;
   sheet.getCell("A4").font = { name: "Times New Roman", size: 16, bold: true, color: { argb: "FF0070C0" } };
   sheet.getCell("A4").alignment = { vertical: "middle", horizontal: "center" };
@@ -204,7 +206,7 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
     row.eachCell((cell, colNumber) => {
       cell.font = { name: "Times New Roman", size: 12 };
       cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
-      if (colNumber === 1 || colNumber >= 4) cell.alignment = { vertical: "middle", horizontal: "center" };
+      if (colNumber === 1 || colNumber >= 3) cell.alignment = { vertical: "middle", horizontal: "center" };
       else cell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
     });
   });
@@ -212,22 +214,22 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
   sheet.addRow([]);
   sheet.addRow([]);
   const dateRowNum = sheet.rowCount + 1;
-  sheet.addRow(["", "", "", dateStr]);
-  sheet.mergeCells(`D${dateRowNum}:E${dateRowNum}`);
-  sheet.getCell(`D${dateRowNum}`).font = { name: "Times New Roman", size: 12, italic: true };
-  sheet.getCell(`D${dateRowNum}`).alignment = { horizontal: "center" };
+  sheet.addRow(["", "", "", "", "", "", dateStr]);
+  sheet.mergeCells(`F${dateRowNum}:G${dateRowNum}`);
+  sheet.getCell(`F${dateRowNum}`).font = { name: "Times New Roman", size: 12, italic: true };
+  sheet.getCell(`F${dateRowNum}`).alignment = { horizontal: "center" };
 
   const signRowNum = sheet.rowCount + 1;
-  sheet.addRow(["", "", "", "Học sinh"]);
-  sheet.mergeCells(`D${signRowNum}:E${signRowNum}`);
-  sheet.getCell(`D${signRowNum}`).font = { name: "Times New Roman", size: 12, bold: true };
-  sheet.getCell(`D${signRowNum}`).alignment = { horizontal: "center" };
+  sheet.addRow(["", "", "", "", "", "", "Học sinh"]);
+  sheet.mergeCells(`F${signRowNum}:G${signRowNum}`);
+  sheet.getCell(`F${signRowNum}`).font = { name: "Times New Roman", size: 12, bold: true };
+  sheet.getCell(`F${signRowNum}`).alignment = { horizontal: "center" };
 
   const nameRowNum = sheet.rowCount + 4; 
-  sheet.addRow(["", "", "", studentName]);
-  sheet.mergeCells(`D${nameRowNum}:E${nameRowNum}`);
-  sheet.getCell(`D${nameRowNum}`).font = { name: "Times New Roman", size: 12, bold: true };
-  sheet.getCell(`D${nameRowNum}`).alignment = { horizontal: "center" };
+  sheet.addRow(["", "", "", "", "", "", studentName]);
+  sheet.mergeCells(`F${nameRowNum}:G${nameRowNum}`);
+  sheet.getCell(`F${nameRowNum}`).font = { name: "Times New Roman", size: 12, bold: true };
+  sheet.getCell(`F${nameRowNum}`).alignment = { horizontal: "center" };
   
   sheet.headerFooter.oddFooter = `&R&"Times New Roman,Bold"&10Người xuất file: ${studentName}`;
   
@@ -294,7 +296,7 @@ const exportPDF = async (dataList, reportTitle, studentName) => {
     body: dataList.map((obj) => Object.values(obj)),
     styles: {
       font: "Roboto", 
-      fontSize: 10,
+      fontSize: 9,
       halign: "center",
       valign: "middle",
       lineColor: [0, 0, 0],
@@ -307,7 +309,6 @@ const exportPDF = async (dataList, reportTitle, studentName) => {
     },
     columnStyles: {
       1: { halign: "left" }, 
-      2: { halign: "center" }, 
     },
   });
 
@@ -389,7 +390,7 @@ const printPDF = async (dataList, reportTitle, studentName) => {
     body: dataList.map((obj) => Object.values(obj)),
     styles: {
       font: "Roboto",
-      fontSize: 10,
+      fontSize: 9,
       halign: "center",
       valign: "middle",
       lineColor: [0, 0, 0],
@@ -402,7 +403,6 @@ const printPDF = async (dataList, reportTitle, studentName) => {
     },
     columnStyles: {
       1: { halign: "left" }, 
-      2: { halign: "center" },
     },
   });
 
@@ -420,7 +420,6 @@ const printPDF = async (dataList, reportTitle, studentName) => {
   doc.setFont("Roboto", "normal");
   doc.text(`Người xuất file: ${studentName}`, 200, 287, { align: "right" });
 
-  // Kích hoạt tính năng gọi lệnh in của trình duyệt
   doc.autoPrint();
   const blob = doc.output("blob");
   const blobUrl = URL.createObjectURL(blob);
@@ -479,7 +478,7 @@ const exportWord = async (dataList, reportTitle, studentName) => {
                 new DocxTableCell({
                   children: [
                     new Paragraph({
-                      alignment: index === 1 || index === 2 ? "left" : "center",
+                      alignment: index === 1 ? "left" : "center",
                       children: [
                         new TextRun({
                           text: String(val),
@@ -867,7 +866,6 @@ const StudentDashboard = () => {
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
 
-  // 👉 THÊM STATE CHO CHỈNH SỬA PROFILE
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [profileForm, setProfileForm] = useState({ fullName: '', phone: '', address: '' });
   const [passwordData, setPasswordData] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
@@ -887,7 +885,6 @@ const StudentDashboard = () => {
           .catch(() => null);
         if (profileRes && profileRes.data) {
           setProfile(profileRes.data);
-          // Set dữ liệu sẵn cho form profile
           setProfileForm({
               fullName: profileRes.data.fullName || "",
               phone: profileRes.data.phone || "",
@@ -973,6 +970,14 @@ const StudentDashboard = () => {
     return "-";
   };
 
+  // 👉 HÀM LẤY DỮ LIỆU ĐẦY ĐỦ CỦA BÀI TẬP ĐỂ HIỂN THỊ HỌC KỲ VÀ PHÂN LOẠI
+  const getAssignData = (sub) => {
+    const foundAssign = allAssignmentsForRef.find(
+      (a) => a._id === (sub.assignment?._id || sub.assignment),
+    );
+    return foundAssign || sub.assignment || {};
+  };
+
   const formatDateVN = (dateString) => {
     if (!dateString) return "-";
     const d = new Date(dateString);
@@ -1051,19 +1056,18 @@ const StudentDashboard = () => {
   const handleExportClick = () => {
     if (filteredHistory.length === 0) return alert("Không có dữ liệu để xuất!");
 
-    const dataToExport = filteredHistory.map((sub, idx) => ({
-      STT: idx + 1,
-      "Tên Bài Tập": sub.assignment?.title || "Bài tập đã xóa",
-      "Môn Học": getSubject(sub),
-      "Thời Gian Nộp": sub.isOverdueMock
-        ? "Không nộp"
-        : formatDateVN(sub.createdAt),
-      "Điểm Số": sub.isOverdueMock
-        ? "0 (Bỏ lỡ)"
-        : sub.status === "pending"
-          ? "Chờ chấm"
-          : sub.score,
-    }));
+    const dataToExport = filteredHistory.map((sub, idx) => {
+      const assignData = getAssignData(sub);
+      return {
+        STT: idx + 1,
+        "Tên Bài Tập": assignData.title || "Bài tập đã xóa",
+        "Phân Loại": assignData.assignmentType === "exam" ? "Đề thi" : "Bài tập",
+        "Học Kỳ": assignData.semester || "-",
+        "Môn Học": getSubject(sub),
+        "Thời Gian Nộp": sub.isOverdueMock ? "Không nộp" : formatDateVN(sub.createdAt),
+        "Điểm Số": sub.isOverdueMock ? "0 (Bỏ lỡ)" : sub.status === "pending" ? "Chờ chấm" : sub.score,
+      };
+    });
 
     exportFormalExcel(
       dataToExport,
@@ -1076,19 +1080,18 @@ const StudentDashboard = () => {
   const handleExportWord = () => {
     if (filteredHistory.length === 0) return alert("Không có dữ liệu để xuất!");
 
-    const dataToExport = filteredHistory.map((sub, idx) => ({
-      STT: idx + 1,
-      "Tên Bài Tập": sub.assignment?.title || "Bài tập đã xóa",
-      "Môn Học": getSubject(sub),
-      "Thời Gian Nộp": sub.isOverdueMock
-        ? "Không nộp"
-        : formatDateVN(sub.createdAt),
-      "Điểm Số": sub.isOverdueMock
-        ? "0 (Bỏ lỡ)"
-        : sub.status === "pending"
-          ? "Chờ chấm"
-          : sub.score,
-    }));
+    const dataToExport = filteredHistory.map((sub, idx) => {
+      const assignData = getAssignData(sub);
+      return {
+        STT: idx + 1,
+        "Tên Bài Tập": assignData.title || "Bài tập đã xóa",
+        "Phân Loại": assignData.assignmentType === "exam" ? "Đề thi" : "Bài tập",
+        "Học Kỳ": assignData.semester || "-",
+        "Môn Học": getSubject(sub),
+        "Thời Gian Nộp": sub.isOverdueMock ? "Không nộp" : formatDateVN(sub.createdAt),
+        "Điểm Số": sub.isOverdueMock ? "0 (Bỏ lỡ)" : sub.status === "pending" ? "Chờ chấm" : sub.score,
+      };
+    });
 
     exportWord(
       dataToExport,
@@ -1103,19 +1106,18 @@ const StudentDashboard = () => {
     if (filteredHistory.length === 0) return alert("Không có dữ liệu để xuất!");
     setIsExportingPDF(true);
 
-    const dataToExport = filteredHistory.map((sub, idx) => ({
-      STT: idx + 1,
-      "Tên Bài Tập": sub.assignment?.title || "Bài tập đã xóa",
-      "Môn Học": getSubject(sub),
-      "Thời Gian Nộp": sub.isOverdueMock
-        ? "Không nộp"
-        : formatDateVN(sub.createdAt),
-      "Điểm Số": sub.isOverdueMock
-        ? "0 (Bỏ lỡ)"
-        : sub.status === "pending"
-          ? "Chờ chấm"
-          : sub.score,
-    }));
+    const dataToExport = filteredHistory.map((sub, idx) => {
+      const assignData = getAssignData(sub);
+      return {
+        STT: idx + 1,
+        "Tên Bài Tập": assignData.title || "Bài tập đã xóa",
+        "Phân Loại": assignData.assignmentType === "exam" ? "Đề thi" : "Bài tập",
+        "Học Kỳ": assignData.semester || "-",
+        "Môn Học": getSubject(sub),
+        "Thời Gian Nộp": sub.isOverdueMock ? "Không nộp" : formatDateVN(sub.createdAt),
+        "Điểm Số": sub.isOverdueMock ? "0 (Bỏ lỡ)" : sub.status === "pending" ? "Chờ chấm" : sub.score,
+      };
+    });
 
     await exportPDF(
       dataToExport,
@@ -1131,19 +1133,18 @@ const StudentDashboard = () => {
     if (filteredHistory.length === 0) return alert("Không có dữ liệu để in!");
     setIsPrinting(true);
 
-    const dataToExport = filteredHistory.map((sub, idx) => ({
-      STT: idx + 1,
-      "Tên Bài Tập": sub.assignment?.title || "Bài tập đã xóa",
-      "Môn Học": getSubject(sub),
-      "Thời Gian Nộp": sub.isOverdueMock
-        ? "Không nộp"
-        : formatDateVN(sub.createdAt),
-      "Điểm Số": sub.isOverdueMock
-        ? "0 (Bỏ lỡ)"
-        : sub.status === "pending"
-          ? "Chờ chấm"
-          : sub.score,
-    }));
+    const dataToExport = filteredHistory.map((sub, idx) => {
+      const assignData = getAssignData(sub);
+      return {
+        STT: idx + 1,
+        "Tên Bài Tập": assignData.title || "Bài tập đã xóa",
+        "Phân Loại": assignData.assignmentType === "exam" ? "Đề thi" : "Bài tập",
+        "Học Kỳ": assignData.semester || "-",
+        "Môn Học": getSubject(sub),
+        "Thời Gian Nộp": sub.isOverdueMock ? "Không nộp" : formatDateVN(sub.createdAt),
+        "Điểm Số": sub.isOverdueMock ? "0 (Bỏ lỡ)" : sub.status === "pending" ? "Chờ chấm" : sub.score,
+      };
+    });
 
     await printPDF(
       dataToExport,
@@ -1155,7 +1156,6 @@ const StudentDashboard = () => {
     setIsPrinting(false);
   };
 
-  // 👉 HÀM CẬP NHẬT PROFILE CÁ NHÂN & ĐỔI MẬT KHẨU
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     if (passwordData.newPassword && passwordData.newPassword !== passwordData.confirmPassword) {
@@ -1212,7 +1212,7 @@ const StudentDashboard = () => {
               <BookOpen className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
             </div>
             <span className="font-extrabold text-lg sm:text-xl text-sky-950 truncate max-w-[120px] sm:max-w-none">
-              Học Sinh Panel
+              Học Sinh 
             </span>
           </div>
 
@@ -1229,7 +1229,6 @@ const StudentDashboard = () => {
                     : "Chưa phân lớp"}
               </p>
             </div>
-            {/* 👉 BẤM VÀO AVATAR ĐỂ MỞ MODAL SỬA THÔNG TIN */}
             <div 
                onClick={() => setIsEditProfileOpen(true)}
                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-sky-100 flex items-center justify-center text-sky-600 font-bold border-2 border-sky-200 shrink-0 cursor-pointer hover:bg-sky-200 transition-colors"
@@ -1250,7 +1249,6 @@ const StudentDashboard = () => {
         </div>
       </header>
 
-      {/* 👉 MODAL CHỈNH SỬA THÔNG TIN CÁ NHÂN (HỌC SINH) */}
       <Dialog open={isEditProfileOpen} onOpenChange={setIsEditProfileOpen}>
         <DialogContent className="sm:max-w-[500px] w-[95%] rounded-3xl border-none p-6 bg-white shadow-2xl">
             <DialogHeader>
@@ -1475,7 +1473,6 @@ const StudentDashboard = () => {
                     </p>
                   </div>
                   <div className="flex gap-2 flex-wrap sm:flex-nowrap">
-                    {/* Nút In Mới */}
                     <Button
                       onClick={handlePrint}
                       disabled={isPrinting}
@@ -1678,14 +1675,20 @@ const StudentDashboard = () => {
                 </div>
 
                 <div className="p-4 sm:p-6 overflow-x-auto">
-                  <Table className="min-w-[700px] border border-slate-100 rounded-2xl overflow-hidden">
+                  <Table className="min-w-[850px] border border-slate-100 rounded-2xl overflow-hidden">
                     <TableHeader className="bg-sky-50/50">
                       <TableRow className="hover:bg-transparent">
                         <TableHead className="font-bold text-sky-800 w-16 text-center rounded-tl-2xl">
                           STT
                         </TableHead>
-                        <TableHead className="font-bold text-sky-800">
+                        <TableHead className="font-bold text-sky-800 min-w-[200px]">
                           Tên Bài Tập
+                        </TableHead>
+                        <TableHead className="font-bold text-sky-800 text-center w-28">
+                          Phân Loại
+                        </TableHead>
+                        <TableHead className="font-bold text-sky-800 text-center w-24">
+                          Học Kỳ
                         </TableHead>
                         <TableHead className="font-bold text-sky-800 text-center w-32">
                           Môn Học
@@ -1704,7 +1707,7 @@ const StudentDashboard = () => {
                     <TableBody>
                       {filteredHistory.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-16">
+                          <TableCell colSpan={8} className="text-center py-16">
                             <History className="w-12 h-12 text-slate-200 mx-auto mb-3" />
                             <p className="text-slate-500 font-medium">
                               Không tìm thấy dữ liệu.
@@ -1715,12 +1718,13 @@ const StudentDashboard = () => {
                         filteredHistory.map((sub, idx) => {
                           const isPending = sub.status === "pending";
                           const isOverdueMock = sub.isOverdueMock;
+                          
+                          // 👉 GỌI HÀM ĐỂ LẤY DỮ LIỆU ĐẦY ĐỦ CỦA BÀI TẬP
+                          const assignData = getAssignData(sub);
 
                           let isTimeOver = false;
-                          if (sub.assignment?.dueDate) {
-                            const due = new Date(
-                              sub.assignment.dueDate,
-                            ).getTime();
+                          if (assignData.dueDate) {
+                            const due = new Date(assignData.dueDate).getTime();
                             const now = new Date().getTime();
                             isTimeOver = now >= due;
                           }
@@ -1734,12 +1738,22 @@ const StudentDashboard = () => {
                                 {idx + 1}
                               </TableCell>
                               <TableCell className="font-bold text-slate-800 py-4">
-                                {sub.assignment?.title || (
+                                {assignData.title || (
                                   <span className="text-slate-400 italic font-normal">
                                     Bài tập đã bị xóa
                                   </span>
                                 )}
                               </TableCell>
+                              
+                              <TableCell className="text-center">
+                                <Badge variant="outline" className={`border-0 font-bold text-[11px] ${assignData.assignmentType === 'exam' ? 'bg-indigo-100 text-indigo-700' : 'bg-sky-100 text-sky-700'}`}>
+                                  {assignData.assignmentType === 'exam' ? "Đề Thi" : "Bài Tập"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-center font-bold text-slate-500 text-sm">
+                                {assignData.semester || "-"}
+                              </TableCell>
+
                               <TableCell className="text-center">
                                 <span className="text-sm font-medium text-slate-600">
                                   {getSubject(sub)}
@@ -1806,7 +1820,7 @@ const StudentDashboard = () => {
                                     size="sm"
                                     onClick={() =>
                                       alert(
-                                        `Bài tập này chưa hết thời gian làm bài của lớp.\n(Hạn nộp: ${formatDateVN(sub.assignment?.dueDate)}).\n\nĐể đảm bảo tính công bằng, bạn chỉ có thể xem đáp án chi tiết sau khi thời gian làm bài kết thúc.`,
+                                        `Bài tập này chưa hết thời gian làm bài của lớp.\n(Hạn nộp: ${formatDateVN(assignData.dueDate)}).\n\nĐể đảm bảo tính công bằng, bạn chỉ có thể xem đáp án chi tiết sau khi thời gian làm bài kết thúc.`,
                                       )
                                     }
                                     className="font-bold rounded-lg shadow-sm border-slate-200 text-slate-400 bg-slate-50 hover:bg-slate-100"

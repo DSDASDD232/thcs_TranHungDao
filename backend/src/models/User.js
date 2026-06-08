@@ -30,19 +30,6 @@ const userSchema = new mongoose.Schema(
             required: true,
         },
 
-        // ==========================================
-        // 👉 THÊM MỚI: CÁC TRƯỜNG THÔNG TIN CÁ NHÂN (PROFILE)
-        // ==========================================
-        phone: { 
-            type: String, 
-            default: "" 
-        },
-        address: { 
-            type: String, 
-            default: "" 
-        },
-       
-
         // --- CÁC TRƯỜNG THÔNG TIN MỞ RỘNG TÙY THEO ROLE ---
         
         // Dành cho Học sinh (Lưu Khối, ví dụ: "6", "7", "8", "9")
@@ -72,7 +59,7 @@ const userSchema = new mongoose.Schema(
         },
 
         // =========================================================================
-        // PHÂN BỔ TỔ CHUYÊN MÔN LỚN VÀ ĐA MÔN HỌC CHO GIÁO VIÊN
+        // 👉 THÊM MỚI: PHÂN BỔ TỔ CHUYÊN MÔN LỚN VÀ ĐA MÔN HỌC CHO GIÁO VIÊN
         // =========================================================================
         
         // Lưu Tổ lớn: Chỉ nhận giá trị "KHTN", "KHXH" hoặc trống ""
@@ -88,6 +75,20 @@ const userSchema = new mongoose.Schema(
             type: [String],
             default: [],
         },
+
+        // Trình độ chuyên môn của giáo viên
+        qualification: {
+            type: String,
+            enum: ["Đại học", "Thạc sĩ", "Tiến sĩ", ""],
+            default: "",
+        },
+
+        // Chức vụ trong tổ (KHTN / KHXH): Tổ trưởng, Tổ phó, Giáo viên thường
+        departmentPosition: {
+            type: String,
+            enum: ["Tổ trưởng", "Tổ phó", "Giáo viên thường", ""],
+            default: "Giáo viên thường",
+        },
         // =========================================================================
         
         // Dành cho giáo viên (Danh sách các lớp được phân công giảng dạy)
@@ -96,10 +97,41 @@ const userSchema = new mongoose.Schema(
             ref: "Class"
         }],
 
+        // Trạng thái chung của tài khoản (chủ yếu dùng cho học sinh)
+        status: {
+            type: String,
+            enum: ["active", "inactive"],
+            default: "active",
+        },
+
+        // Thông tin liên lạc chung
+        phone: {
+            type: String,
+            default: "",
+        },
+        address: {
+            type: String,
+            default: "",
+        },
+
+        // Ghi chú hồ sơ dùng cho quản lý tài khoản
+        note: {
+            type: String,
+            default: "",
+        },
+
         // Trạng thái khóa tài khoản (Cấm đăng nhập)
         isLocked: {
             type: Boolean,
             default: false, // Mặc định tài khoản mới tạo sẽ không bị khóa
+        },
+        // 👉 THÊM MỚI: Dành cho Admin ghi đè điểm thi đua của học sinh
+        leaderboardOverride: {
+            totalTests: { type: Number, default: null },
+            averageScore: { type: Number, default: null },
+            note: { type: String, default: "" },
+            // Cờ để biết liệu điểm này có bị ghi đè thủ công hay không
+            isOverridden: { type: Boolean, default: false },
         }
     },
     { 

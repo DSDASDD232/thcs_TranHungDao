@@ -17,6 +17,159 @@ const router = express.Router();
 const upload = multer({ dest: 'uploads/temp_backups/' });
 const excelUpload = multer({ storage: multer.memoryStorage() });
 
+const normalizeDuplicateName = (str) => {
+    if (!str) return "";
+    return String(str)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/Đ/g, 'D')
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, ' ');
+};
+
+const normalizeDuplicatePhone = (str) => {
+    if (!str) return "";
+    return String(str).trim().replace(/\s+/g, '');
+};
+
+const buildDuplicateAccountKey = (fullName, phone) => {
+    return `${normalizeDuplicateName(fullName)}|${normalizeDuplicatePhone(phone)}`;
+};
+
+const getNextExcelAccountSequence = async (counterId = 'excelStudentUsernameSequence') => {
+    const counters = mongoose.connection.db.collection('counters');
+    const result = await counters.findOneAndUpdate(
+        { _id: counterId },
+        { $inc: { seq: 1 } },
+        { upsert: true, returnDocument: 'after' }
+    );
+
+    return result?.value?.seq ?? result?.seq ?? 1;
+};
+
+const checkTeacherReplacement = async (teacherId) => {
+    const teacher = await User.findById(teacherId);
+    if (!teacher || teacher.role !== "teacher") return null;
+
+    const assignedClassIds = teacher.assignedClasses || [];
+    const homeroomClasses = await Class.find({ homeroomTeacher: teacherId }).select("_id");
+    const homeroomClassIds = homeroomClasses.map(c => c._id);
+    
+    const allClassIds = [...new Set([
+        ...assignedClassIds.map(id => String(id)),
+        ...homeroomClassIds.map(id => String(id))
+    ])];
+
+    if (allClassIds.length === 0) return null;
+
+    for (const classId of allClassIds) {
+        const classObj = await Class.findById(classId);
+        if (!classObj) continue;
+
+        const otherTeachers = await User.find({
+            _id: { $ne: teacherId },
+            role: "teacher",
+            status: { $ne: "inactive" },
+            isLocked: { $ne: true }
+        }).select("_id assignedClasses");
+
+        const otherAssigned = otherTeachers.filter(t => {
+            const isAssigned = (t.assignedClasses || []).some(cid => String(cid) === String(classId));
+            const isHomeroom = classObj.homeroomTeacher && String(classObj.homeroomTeacher) === String(t._id);
+            return isAssigned || isHomeroom;
+        });
+
+        if (otherAssigned.length === 0) {
+            return classObj.name;
+        }
+    }
+
+    return null;
+};
+
+const normalizeLeaderboardScopeValue = (value) => {
+    if (value === undefined || value === null) return "all";
+    const normalized = String(value).trim();
+    return normalized === "" ? "all" : normalized;
+};
+
+const getSemesterFromMonth = (monthIndex) => (monthIndex <= 5 ? "1" : "2");
+
+const doesLeaderboardOverrideApply = (override, filter, appliedAt) => {
+    if (!override?.isOverridden) return false;
+
+    const scopeType = String(override.scopeType || "").toLowerCase();
+    const queryYear = normalizeLeaderboardScopeValue(filter.year);
+    const queryMonth = normalizeLeaderboardScopeValue(filter.month);
+    const querySemester = normalizeLeaderboardScopeValue(filter.semester);
+
+    const appliedDate = appliedAt ? new Date(appliedAt) : null;
+    const appliedYear = appliedDate && !Number.isNaN(appliedDate.getTime()) ? String(appliedDate.getFullYear()) : "";
+    const appliedMonth = appliedDate && !Number.isNaN(appliedDate.getTime()) ? String(appliedDate.getMonth() + 1) : "";
+    const appliedSemester = appliedDate && !Number.isNaN(appliedDate.getTime()) ? getSemesterFromMonth(appliedDate.getMonth()) : "";
+
+    const overrideYear = normalizeLeaderboardScopeValue(override.scopeYear);
+    const overrideMonth = normalizeLeaderboardScopeValue(override.scopeMonth);
+    const overrideSemester = normalizeLeaderboardScopeValue(override.scopeSemester);
+    const overrideMonthNumber = Number(overrideMonth);
+    const overrideSemesterFromMonth = Number.isFinite(overrideMonthNumber) && overrideMonthNumber >= 1 && overrideMonthNumber <= 12
+        ? (overrideMonthNumber <= 6 ? "1" : "2")
+        : "";
+
+    const matchesYear = queryYear !== "all" && queryYear === overrideYear;
+
+    if (!scopeType) {
+        if (!appliedYear) return false;
+
+        if (queryYear !== "all" && queryMonth !== "all") {
+            return queryYear === appliedYear && queryMonth === appliedMonth;
+        }
+
+        if (queryYear !== "all" && querySemester !== "all") {
+            return queryYear === appliedYear && querySemester === appliedSemester;
+        }
+
+        if (queryYear !== "all") {
+            return queryYear === appliedYear;
+        }
+
+        return false;
+    }
+
+    if (scopeType === "year") {
+        return matchesYear;
+    }
+
+    if (scopeType === "month") {
+        if (!matchesYear) return false;
+        if (queryMonth !== "all") {
+            return queryMonth === overrideMonth;
+        }
+        if (querySemester !== "all") {
+            return querySemester === overrideSemesterFromMonth;
+        }
+        return true;
+    }
+
+    if (scopeType === "semester") {
+        if (!matchesYear) return false;
+        if (queryMonth !== "all") {
+            if (overrideSemester === "" && overrideMonth !== "") {
+                return queryMonth === overrideMonth;
+            }
+            return queryMonth === overrideMonth;
+        }
+        if (querySemester !== "all") {
+            return querySemester === overrideSemester;
+        }
+        return true;
+    }
+
+    return false;
+};
+
 // ==========================================
 // 1. [GET] Lấy thống kê tổng quan toàn trường
 // ==========================================
@@ -194,9 +347,14 @@ router.get("/users/:id", verifyToken, isAdmin, async (req, res) => {
 // ======================================================================
 router.post("/users/import-json", verifyToken, isAdmin, async (req, res) => {
     try {
-        const { classId, className, grade, students } = req.body;
-        if (!classId || !className || !students || students.length === 0) {
+        const { classId, className, grade, students, role } = req.body;
+        const importRole = role === "teacher" ? "teacher" : "student";
+        if (!students || students.length === 0) {
             return res.status(400).json({ message: "Thiếu thông tin hoặc danh sách trống!" });
+        }
+
+        if (importRole === "student" && (!classId || !className)) {
+            return res.status(400).json({ message: "Thiếu thông tin lớp cho import học sinh!" });
         }
 
         let successCount = 0;
@@ -205,6 +363,9 @@ router.post("/users/import-json", verifyToken, isAdmin, async (req, res) => {
         let generatedAccounts = [];
         const errors = [];
         const duplicates = [];
+        const roleLabel = importRole === "teacher" ? "giáo viên" : "học sinh";
+        const accountPrefix = importRole === "teacher" ? "gv" : "hs";
+        const usernameCounterId = importRole === "teacher" ? "excelTeacherUsernameSequence" : "excelStudentUsernameSequence";
 
         const removeAccents = (str) => {
             if (!str) return "";
@@ -220,8 +381,76 @@ router.post("/users/import-json", verifyToken, isAdmin, async (req, res) => {
             return String(key)
                 .normalize('NFD')
                 .replace(/[\u0300-\u036f]/g, '')
+                .replace(/đ/g, 'd')
+                .replace(/Đ/g, 'D')
                 .toLowerCase()
                 .trim();
+        };
+
+        const compactImportKey = (key) => normalizeImportKey(key).replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ');
+
+        const getRowValue = (row, candidates) => {
+            const candidateSet = new Set(candidates.map((candidate) => compactImportKey(candidate)));
+
+            for (const [key, value] of Object.entries(row)) {
+                const normalizedKey = compactImportKey(key);
+                if (candidateSet.has(normalizedKey) || candidateSet.has(normalizedKey.replace(/\s+/g, ''))) {
+                    if (value !== undefined && value !== null && String(value).trim() !== '') {
+                        return value;
+                    }
+                }
+            }
+
+            return "";
+        };
+
+        const inferStudentName = (row) => {
+            const rowValues = Object.values(row)
+                .map((value) => String(value ?? "").trim())
+                .filter(Boolean);
+
+            const directValue = getRowValue(row, ['Tên học sinh', 'Tên giáo viên', 'Họ và tên', 'Họ tên', 'Họ Tên', 'Tên', 'Họ', 'Full name', 'Name']);
+            if (String(directValue || "").trim()) return String(directValue).trim();
+
+            const inferredValue = rowValues.find((value) => {
+                const compact = value.replace(/\s+/g, ' ').trim();
+                return compact.length >= 3 && /[A-Za-zÀ-ỹ]/.test(compact) && !/^\d+$/.test(compact);
+            });
+
+            return inferredValue || "";
+        };
+
+        const inferPhoneNumber = (row) => {
+            const directValue = getRowValue(row, ['Số điện thoại', 'SĐT', 'SDT', 'Phone', 'phone', 'Điện thoại', 'Dien thoai', 'Số điện thoại phụ huynh']);
+            const directPhone = String(directValue || "").replace(/\s+/g, '').trim();
+            if (/^\+?\d{8,15}$/.test(directPhone.replace(/[^\d+]/g, ''))) return directPhone;
+
+            const rowValues = Object.values(row)
+                .map((value) => String(value ?? "").trim())
+                .filter(Boolean);
+
+            const inferredValue = rowValues.find((value) => {
+                const digitsOnly = value.replace(/\D/g, '');
+                return digitsOnly.length >= 8 && digitsOnly.length <= 15;
+            });
+
+            return inferredValue || "";
+        };
+
+        const inferAddress = (row) => {
+            const directValue = getRowValue(row, ['Địa chỉ', 'Dia chi', 'Address', 'address']);
+            if (String(directValue || "").trim()) return String(directValue).trim();
+
+            const rowValues = Object.values(row)
+                .map((value) => String(value ?? "").trim())
+                .filter(Boolean);
+
+            const inferredValue = [...rowValues].reverse().find((value) => {
+                const digitsOnly = value.replace(/\D/g, '');
+                return value.length >= 6 && digitsOnly.length !== value.length;
+            });
+
+            return inferredValue || rowValues[rowValues.length - 1] || "";
         };
 
         const normalizeRow = (rawRow) => {
@@ -229,7 +458,7 @@ router.post("/users/import-json", verifyToken, isAdmin, async (req, res) => {
             Object.entries(rawRow).forEach(([key, value]) => {
                 const normalizedKey = normalizeImportKey(key);
                 if (['stt', 'so thu tu', 'sott'].includes(normalizedKey)) normalized['STT'] = value;
-                else if (['ten hoc sinh', 'ho va ten', 'ho ten', 'ho', 'ten', 'ho va ten', 'ho ten'].includes(normalizedKey)) normalized['Tên học sinh'] = value;
+                else if (['ten hoc sinh', 'ten giao vien', 'ho va ten', 'ho ten', 'ho', 'ten'].includes(normalizedKey)) normalized['Tên học sinh'] = value;
                 else if (['nam sinh', 'namsinh', 'year'].includes(normalizedKey)) normalized['Năm sinh'] = value;
                 else if (['so dien thoai', 'sodienthoai', 'sdt', 'phone', 'dien thoai', 'dienthoai'].includes(normalizedKey)) normalized['Số điện thoại'] = value;
                 else if (['dia chi', 'diachi', 'address'].includes(normalizedKey)) normalized['Địa chỉ'] = value;
@@ -238,32 +467,13 @@ router.post("/users/import-json", verifyToken, isAdmin, async (req, res) => {
             return normalized;
         };
 
-        const existingStudents = await User.find({ role: 'student', classId })
+        const existingUsers = await User.find({})
             .select('fullName phone username')
             .lean();
 
-        const existingStudentKeys = new Set(
-            existingStudents.map((u) => `${removeAccents(String(u.fullName || '')).toLowerCase()}|${String(u.phone || '').trim()}`)
+        const existingAccountKeys = new Set(
+            existingUsers.map((u) => buildDuplicateAccountKey(u.fullName, u.phone))
         );
-
-        const generateUsernameBase = (fullName, className, stt) => {
-            const nameParts = String(fullName || '').trim().split(' ').filter(Boolean);
-            const firstName = nameParts.length > 0 ? nameParts[nameParts.length - 1] : String(fullName || '').trim();
-            const cleanFirstName = removeAccents(firstName).toLowerCase().replace(/\s+/g, '');
-            const cleanClassName = String(className || '').toLowerCase().replace(/\s+/g, '');
-            const paddedStt = String(stt || '').padStart(2, '0');
-            return `${cleanFirstName}${cleanClassName}${paddedStt}`;
-        };
-
-        const generateUniqueUsername = async (baseUsername) => {
-            let username = baseUsername;
-            let suffix = 1;
-            while (await User.exists({ username })) {
-                username = `${baseUsername}${suffix}`;
-                suffix++;
-            }
-            return username;
-        };
 
         const salt = await bcrypt.genSalt(10);
         const defaultHashedPassword = await bcrypt.hash('1', salt);
@@ -272,9 +482,37 @@ router.post("/users/import-json", verifyToken, isAdmin, async (req, res) => {
         for (let i = 0; i < students.length; i++) {
             const row = normalizeRow(students[i]);
             const sttRaw = row['STT'] || row['stt'] || row['Stt'] || i + 1;
-            const fullNameRaw = String(row['Tên học sinh'] || row['Họ và tên'] || row['Họ tên'] || row['Họ Tên'] || '').trim();
-            const phoneRaw = String(row['Số điện thoại'] || row['SDT'] || row['Phone'] || row['phone'] || '').trim();
-            const addressRaw = String(row['Địa chỉ'] || row['Dia chi'] || row['Address'] || row['address'] || '').trim();
+            const fullNameRaw = String(
+                row['Tên học sinh'] ||
+                row['Tên giáo viên'] ||
+                row['Họ và tên'] ||
+                row['Họ tên'] ||
+                row['Họ Tên'] ||
+                row['fullName'] ||
+                row['full_name'] ||
+                inferStudentName(row) ||
+                ""
+            ).trim();
+            const phoneRaw = String(
+                row['Số điện thoại'] ||
+                row['SĐT'] ||
+                row['SDT'] ||
+                row['Phone'] ||
+                row['phone'] ||
+                row['so dien thoai'] ||
+                row['phoneNumber'] ||
+                inferPhoneNumber(row) ||
+                ""
+            ).trim();
+            const addressRaw = String(
+                row['Địa chỉ'] ||
+                row['Dia chi'] ||
+                row['Address'] ||
+                row['address'] ||
+                row['diachi'] ||
+                inferAddress(row) ||
+                ""
+            ).trim();
             const yearRaw = String(row['Năm sinh'] || row['Nam sinh'] || row['year'] || '').trim();
 
             const missingFields = [];
@@ -285,38 +523,42 @@ router.post("/users/import-json", verifyToken, isAdmin, async (req, res) => {
             if (missingFields.length > 0) {
                 failedCount++;
                 const excelRow = i + 2;
-                errors.push({ row: excelRow, message: `Dòng ${excelRow} thiếu thông tin bắt buộc` });
+                errors.push({ row: excelRow, message: `Dòng ${excelRow} thiếu: ${missingFields.join(', ')}` });
                 continue;
             }
 
-            const studentKey = `${removeAccents(fullNameRaw).toLowerCase()}|${phoneRaw}`;
-            if (existingStudentKeys.has(studentKey) || newStudentKeys.has(studentKey)) {
+            const studentKey = buildDuplicateAccountKey(fullNameRaw, phoneRaw);
+            if (existingAccountKeys.has(studentKey) || newStudentKeys.has(studentKey)) {
                 duplicateCount++;
-                duplicates.push({ row: i + 2, message: `Học sinh ${fullNameRaw} - ${phoneRaw} đã tồn tại trong lớp` });
+                duplicates.push({ row: i + 2, message: `${roleLabel} ${fullNameRaw} - ${phoneRaw} đã tồn tại` });
                 continue;
             }
 
             newStudentKeys.add(studentKey);
-            const usernameBase = generateUsernameBase(fullNameRaw, className, sttRaw);
-            const username = await generateUniqueUsername(usernameBase);
+            const sequence = await getNextExcelAccountSequence(usernameCounterId);
+            const username = `${accountPrefix}${String(sequence).padStart(6, '0')}`;
 
             try {
                 const newUser = new User({
                     fullName: fullNameRaw,
                     username,
                     password: defaultHashedPassword,
-                    role: 'student',
-                    classId,
-                    grade: grade || String(className).replace(/\D/g, '').substring(0, 1),
+                    role: importRole,
+                    classId: importRole === 'student' ? classId : null,
+                    grade: importRole === 'student' ? (grade || String(className).replace(/\D/g, '').substring(0, 1)) : "",
                     phone: phoneRaw,
                     address: addressRaw,
+                    department: "",
+                    subjects: [],
+                    qualification: importRole === 'teacher' ? "Đại học" : "",
+                    departmentPosition: importRole === 'teacher' ? "Giáo viên thường" : "",
                 });
                 await newUser.save();
                 successCount++;
                 generatedAccounts.push({ 'STT': String(sttRaw).padStart(2, '0'), 'Họ và Tên': fullNameRaw, 'Tài Khoản': username, 'Mật Khẩu': '1' });
             } catch (err) {
                 failedCount++;
-                errors.push({ row: i + 1, message: `Lỗi tạo tài khoản cho dòng ${i + 1}` });
+                errors.push({ row: i + 2, message: `Lỗi tạo tài khoản ${roleLabel} cho dòng ${i + 2}` });
             }
         }
 
@@ -345,6 +587,27 @@ router.delete("/users/:id", verifyToken, isAdmin, async (req, res) => {
         const userToDelete = await User.findById(userId);
         if (!userToDelete) {
             return res.status(404).json({ message: "Không tìm thấy tài khoản!" });
+        }
+
+        if (userToDelete.role === "teacher") {
+            const unassignedClassName = await checkTeacherReplacement(userId);
+            if (unassignedClassName) {
+                return res.status(400).json({
+                    message: `Lớp ${unassignedClassName} chỉ còn thầy/cô này phụ trách. Vui lòng phân công giáo viên thay thế vào lớp đó trước khi xóa!`
+                });
+            }
+        }
+
+        if (userToDelete.role === "teacher") {
+            await User.updateMany(
+                { role: "teacher", assignedClasses: userId },
+                { $pull: { assignedClasses: userId } }
+            );
+
+            await Class.updateMany(
+                { homeroomTeacher: userId },
+                { $unset: { homeroomTeacher: "" } }
+            );
         }
 
         if (userToDelete.role === "student") {
@@ -379,6 +642,22 @@ router.put("/users/:id", verifyToken, isAdmin, async (req, res) => {
         
         const existingUser = await User.findById(userId);
         if (!existingUser) return res.status(404).json({ message: "Không tìm thấy người dùng!" });
+
+        if (existingUser.role === "teacher") {
+            const willLock = (isLocked !== undefined && Boolean(isLocked) && !existingUser.isLocked) || 
+                             (status !== undefined && status === "inactive" && existingUser.status !== "inactive");
+            const willChangeToStudent = (role !== undefined && role === "student");
+
+            if (willLock || willChangeToStudent) {
+                const actionVerb = willLock ? "khóa" : "chuyển vai trò";
+                const unassignedClassName = await checkTeacherReplacement(userId);
+                if (unassignedClassName) {
+                    return res.status(400).json({
+                        message: `Lớp ${unassignedClassName} chỉ còn thầy/cô này phụ trách. Vui lòng phân công giáo viên thay thế vào lớp đó trước khi ${actionVerb}!`
+                    });
+                }
+            }
+        }
 
         let updateFields = {};
 
@@ -485,12 +764,18 @@ router.put("/users/:id", verifyToken, isAdmin, async (req, res) => {
             updateFields.classId = null; 
         }
 
-        if (isLocked !== undefined) updateFields.isLocked = isLocked;
+        if (isLocked !== undefined) {
+            const locked = Boolean(isLocked);
+            updateFields.isLocked = locked;
+            updateFields.status = locked ? "inactive" : "active";
+        }
 
         if (password) {
             const salt = await bcrypt.genSalt(10);
             updateFields.password = await bcrypt.hash(password, salt);
         }
+
+        updateFields.$inc = { tokenVersion: 1 };
 
         const updatedUser = await User.findByIdAndUpdate(
             userId,
@@ -510,7 +795,7 @@ router.put("/users/:id", verifyToken, isAdmin, async (req, res) => {
 // ======================================================================
 router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
     try {
-        const { timeframe, grade, year, month, day, startDate, endDate } = req.query;
+        const { timeframe, grade, year, month, day, semester, startDate, endDate, academicYear } = req.query;
         const getDaysInMonthUtc = (y, mZeroBased) => new Date(Date.UTC(y, mZeroBased + 1, 0)).getUTCDate();
 
         let classQuery = {};
@@ -542,14 +827,32 @@ router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
         } else if (year && year !== 'all') {
             const y = parseInt(year, 10);
             if (!isNaN(y)) {
+                const semesterMap = {
+                    "1": { startMonth: 0, endMonth: 5 },
+                    "2": { startMonth: 6, endMonth: 11 },
+                    "hk1": { startMonth: 0, endMonth: 5 },
+                    "hk2": { startMonth: 6, endMonth: 11 },
+                    "ky1": { startMonth: 0, endMonth: 5 },
+                    "ky2": { startMonth: 6, endMonth: 11 },
+                };
+                const semesterKey = String(semester || "all").toLowerCase();
+                const semesterRange = semesterMap[semesterKey];
+
+                if (semesterKey !== "all" && semesterKey !== "" && !semesterRange) {
+                    return res.status(200).json({ leaderboard: [] });
+                }
+
                 if (month && month !== 'all') {
                     const m = parseInt(month, 10) - 1;
                     if (!isNaN(m) && m >= 0 && m <= 11) {
+                        if (semesterRange && (m < semesterRange.startMonth || m > semesterRange.endMonth)) {
+                            return res.status(200).json({ leaderboard: [] });
+                        }
+
                         if (day && day !== 'all') {
                             const d = parseInt(day, 10);
                             const maxDay = getDaysInMonthUtc(y, m);
                             if (!isNaN(d) && d >= 1 && d <= maxDay) {
-                                // Sử dụng UTC để tránh vấn đề timezone
                                 const startDate = new Date(Date.UTC(y, m, d, 0, 0, 0, 0));
                                 const endDate = new Date(Date.UTC(y, m, d, 23, 59, 59, 999));
                                 dateFilter = { createdAt: { $gte: startDate, $lte: endDate } };
@@ -557,14 +860,16 @@ router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
                                 return res.status(200).json({ leaderboard: [] });
                             }
                         } else {
-                            // Nguyên tháng - lấy từ ngày 1 đến cuối tháng
                             const startDate = new Date(Date.UTC(y, m, 1, 0, 0, 0, 0));
                             const endDate = new Date(Date.UTC(y, m + 1, 0, 23, 59, 59, 999));
                             dateFilter = { createdAt: { $gte: startDate, $lte: endDate } };
                         }
                     }
+                } else if (semesterRange) {
+                    const startDate = new Date(Date.UTC(y, semesterRange.startMonth, 1, 0, 0, 0, 0));
+                    const endDate = new Date(Date.UTC(y, semesterRange.endMonth + 1, 0, 23, 59, 59, 999));
+                    dateFilter = { createdAt: { $gte: startDate, $lte: endDate } };
                 } else {
-                    // Nguyên năm - lấy từ 1/1 đến 31/12
                     const startDate = new Date(Date.UTC(y, 0, 1, 0, 0, 0, 0));
                     const endDate = new Date(Date.UTC(y, 11, 31, 23, 59, 59, 999));
                     dateFilter = { createdAt: { $gte: startDate, $lte: endDate } };
@@ -572,10 +877,12 @@ router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
             }
         }
 
-        console.log("📊 Leaderboard Filter:", { year, month, day, dateFilter });
+        
+
+        let allStudents = [];
 
         let leaderboard = await Promise.all(classes.map(async (cls) => {
-            const students = await User.find({ classId: cls._id, role: 'student' }).select('_id fullName leaderboardOverride');
+            const students = await User.find({ classId: cls._id, role: 'student' }).select('_id fullName username leaderboardOverride');
             const studentIds = students.map(s => s._id);
 
             const submissions = await Submission.find({
@@ -592,6 +899,8 @@ router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
             }, {});
 
             let totalTests = 0;
+            let actualTests = 0;
+            let overrideEntries = 0;
             let weightedScoreSum = 0;
             let effectiveWeight = 0;
 
@@ -601,38 +910,65 @@ router.get("/leaderboard", verifyToken, isAdmin, async (req, res) => {
                 const computedAverageScore = computedTotalTests > 0 ? studentSubs.reduce((sum, sub) => sum + sub.score, 0) / computedTotalTests : 0;
 
                 const override = student.leaderboardOverride || {};
-                const hasComputedDataInRange = computedTotalTests > 0;
-                const useOverrideInRange = hasComputedDataInRange && override.isOverridden;
+                const useOverrideInRange = doesLeaderboardOverrideApply(override, { year, month, semester }, override.appliedAt);
                 const finalTotalTests = useOverrideInRange && override.totalTests !== null && override.totalTests !== undefined ? override.totalTests : computedTotalTests;
                 const finalAverageScore = useOverrideInRange && override.averageScore !== null && override.averageScore !== undefined ? override.averageScore : computedAverageScore;
 
+                actualTests += computedTotalTests;
+                if (useOverrideInRange && (override.totalTests !== null && override.totalTests !== undefined || override.averageScore !== null && override.averageScore !== undefined)) {
+                    overrideEntries += 1;
+                }
                 totalTests += finalTotalTests;
 
                 const weightForAverage = finalTotalTests > 0 ? finalTotalTests : (override.averageScore !== null && override.averageScore !== undefined ? 1 : 0);
                 weightedScoreSum += finalAverageScore * weightForAverage;
                 effectiveWeight += weightForAverage;
+
+                // Lưu học sinh có nộp bài hoặc có ghi đè thi đua đúng phạm vi lọc hiện tại
+                if (finalTotalTests > 0 || (useOverrideInRange && override.averageScore !== null && override.averageScore !== undefined)) {
+                    allStudents.push({
+                        _id: student._id,
+                        fullName: student.fullName,
+                        username: student.username,
+                        className: cls.name,
+                        grade: cls.grade,
+                        totalTests: finalTotalTests,
+                        averageScore: parseFloat(finalAverageScore.toFixed(2))
+                    });
+                }
             });
 
             const averageScore = effectiveWeight > 0 ? parseFloat((weightedScoreSum / effectiveWeight).toFixed(2)) : 0;
+
 
             return {
                 _id: cls._id,
                 className: cls.name,
                 grade: cls.grade,
+                academicYear: cls.academicYear,
                 studentCount: students.length,
                 studentNames: students.map(s => s.fullName),
+                actualTests,
+                overrideEntries,
                 totalTests,
                 averageScore,
                 effectiveTests: effectiveWeight,
             };
         }));
 
+        leaderboard = leaderboard.filter(Boolean);
+
         leaderboard.sort((a, b) => {
             if (b.averageScore !== a.averageScore) return b.averageScore - a.averageScore;
             return b.totalTests - a.totalTests;
         });
 
-        res.status(200).json({ leaderboard });
+        // Xếp hạng top 10 học sinh
+        const topStudents = allStudents
+            .sort((a, b) => b.averageScore - a.averageScore || b.totalTests - a.totalTests)
+            .slice(0, 10);
+
+        res.status(200).json({ leaderboard, topStudents });
     } catch (error) {
         console.error("Lỗi lấy bảng thi đua Admin:", error);
         res.status(500).json({ message: "Lỗi server", error });
@@ -700,7 +1036,7 @@ router.get("/leaderboard/stats", verifyToken, isAdmin, async (req, res) => {
 router.get("/leaderboard/class/:classId/students", verifyToken, isAdmin, async (req, res) => {
     try {
         const { classId } = req.params;
-        const { timeframe, subject, year, month, day, startDate, endDate } = req.query;
+        const { timeframe, subject, year, month, day, semester, startDate, endDate } = req.query;
         const getDaysInMonthUtc = (y, mZeroBased) => new Date(Date.UTC(y, mZeroBased + 1, 0)).getUTCDate();
 
         const classInfo = await Class.findById(classId).select("name grade");
@@ -708,7 +1044,7 @@ router.get("/leaderboard/class/:classId/students", verifyToken, isAdmin, async (
             return res.status(404).json({ message: "Không tìm thấy lớp học!" });
         }
 
-        const students = await User.find({ classId: classId, role: "student" }).select("fullName username leaderboardOverride");
+        const students = await User.find({ classId: classId, role: "student" }).select("fullName username isLocked status leaderboardOverride");
         if (students.length === 0) {
             return res.status(200).json({ classInfo, students: [] });
         }
@@ -732,9 +1068,28 @@ router.get("/leaderboard/class/:classId/students", verifyToken, isAdmin, async (
         } else if (year && year !== 'all') {
             const y = parseInt(year, 10);
             if (!isNaN(y)) {
+                const semesterMap = {
+                    "1": { startMonth: 0, endMonth: 5 },
+                    "2": { startMonth: 6, endMonth: 11 },
+                    "hk1": { startMonth: 0, endMonth: 5 },
+                    "hk2": { startMonth: 6, endMonth: 11 },
+                    "ky1": { startMonth: 0, endMonth: 5 },
+                    "ky2": { startMonth: 6, endMonth: 11 },
+                };
+                const semesterKey = String(semester || "all").toLowerCase();
+                const semesterRange = semesterMap[semesterKey];
+
+                if (semesterKey !== "all" && semesterKey !== "" && !semesterRange) {
+                    return res.status(200).json({ classInfo, students: [] });
+                }
+
                 if (month && month !== 'all') {
                     const m = parseInt(month, 10) - 1;
                     if (!isNaN(m) && m >= 0 && m <= 11) {
+                        if (semesterRange && (m < semesterRange.startMonth || m > semesterRange.endMonth)) {
+                            return res.status(200).json({ classInfo, students: [] });
+                        }
+
                         if (day && day !== 'all') {
                             const d = parseInt(day, 10);
                             const maxDay = getDaysInMonthUtc(y, m);
@@ -751,6 +1106,10 @@ router.get("/leaderboard/class/:classId/students", verifyToken, isAdmin, async (
                             dateFilter = { createdAt: { $gte: start, $lte: end } };
                         }
                     }
+                } else if (semesterRange) {
+                    const start = new Date(Date.UTC(y, semesterRange.startMonth, 1, 0, 0, 0, 0));
+                    const end = new Date(Date.UTC(y, semesterRange.endMonth + 1, 0, 23, 59, 59, 999));
+                    dateFilter = { createdAt: { $gte: start, $lte: end } };
                 } else {
                     const start = new Date(Date.UTC(y, 0, 1, 0, 0, 0, 0));
                     const end = new Date(Date.UTC(y, 11, 31, 23, 59, 59, 999));
@@ -786,14 +1145,14 @@ router.get("/leaderboard/class/:classId/students", verifyToken, isAdmin, async (
             const final = { ...computed };
             const overridden = { totalTests: false, averageScore: false };
 
-            const hasComputedDataInRange = computed.totalTests > 0;
-            if (hasComputedDataInRange && student.leaderboardOverride?.isOverridden) {
-                if (student.leaderboardOverride.totalTests !== null) {
-                    final.totalTests = student.leaderboardOverride.totalTests;
+            if (doesLeaderboardOverrideApply(student.leaderboardOverride, { year, month, semester }, student.leaderboardOverride?.appliedAt)) {
+                const override = student.leaderboardOverride || {};
+                if (override.totalTests !== null) {
+                    final.totalTests = override.totalTests;
                     overridden.totalTests = true;
                 }
-                if (student.leaderboardOverride.averageScore !== null) {
-                    final.averageScore = student.leaderboardOverride.averageScore;
+                if (override.averageScore !== null) {
+                    final.averageScore = override.averageScore;
                     overridden.averageScore = true;
                 }
             }
@@ -830,7 +1189,11 @@ router.get("/leaderboard/class/:classId/students", verifyToken, isAdmin, async (
 router.put("/leaderboard/class/:classId/students/:studentId", verifyToken, isAdmin, async (req, res) => {
     try {
         const { studentId } = req.params;
-        const { totalTests, averageScore, note, resetOverride } = req.body;
+        const { totalTests, averageScore, note, resetOverride, scopeType, scopeYear, scopeMonth, scopeSemester } = req.body;
+
+        const normalizedScopeType = ["year", "month", "semester"].includes(String(scopeType || "").toLowerCase())
+            ? String(scopeType).toLowerCase()
+            : "year";
 
         let updateFields = {};
         if (resetOverride) {
@@ -838,6 +1201,11 @@ router.put("/leaderboard/class/:classId/students/:studentId", verifyToken, isAdm
                 "leaderboardOverride.totalTests": null,
                 "leaderboardOverride.averageScore": null,
                 "leaderboardOverride.note": "",
+                "leaderboardOverride.appliedAt": null,
+                "leaderboardOverride.scopeType": "",
+                "leaderboardOverride.scopeYear": "",
+                "leaderboardOverride.scopeMonth": "",
+                "leaderboardOverride.scopeSemester": "",
                 "leaderboardOverride.isOverridden": false,
             };
         } else {
@@ -845,6 +1213,11 @@ router.put("/leaderboard/class/:classId/students/:studentId", verifyToken, isAdm
                 "leaderboardOverride.totalTests": totalTests !== undefined ? totalTests : null,
                 "leaderboardOverride.averageScore": averageScore !== undefined ? averageScore : null,
                 "leaderboardOverride.note": note !== undefined ? note : "",
+                "leaderboardOverride.appliedAt": new Date(),
+                "leaderboardOverride.scopeType": normalizedScopeType,
+                "leaderboardOverride.scopeYear": scopeYear !== undefined ? String(scopeYear) : "",
+                "leaderboardOverride.scopeMonth": scopeMonth !== undefined ? String(scopeMonth) : "",
+                "leaderboardOverride.scopeSemester": scopeSemester !== undefined ? String(scopeSemester) : "",
                 "leaderboardOverride.isOverridden": true,
             };
         }

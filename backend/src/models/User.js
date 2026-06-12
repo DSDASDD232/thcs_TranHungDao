@@ -125,11 +125,21 @@ const userSchema = new mongoose.Schema(
             type: Boolean,
             default: false, // Mặc định tài khoản mới tạo sẽ không bị khóa
         },
+        // Mỗi lần admin thay đổi thông tin tài khoản, token phiên cũ sẽ bị vô hiệu hóa
+        tokenVersion: {
+            type: Number,
+            default: 0,
+        },
         // 👉 THÊM MỚI: Dành cho Admin ghi đè điểm thi đua của học sinh
         leaderboardOverride: {
             totalTests: { type: Number, default: null },
             averageScore: { type: Number, default: null },
             note: { type: String, default: "" },
+            appliedAt: { type: Date, default: null },
+            scopeType: { type: String, enum: ["year", "month", "semester", ""], default: "" },
+            scopeYear: { type: String, default: "" },
+            scopeMonth: { type: String, default: "" },
+            scopeSemester: { type: String, default: "" },
             // Cờ để biết liệu điểm này có bị ghi đè thủ công hay không
             isOverridden: { type: Boolean, default: false },
         }

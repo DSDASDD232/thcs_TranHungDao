@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import axios from "../lib/axios"; 
 import { processWordFile, extractQuestionsFromText } from "../lib/wordExtractor"; 
@@ -6,16 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress"; 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
-  ArrowLeft, UploadCloud, CheckCircle, CheckCircle2, AlertTriangle, Eraser,
-  Sparkles, FileText, Loader2, Image as ImageIcon, ListChecks, Layers,
-  PenTool, Database, Calculator, Save, Search, Eye, Trash2, PlusCircle, ArrowRight, FolderOpen, Lock,
-  Calendar, Video, FileAudio, Sigma, X, BookOpen, FileCheck, History
-} from "lucide-react";
+  ArrowLeft, UploadCloud, CheckCircle2, AlertTriangle, Eraser,
+  Sparkles, FileText, Loader2, Image as ImageIcon, ListChecks,
+  PenTool, Database, Calculator, Search, Eye, EyeOff, Trash2, PlusCircle, ArrowRight, FolderOpen, Lock,
+  Calendar, Video, FileAudio, Sigma, X, RotateCcw, Save
+} from "lucide-react"; 
 
 import RichTextEditor from "@/components/ui/RichTextEditor";
 import katex from 'katex';
@@ -23,7 +23,7 @@ import 'katex/dist/katex.min.css';
 import 'mathlive';
 
 // ==========================================
-// HÀM DỊCH MÃ LATEX THÀNH CÔNG THỨC TOÁN HỌC (ĐỂ XEM TRƯỚC)
+// HÀM DỊCH MÃ LATEX
 // ==========================================
 const renderLatexContent = (htmlString) => {
   if (!htmlString) return "";
@@ -65,6 +65,43 @@ const getDriveEmbedUrl = (url) => {
 const isAudioFile = (url) => {
   if (!url) return false;
   return url.toLowerCase().match(/\.(mp3|wav|m4a|ogg)$/) != null;
+};
+
+const renderVideoUrl = (url) => {
+    if(!url) return null;
+    if(url.includes("youtube.com/watch?v=") || url.includes("youtu.be/")) {
+        let videoId = url.split("v=")[1] || url.split("youtu.be/")[1];
+        if(videoId) {
+            let ampersandPosition = videoId.indexOf('&');
+            if(ampersandPosition !== -1) videoId = videoId.substring(0, ampersandPosition);
+            return <iframe className="w-full aspect-video rounded-xl shadow-sm mt-2 border border-slate-200" src={`https://www.youtube.com/embed/${videoId}`} title="YouTube video player" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>;
+        }
+    }
+    if (url.includes("drive.google.com")) {
+        return (
+            <div className="w-full flex flex-col items-center mt-2">
+                <div className="h-[200px] sm:h-[350px] w-full rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-slate-100 flex items-center justify-center relative">
+                    <iframe className="w-full h-full relative z-10" src={getDriveEmbedUrl(url)} allow="autoplay; fullscreen; encrypted-media" allowFullScreen referrerPolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>
+                </div>
+            </div>
+        );
+    }
+    if (isAudioFile(url) || (url.includes("/video/upload/") && url.match(/\.(mp3|wav|m4a|ogg)$/i))) {
+        return (
+            <div className="bg-white p-6 w-full max-w-md mx-auto rounded-xl flex flex-col items-center mt-2 border border-slate-200 shadow-sm">
+                <FileAudio className="w-12 h-12 text-indigo-400 mb-4" />
+                <audio controls className="w-full" src={url} />
+            </div>
+        );
+    }
+    if (url.includes("/video/upload/") || url.match(/\.(mp4|mov|webm)$/i)) {
+        return (
+            <div className="relative w-full rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-black flex justify-center mt-2">
+                <video className="w-full max-h-[400px] object-contain" controls src={url} preload="metadata" playsInline />
+            </div>
+        );
+    }
+    return <a href={url} target="_blank" rel="noopener noreferrer" className="text-sky-600 font-bold hover:underline break-all mt-2 inline-block">{url}</a>;
 };
 
 // ==========================================
@@ -144,10 +181,12 @@ const CreateAssignment = () => {
   const { id } = useParams(); 
   const location = useLocation();
   const assignmentFileRef = useRef(null);
+  const serverUrl = axios.defaults.baseURL?.replace('/api', '') || '';
 
   const [loading, setLoading] = useState(false);
   const [questions, setQuestions] = useState([]);
   const [teacherProfile, setTeacherProfile] = useState(null);
+  const [allClasses, setAllClasses] = useState([]);
 
   const [creationMethod, setCreationMethod] = useState("manual"); 
   const [viewQuestion, setViewQuestion] = useState(null);
@@ -253,6 +292,7 @@ const CreateAssignment = () => {
   });
 
   const [hasPassword, setHasPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (!newAssignment.startDate_date || !newAssignment.startDate_time || !newAssignment.dueDate_date || !newAssignment.dueDate_time) return;
@@ -288,16 +328,14 @@ const CreateAssignment = () => {
   const [assignmentFile, setAssignmentFile] = useState(null);
   const [questionPoints, setQuestionPoints] = useState({});
 
+  // States lọc từ kho
   const [bankSearch, setBankSearch] = useState("");
   const [bankSubject, setBankSubject] = useState("all");
   const [bankSemester, setBankSemester] = useState("all");
-  const [bankFolder, setBankFolder] = useState("all"); 
   const [bankExam, setBankExam] = useState("all"); 
   const [bankType, setBankType] = useState("all"); 
-  const [bankPoints, setBankPoints] = useState(""); 
+  const [bankGrade, setBankGrade] = useState("all"); 
   const [bankSelected, setBankSelected] = useState([]); 
-
-  const serverUrl = axios.defaults.baseURL?.replace('/api', '') || '';
 
   const getHeader = (isMultipart = false) => {
     const token = localStorage.getItem("token");
@@ -384,7 +422,6 @@ const CreateAssignment = () => {
               options: parsedOptions, correctAnswer: correctKey, difficulty: q.difficulty || "medium",
               videoUrl: q.videoUrl || "", 
               videoFile: null, videoPreviewUrl: "",
-              imageFile: null, previewUrl: q.imageUrl ? getImageUrl(q.imageUrl) : "", existingImageUrl: q.imageUrl,
               essayAnswerText: q.essayAnswerText || "",
               essayAnswerPreviewUrl: q.essayAnswerImageUrl ? getImageUrl(q.essayAnswerImageUrl) : "",
             };
@@ -410,12 +447,15 @@ const CreateAssignment = () => {
       try {
         const token = localStorage.getItem("token");
         if (!token) return navigate("/login");
-        const [profRes, questionsRes] = await Promise.all([
-          axios.get("/teacher/me", getHeader()), axios.get("/questions/all", getHeader())
+        const [profRes, classRes, questionsRes] = await Promise.all([
+          axios.get("/teacher/me", getHeader()), 
+          axios.get("/classes/all", getHeader()),
+          axios.get("/questions/all", getHeader())
         ]);
         
         const teacherInfo = profRes.data;
         setTeacherProfile(teacherInfo);
+        setAllClasses(classRes.data.classes || []);
         
         if (!id) {
             const defaultSub = Array.isArray(teacherInfo.subjects) && teacherInfo.subjects.length > 0 
@@ -423,7 +463,6 @@ const CreateAssignment = () => {
                 : teacherInfo.subject || "Chưa phân tổ";
                 
             setNewAssignment(prev => ({ ...prev, subject: defaultSub }));
-            setBankSubject("all"); 
         }
         questionsRes.data && setQuestions(questionsRes.data.questions || []);
       } catch (error) {}
@@ -432,8 +471,27 @@ const CreateAssignment = () => {
   }, [navigate, id]);
 
   const teacherSubjects = Array.isArray(teacherProfile?.subjects) && teacherProfile.subjects.length > 0 
-    ? teacherProfile.subjects 
-    : teacherProfile?.subject ? [teacherProfile.subject] : [];
+    ? teacherProfile.subjects : teacherProfile?.subject ? [teacherProfile.subject] : [];
+
+  // 👉 TỰ ĐỘNG KHÓA VÀ ĐỒNG BỘ BỘ LỌC KHO CÂU HỎI VỚI THÔNG TIN CHUNG
+  const selectedGrade = useMemo(() => {
+      if (!newAssignment.targetClass || !allClasses.length) return "";
+      const cls = allClasses.find(c => c.name === newAssignment.targetClass);
+      return cls ? String(cls.grade) : (newAssignment.targetClass.match(/\d+/)?.[0] || "");
+  }, [newAssignment.targetClass, allClasses]);
+
+  const allowedSubjects = newAssignment.subject ? [newAssignment.subject] : teacherSubjects;
+  const allowedGrades = selectedGrade ? [selectedGrade] : [...new Set(teacherProfile?.assignedClasses?.map(c => {
+      const clsObj = allClasses.find(ac => ac.name === c.name || ac._id === c._id) || c;
+      return clsObj.grade || c.name?.match(/\d+/)?.[0];
+  }).filter(Boolean))];
+  const allowedSemesters = newAssignment.semester ? [newAssignment.semester] : ["1", "2", "Cả năm"];
+
+  useEffect(() => {
+      if (allowedSubjects.length > 0) setBankSubject(allowedSubjects[0]);
+      if (allowedGrades.length > 0) setBankGrade(allowedGrades[0]);
+      if (allowedSemesters.length > 0) setBankSemester(allowedSemesters[0]);
+  }, [allowedSubjects.join(','), allowedGrades.join(','), allowedSemesters.join(',')]);
 
   const handleEssayCountChange = (e) => {
     const count = parseInt(e.target.value) || 0;
@@ -548,13 +606,12 @@ const CreateAssignment = () => {
   const roundedTotal = Math.round(totalPoints * 100) / 100; 
   const isPointsValid = roundedTotal === 10; 
 
-  // 👉 HÀM RÓT CÂU HỎI ĐÃ ĐƯỢC CHỈNH SỬA (CHỈ LẤY ĐỦ SỐ LƯỢNG SLOT TRỐNG)
   const fillEmptySlots = (importedQs) => {
     let newManuals = [...manualQuestions];
     let updatedPoints = { ...questionPoints };
     let filledCount = 0;
     let duplicateCount = 0;
-    let skippedFullCount = 0; // Biến đếm số câu bị bỏ qua do hết chỗ
+    let skippedFullCount = 0; 
     
     const stripHtml = (html) => {
       let tmp = document.createElement("DIV");
@@ -568,16 +625,13 @@ const CreateAssignment = () => {
       const impQ = importedQs[i];
       const normalizedContent = stripHtml(impQ.content).trim().toLowerCase();
 
-      // Kiểm tra trùng lặp nội dung
       if (existingContents.has(normalizedContent)) {
           duplicateCount++; continue; 
       }
 
-      // Tìm một slot (khung) đang TRỐNG và CÙNG LOẠI (Trắc nghiệm/Tự luận)
       let targetSlotIndex = newManuals.findIndex(slot => slot.type === impQ.type && stripHtml(slot.content).trim() === "");
 
       if (targetSlotIndex !== -1) {
-          // 👉 Nếu TÌM THẤY khung trống -> Rót dữ liệu vào
           let parsedOptions = [];
           if (Array.isArray(impQ.options) && impQ.options.length > 0) {
               parsedOptions = impQ.options;
@@ -592,7 +646,6 @@ const CreateAssignment = () => {
             options: impQ.type === 'multiple_choice' ? parsedOptions : [],
             correctAnswer: correctKey,
             difficulty: impQ.difficulty || "medium",
-            previewUrl: impQ.previewUrl || "",
             essayAnswerText: impQ.essayAnswerText || "",
           };
 
@@ -600,7 +653,6 @@ const CreateAssignment = () => {
           newManuals[targetSlotIndex] = { ...newManuals[targetSlotIndex], ...payloadToInject };
           filledCount++;
       } else {
-          // 👉 Nếu KHÔNG TÌM THẤY khung trống -> Bỏ qua và tăng biến đếm
           skippedFullCount++;
       }
     }
@@ -609,7 +661,6 @@ const CreateAssignment = () => {
     setQuestionPoints(updatedPoints);
     recalculatePoints(newManuals, updatedPoints); 
     
-    // Tạo câu thông báo chi tiết cho giáo viên
     let alertMsg = `✅ Đã rót thành công ${filledCount} câu vào Khung.`;
     if (duplicateCount > 0) alertMsg += `\n⚠️ Bỏ qua ${duplicateCount} câu do đã bị trùng lặp nội dung.`;
     if (skippedFullCount > 0) alertMsg += `\n❌ Bỏ qua ${skippedFullCount} câu do số lượng Khung trực tiếp đã đầy (hoặc không khớp loại).`;
@@ -730,14 +781,11 @@ const CreateAssignment = () => {
     if(!window.confirm("Xóa nội dung khung này?")) return; 
     setManualQuestions(manualQuestions.map(q => { 
       if (q.tempId === tempId) { 
-        return { ...q, content: "", videoUrl: "", videoFile: null, videoPreviewUrl: "", options: ["", "", "", ""], imageFile: null, previewUrl: "", existingImageUrl: "", essayAnswerText: "", essayAnswerImageFile: null, essayAnswerPreviewUrl: "", existingEssayAnswerImageUrl: "", _id: undefined }; 
+        return { ...q, content: "", videoUrl: "", videoFile: null, videoPreviewUrl: "", options: ["", "", "", ""], essayAnswerText: "", essayAnswerImageFile: null, essayAnswerPreviewUrl: "", existingEssayAnswerImageUrl: "", _id: undefined }; 
       } 
       return q; 
     })); 
   };
-
-  const handleManualImageChange = (tempId, e) => { const file = e.target.files[0]; if (file) setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, imageFile: file, previewUrl: URL.createObjectURL(file) } : q)); };
-  const handleRemoveManualImage = (tempId) => { setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, imageFile: null, previewUrl: "", existingImageUrl: "" } : q)); };
   
   const handleManualVideoChange = (tempId, e) => {
     const file = e.target.files[0];
@@ -755,11 +803,12 @@ const CreateAssignment = () => {
     }
   };
 
-  const handleManualEssayImageChange = (tempId, e) => { const file = e.target.files[0]; if (file) setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, essayAnswerImageFile: file, essayAnswerPreviewUrl: URL.createObjectURL(file) } : q)); };
-  const handleRemoveManualEssayImage = (tempId) => { setManualQuestions(manualQuestions.map(q => q.tempId === tempId ? { ...q, essayAnswerImageFile: null, essayAnswerPreviewUrl: "", existingEssayAnswerImageUrl: "" } : q)); };
-
   const handleSubmit = async (actionType) => {
+    if (!newAssignment.title) return alert("Vui lòng nhập Tên bài tập / Đề thi trước khi lưu!");
     if (!newAssignment.targetClass) return alert("Vui lòng chọn lớp để giao bài!");
+    
+    let finalStartDate = new Date(`${newAssignment.startDate_date}T${newAssignment.startDate_time}:00`);
+    let finalDueDate = new Date(`${newAssignment.dueDate_date}T${newAssignment.dueDate_time}:00`);
     
     if (actionType === 'published') {
       if (!isPointsValid) {
@@ -770,51 +819,57 @@ const CreateAssignment = () => {
       if (hasUglyPoints) {
         return alert("KHÔNG THỂ TẠO BÀI TẬP: Đề thi đang có câu hỏi chứa điểm bị lẻ. Vui lòng điều chỉnh lại số lượng câu hoặc điểm để tạo bài tập !");
       }
-    }
-    
-    if (hasPassword && (!newAssignment.password || newAssignment.password.trim() === "")) {
-       return alert("Bạn đã chọn Yêu cầu Mật khẩu nhưng chưa nhập mật khẩu! Vui lòng nhập mật khẩu hoặc tắt tính năng này.");
-    }
+      
+      if (hasPassword && (!newAssignment.password || newAssignment.password.trim() === "")) {
+         return alert("Bạn đã chọn Yêu cầu Mật khẩu nhưng chưa nhập mật khẩu! Vui lòng nhập mật khẩu hoặc tắt tính năng này.");
+      }
 
-    const finalStartDate = new Date(`${newAssignment.startDate_date}T${newAssignment.startDate_time}:00`);
-    const finalDueDate = new Date(`${newAssignment.dueDate_date}T${newAssignment.dueDate_time}:00`);
-    const durationMs = (parseInt(newAssignment.duration) || 0) * 60 * 1000;
+      const durationMs = (parseInt(newAssignment.duration) || 0) * 60 * 1000;
+      if (finalDueDate.getTime() < finalStartDate.getTime() + durationMs) {
+          const minDueTimeStr = new Date(finalStartDate.getTime() + durationMs).toLocaleString('vi-VN');
+          return alert(`LỖI THỜI GIAN:\nHạn nộp bài phải nằm sau thời gian làm bài kết thúc!\n\nThời gian mở đề: ${finalStartDate.toLocaleString('vi-VN')}\nThời lượng: ${newAssignment.duration} phút\n👉 Hạn nộp TỐI THIỂU phải được đặt từ: ${minDueTimeStr} trở đi.`);
+      }
 
-    if (finalDueDate.getTime() < finalStartDate.getTime() + durationMs) {
-        return alert(`Lỗi thời gian: Hạn nộp bài phải nằm sau Thời gian mở đề ít nhất ${newAssignment.duration} phút!`);
+      let questionsValid = true;
+      for (let i = 0; i < manualQuestions.length; i++) {
+        let q = manualQuestions[i];
+        let textContent = q.content ? q.content.replace(/<[^>]*>/g, '').trim() : "";
+
+        if (!textContent) {
+          if (q.imageFile || q.existingImageUrl || q.videoFile || q.videoUrl || q.content.includes('<img')) {
+            // Hợp lệ do có hình/video đính kèm
+          } else {
+            alert(`LỖI LƯU BÀI: Câu số ${i + 1} đang bị bỏ trống nội dung đề bài! Vui lòng gõ chữ hoặc tải file đính kèm trước khi lưu.`);
+            questionsValid = false;
+            break;
+          }
+        }
+
+        if (q.type === 'multiple_choice') {
+          const hasEmptyOption = q.options.some(opt => !opt || opt.replace(/<[^>]*>/g, '').trim() === "");
+          if (hasEmptyOption) {
+            alert(`LỖI LƯU BÀI: Câu trắc nghiệm số ${i + 1} đang có đáp án bị trống. Vui lòng điền đủ!`);
+            questionsValid = false;
+            break;
+          }
+        }
+      }
+      if (!questionsValid) return;
     }
 
     const finalStartDateISO = finalStartDate.toISOString();
     const finalDueDateISO = finalDueDate.toISOString();
 
-    let questionsValid = true;
     const updatedManualQuestions = [...manualQuestions];
 
     for (let i = 0; i < updatedManualQuestions.length; i++) {
       let q = updatedManualQuestions[i];
       let textContent = q.content ? q.content.replace(/<[^>]*>/g, '').trim() : "";
 
-      if (!textContent) {
-        if (q.imageFile || q.existingImageUrl || q.videoFile || q.videoUrl) {
-          q.content = "<p><i>(Dựa vào dữ liệu đính kèm bên dưới để trả lời câu hỏi)</i></p>";
-        } else {
-          alert(`LỖI LƯU BÀI: Câu số ${i + 1} đang bị bỏ trống nội dung đề bài! Vui lòng gõ chữ hoặc tải file đính kèm trước khi lưu.`);
-          questionsValid = false;
-          break;
-        }
-      }
-
-      if (q.type === 'multiple_choice') {
-        const hasEmptyOption = q.options.some(opt => !opt || opt.replace(/<[^>]*>/g, '').trim() === "");
-        if (hasEmptyOption) {
-          alert(`LỖI LƯU BÀI: Câu trắc nghiệm số ${i + 1} đang có đáp án bị trống. Vui lòng điền đủ!`);
-          questionsValid = false;
-          break;
-        }
+      if (!textContent && (q.imageFile || q.existingImageUrl || q.videoFile || q.videoUrl || q.content.includes('<img'))) {
+        q.content = "<p><i>(Dựa vào dữ liệu đính kèm bên dưới để trả lời câu hỏi)</i></p>" + q.content;
       }
     }
-
-    if (!questionsValid) return;
 
     setManualQuestions(updatedManualQuestions);
 
@@ -851,13 +906,11 @@ const CreateAssignment = () => {
           semester: newAssignment.semester,
           points: questionPoints[q.tempId] || 0, 
           essayAnswerText: q.essayAnswerText || "",
-          existingImageUrl: q.existingImageUrl || "",
           existingEssayAnswerImageUrl: q.existingEssayAnswerImageUrl || "" 
       }));
       formData.append("questionsData", JSON.stringify(questionsToSave));
 
       updatedManualQuestions.forEach(q => { 
-          if (q.imageFile) formData.append(`image_${q.tempId}`, q.imageFile); 
           if (q.essayAnswerImageFile) formData.append(`essayImage_${q.tempId}`, q.essayAnswerImageFile);
           if (q.videoFile) formData.append(`video_${q.tempId}`, q.videoFile); 
       });
@@ -870,12 +923,12 @@ const CreateAssignment = () => {
     } catch (err) { alert("Lỗi xử lý! Vui lòng thử lại."); } finally { setLoading(false); }
   };
 
-  const availableFolders = [...new Set(questions.filter(q => bankSubject === "all" || q.subject === bankSubject).map(q => q.folderName).filter(Boolean))];
-  const availableExams = [...new Set(questions.filter(q => (bankSubject === "all" || q.subject === bankSubject) && (bankFolder === "all" || q.folderName === bankFolder)).map(q => q.examName).filter(Boolean))];
+  const availableExams = [...new Set(questions.filter(q => (bankSubject === "all" || q.subject === bankSubject)).map(q => q.examName).filter(Boolean))];
 
   const filteredBankQuestions = questions.filter(q => {
     const matchSearch = (q.content || "").toLowerCase().includes(bankSearch.toLowerCase());
     const matchSubject = bankSubject === "all" || q.subject === bankSubject;
+    const matchGrade = bankGrade === "all" || String(q.grade) === bankGrade;
     
     let matchSemester = false;
     const qSem = String(q.semester || "1");
@@ -888,10 +941,9 @@ const CreateAssignment = () => {
     }
 
     const matchType = bankType === "all" || q.type === bankType;
-    const matchFolder = bankFolder === "all" || q.folderName === bankFolder;
     const matchExam = bankExam === "all" || q.examName === bankExam;
-    const matchPoints = !bankPoints || Number(q.points) === Number(bankPoints);
-    return matchSearch && matchSubject && matchSemester && matchType && matchFolder && matchExam && matchPoints;
+    
+    return matchSearch && matchSubject && matchGrade && matchSemester && matchType && matchExam;
   });
 
   const handleSelectAllFiltered = () => {
@@ -1049,7 +1101,6 @@ const CreateAssignment = () => {
                    </div>
                 </div>
 
-                {/* 👉 BỔ SUNG TUỲ CHỌN MẬT KHẨU & LÀM NHIỀU LẦN DÀNH RIÊNG CHO BÀI TẬP */}
                 <div className="flex flex-col gap-4">
                   <div className="bg-sky-50/50 p-4 rounded-xl border border-sky-100 mt-2 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
                      <div className="flex-1">
@@ -1064,25 +1115,27 @@ const CreateAssignment = () => {
                      </div>
                      
                      {hasPassword && (
-                        <div className="w-full sm:w-[280px] shrink-0 animate-in fade-in slide-in-from-right-4 duration-300">
+                        <div className="relative w-full sm:w-[280px] shrink-0 animate-in fade-in slide-in-from-right-4 duration-300">
                             <Input 
-                               type="text" 
+                               type={showPassword ? "text" : "password"} 
                                placeholder="Nhập mật khẩu cho bài thi..." 
-                               className="h-11 rounded-xl border-sky-300 focus-visible:ring-sky-500 font-bold text-sky-700 bg-white"
+                               className="h-11 rounded-xl border-sky-300 focus-visible:ring-sky-500 font-bold text-sky-700 bg-white pr-10"
                                value={newAssignment.password}
                                onChange={(e) => setNewAssignment({...newAssignment, password: e.target.value})}
                                autoFocus
                             />
+                            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-sky-600">
+                                {showPassword ? <EyeOff className="w-5 h-5"/> : <Eye className="w-5 h-5"/>}
+                            </button>
                         </div>
                      )}
                   </div>
 
-                  {/* Toggle Cho phép làm nhiều lần (Chỉ dành cho Bài tập về nhà) */}
                   {currentAssignmentType === "homework" && (
                     <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 flex flex-col sm:flex-row gap-4 items-start sm:items-center animate-in fade-in">
                        <div className="flex-1">
                           <div className="flex items-center gap-2">
-                              <History className="w-5 h-5 text-emerald-600" />
+                              <RotateCcw className="w-5 h-5 text-emerald-600" />
                               <label className="font-bold text-emerald-900 cursor-pointer flex items-center select-none" onClick={() => setNewAssignment({...newAssignment, allowMultipleSubmissions: !newAssignment.allowMultipleSubmissions})}>
                                  <input type="checkbox" className="mr-2 w-4 h-4 accent-emerald-500 cursor-pointer" checked={newAssignment.allowMultipleSubmissions} onChange={() => setNewAssignment({...newAssignment, allowMultipleSubmissions: !newAssignment.allowMultipleSubmissions})} />
                                  Cho phép học sinh làm bài nhiều lần
@@ -1182,7 +1235,7 @@ const CreateAssignment = () => {
                             <p className="text-slate-500 text-xs sm:text-sm mb-4">Hệ thống sẽ bóc tách văn bản thô từ Word. Sau đó bạn có thể rà soát lại trước khi rót vào Form trực tiếp.</p>
                             <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => {e.preventDefault(); const f = e.dataTransfer.files[0]; if(f) setAssignmentFile(f);}} onClick={() => assignmentFileRef.current.click()} className={`border-2 border-dashed rounded-2xl sm:rounded-3xl p-6 sm:p-10 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 sm:gap-3 max-w-lg mx-auto ${assignmentFile ? 'border-sky-500 bg-sky-50' : 'border-slate-200 hover:border-sky-400 bg-slate-50/50'}`}>
                               <input type="file" ref={assignmentFileRef} onChange={handleAssignmentFileChange} className="hidden" accept=".doc,.docx" />
-                              {assignmentFile ? (<><div className="w-12 h-12 sm:w-14 sm:h-14 bg-sky-100 rounded-full flex items-center justify-center mb-1"><FileText className="h-6 w-6 sm:h-7 sm:w-7 text-sky-600" /></div><p className="font-black text-sky-900 text-base sm:text-lg line-clamp-1 break-all px-2">{assignmentFile.name}</p><p className="text-[10px] sm:text-xs text-sky-600 font-medium bg-white px-2 sm:px-3 py-1 rounded-full border border-sky-100">Click để đổi file khác</p></>) : (<><div className="w-12 h-12 sm:w-16 sm:h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-1"><UploadCloud className="h-6 w-6 sm:h-8 sm:w-8 text-sky-400" /></div><p className="text-sm sm:text-base font-black text-slate-700">Kéo thả file Word (.docx) vào đây</p></>)}
+                              {assignmentFile ? (<><FileText className="h-8 w-8 text-indigo-600 mb-2" /><p className="font-black text-indigo-900 text-base line-clamp-1">{assignmentFile.name}</p><p className="text-xs text-indigo-600 mt-1">Click để chọn file khác</p></>) : (<><UploadCloud className="h-8 w-8 text-indigo-400 mb-2" /><p className="font-bold text-slate-700">Nhấn hoặc Kéo thả file vào đây</p></>)}
                             </div>
                             {assignmentFile && <Button type="button" onClick={handleExtractWord} disabled={loading} className="mt-4 sm:mt-6 w-full sm:w-auto bg-teal-500 hover:bg-teal-600 text-white font-bold h-11 sm:h-12 px-6 sm:px-8 rounded-xl shadow-md">{loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <Sparkles className="w-4 h-4 mr-2" />} Bắt đầu bóc tách văn bản</Button>}
                          </div>
@@ -1192,8 +1245,8 @@ const CreateAssignment = () => {
                               <div className="flex justify-between items-center bg-slate-100 p-3 rounded-t-xl border border-slate-200 border-b-0 shadow-sm">
                                 <span className="text-sm font-bold text-slate-700 uppercase">Văn bản thô (File gốc)</span>
                                 <div className="flex gap-2">
-                                  <label className="h-8 px-3 inline-flex items-center justify-center rounded-md text-xs font-bold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 cursor-pointer transition-colors shadow-sm">
-                                    <FolderOpen className="w-3.5 h-3.5 mr-1.5"/> Chọn file khác
+                                  <label className="h-8 px-3 inline-flex items-center justify-center rounded-md text-xs font-bold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 cursor-pointer shadow-sm">
+                                    <FolderOpen className="w-3.5 h-3.5 mr-1.5"/> Chọn lại
                                     <input type="file" className="hidden" accept=".doc,.docx" onChange={handleReuploadAndExtract} />
                                   </label>
                                   <Button size="sm" variant="outline" className="h-8 text-sky-600 border-sky-300 hover:bg-sky-50 font-bold shadow-sm" onClick={() => {
@@ -1250,8 +1303,8 @@ const CreateAssignment = () => {
                                                       <div className="relative w-full max-w-[450px] mx-auto rounded-xl overflow-hidden border border-indigo-200 shadow-sm bg-black group flex flex-col items-center justify-center p-4">
                                                           {isAudioFile(q.videoUrl) || (q.videoFile && q.videoFile.type.includes("audio")) ? (
                                                              <div className="bg-white p-4 w-full rounded-xl flex flex-col items-center">
-                                                               <FileAudio className="w-12 h-12 text-indigo-400 mb-3" />
-                                                               <audio controls className="w-full" src={q.videoPreviewUrl || q.videoUrl} />
+                                                                <FileAudio className="w-12 h-12 text-indigo-400 mb-3" />
+                                                                <audio controls className="w-full" src={q.videoPreviewUrl || q.videoUrl} />
                                                              </div>
                                                           ) : (
                                                              <video className="w-full max-h-[300px] object-contain" controls src={q.videoPreviewUrl || q.videoUrl} />
@@ -1276,9 +1329,12 @@ const CreateAssignment = () => {
                                                                       ></iframe>
                                                                       <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center z-0">
                                                                          <Video className="w-8 h-8 text-slate-300 mb-2" />
-                                                                         <p className="text-slate-500 font-medium text-xs">Video đang bị Google Drive chặn hiển thị trực tiếp do cài đặt trình duyệt.</p>
+                                                                         <p className="text-slate-500 font-medium text-xs">Video bị chặn. Nhấn link để xem.</p>
                                                                       </div>
                                                                   </div>
+                                                                  <a href={q.videoUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center justify-center h-10 px-6 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-sm transition-colors border border-indigo-200 shadow-sm">
+                                                                     <Video className="w-4 h-4 mr-2" /> Click mở Video sang Tab mới
+                                                                  </a>
                                                               </div>
                                                           )}
                                                       </div>
@@ -1318,21 +1374,19 @@ const CreateAssignment = () => {
                                                     <div className="flex items-center gap-2">
                                                       <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base mt-2">{letter}.</span>
                                                       <div className="flex-1 flex items-center gap-2">
-                                                        <Input className="h-11 rounded-xl bg-white text-sm sm:text-base border-sky-100" value={q.options[i]} onChange={(e) => handleExtractedOptionChange(q.tempId, i, e.target.value)} />
+                                                        <Input className={`h-11 rounded-xl bg-white text-sm sm:text-base ${isSlotEmpty ? 'border-dashed border-slate-300' : 'border-sky-100'}`} value={q.options[i]} onChange={(e) => handleExtractedOptionChange(q.tempId, i, e.target.value)} />
                                                         <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: q.tempId, targetOptionIndex: i, isExtracted: true, isEditing: false })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
                                                       </div>
                                                       {q.options.length > 2 && <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveExtractedOption(q.tempId, i)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 mt-1.5"><Trash2 className="w-4 h-4"/></Button>}
                                                     </div>
-                                                    {q.options[i] && q.options[i].includes('\\') && (
-                                                        <div className="ml-8 p-2 bg-white border border-sky-100 rounded-lg text-sm text-sky-900 q-content-view whitespace-pre-wrap flex items-center"
-                                                             dangerouslySetInnerHTML={{ __html: renderLatexContent(q.options[i]) }}
-                                                        />
-                                                    )}
                                                 </div>
                                               )})}
                                             </div>
                                             <div className="flex justify-between items-center pt-2 border-t border-slate-200 mt-2">
-                                              <Button type="button" variant="ghost" size="sm" onClick={() => handleAddExtractedOption(q.tempId)} className="text-indigo-600 hover:bg-indigo-100 rounded-lg"><PlusCircle className="w-4 h-4 mr-1"/> Thêm đáp án</Button>
+                                              {q.options.length < 16 ? (
+                                                  <Button type="button" variant="ghost" size="sm" onClick={() => handleAddExtractedOption(q.tempId)} className="text-indigo-600 hover:bg-indigo-100 rounded-lg"><PlusCircle className="w-4 h-4 mr-1"/> Thêm đáp án</Button>
+                                              ) : <div className="text-xs text-rose-500 font-bold">Đã đạt tối đa 16 đáp án</div>}
+                                              
                                               <div className="flex items-center gap-2">
                                                 <label className="text-xs font-bold text-rose-500">ĐÁP ÁN ĐÚNG:</label>
                                                 <Select value={q.correctAnswer || ""} onValueChange={(val) => handleExtractedChange(q.tempId, 'correctAnswer', val)}>
@@ -1352,7 +1406,7 @@ const CreateAssignment = () => {
                                   </Card>
                               ))}
 
-                              <Button type="button" onClick={handleCommitExtraction} className="w-full h-14 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-lg shadow-xl shadow-sky-200 transition-all mt-4">
+                              <Button type="button" onClick={handleCommitExtraction} className="w-full h-14 rounded-2xl bg-indigo-500 hover:bg-indigo-600 text-white font-black text-lg shadow-xl shadow-indigo-200 transition-all mt-4">
                                   XÁC NHẬN RÓT VÀO KHUNG TRỰC TIẾP <ArrowRight className="ml-2 w-5 h-5"/>
                               </Button>
                            </div>
@@ -1361,6 +1415,7 @@ const CreateAssignment = () => {
                     </div>
                   )}
 
+                  {/* BỘ LỌC TỪ KHO CÂU HỎI */}
                   {creationMethod === "bank" && (
                     <div className="border border-sky-200 rounded-xl sm:rounded-2xl overflow-hidden bg-white shadow-sm mt-4">
                       <div className="bg-sky-50 px-3 sm:px-4 py-4 flex flex-col space-y-4 border-b border-sky-100">
@@ -1385,47 +1440,43 @@ const CreateAssignment = () => {
                                <SelectItem value="essay">Tự luận</SelectItem>
                              </SelectContent>
                           </Select>
-                          
-                          <Select value={bankSubject || "all"} onValueChange={(val) => setBankSubject(val)}>
-                            <SelectTrigger className="h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700">
-                              <span className="truncate">{bankSubject === 'all' ? 'Tất cả môn' : bankSubject}</span>
+
+                          <Select value={bankGrade} onValueChange={setBankGrade} disabled={allowedGrades.length === 1 && allowedGrades[0] !== "all"}>
+                            <SelectTrigger className="h-10 w-[120px] bg-white border-sky-200 font-bold text-sky-700 disabled:opacity-50">
+                              <span className="truncate">{bankGrade === 'all' ? 'Tất cả Khối' : `Khối ${bankGrade}`}</span>
                             </SelectTrigger>
                             <SelectContent position="popper" sideOffset={4} className="bg-white max-h-[300px]">
-                              <SelectItem value="all">Tất cả môn</SelectItem>
-                              {teacherSubjects.map((sub, idx) => (
-                                <SelectItem key={idx} value={sub}>Môn: {sub}</SelectItem>
-                              ))}
+                              {allowedGrades.length > 1 && <SelectItem value="all">Tất cả Khối</SelectItem>}
+                              {allowedGrades.map(g => g !== "all" && <SelectItem key={g} value={g}>Khối {g}</SelectItem>)}
                             </SelectContent>
                           </Select>
                           
-                          <Select value={bankSemester} onValueChange={setBankSemester}>
-                            <SelectTrigger className="h-10 w-[150px] bg-white border-sky-200 font-bold text-sky-700">
+                          <Select value={bankSubject} onValueChange={setBankSubject} disabled={allowedSubjects.length === 1}>
+                            <SelectTrigger className="h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700 disabled:opacity-50">
+                              <span className="truncate">{bankSubject === 'all' ? 'Tất cả môn' : `Môn: ${bankSubject}`}</span>
+                            </SelectTrigger>
+                            <SelectContent position="popper" sideOffset={4} className="bg-white max-h-[300px]">
+                              {allowedSubjects.length > 1 && <SelectItem value="all">Tất cả môn</SelectItem>}
+                              {allowedSubjects.map(sub => <SelectItem key={sub} value={sub}>Môn: {sub}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                          
+                          <Select value={bankSemester} onValueChange={setBankSemester} disabled={allowedSemesters.length === 1 && allowedSemesters[0] !== "all"}>
+                            <SelectTrigger className="h-10 w-[150px] bg-white border-sky-200 font-bold text-sky-700 disabled:opacity-50">
                               <span className="truncate">{bankSemester === 'all' ? 'Tất cả Học kỳ' : bankSemester === 'Cả năm' ? 'Cả năm' : `Học kỳ ${bankSemester}`}</span>
                             </SelectTrigger>
                             <SelectContent position="popper" sideOffset={4} className="bg-white max-h-[300px]">
-                              <SelectItem value="all">Tất cả Học kỳ</SelectItem>
-                              <SelectItem value="1">Học kỳ 1</SelectItem>
-                              <SelectItem value="2">Học kỳ 2</SelectItem>
-                              <SelectItem value="Cả năm">Cả năm</SelectItem>
-                            </SelectContent>
-                          </Select>
-
-                          <Select value={bankFolder || "all"} onValueChange={(val) => { setBankFolder(val); setBankExam("all"); }}>
-                            <SelectTrigger className="h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700">
-                              <span className="truncate">{bankFolder === 'all' ? 'Tất cả Thư mục' : bankFolder}</span>
-                            </SelectTrigger>
-                            <SelectContent position="popper" sideOffset={4} className="bg-white max-h-[300px]">
-                              <SelectItem value="all">Tất cả Thư mục</SelectItem>
-                              {availableFolders.map((f, idx) => (<SelectItem key={idx} value={f}>{f}</SelectItem>))}
+                              {allowedSemesters.length > 1 && <SelectItem value="all">Tất cả Học kỳ</SelectItem>}
+                              {allowedSemesters.map(s => s !== "all" && <SelectItem key={s} value={s}>{s === 'Cả năm' ? 'Cả năm' : `Học kỳ ${s}`}</SelectItem>)}
                             </SelectContent>
                           </Select>
 
                           <Select value={bankExam || "all"} onValueChange={setBankExam}>
                             <SelectTrigger className="h-10 w-[160px] bg-white border-sky-200 font-bold text-sky-700">
-                              <span className="truncate">{bankExam === 'all' ? 'Tất cả Đề thi' : bankExam}</span>
+                              <span className="truncate">{bankExam === 'all' ? 'Tất cả Tập câu hỏi' : bankExam}</span>
                             </SelectTrigger>
                             <SelectContent position="popper" sideOffset={4} className="bg-white max-h-[300px]">
-                              <SelectItem value="all">Tất cả Đề thi</SelectItem>
+                              <SelectItem value="all">Tất cả Tập câu hỏi</SelectItem>
                               {availableExams.map((e, idx) => (<SelectItem key={idx} value={e}>{e}</SelectItem>))}
                             </SelectContent>
                           </Select>
@@ -1444,29 +1495,39 @@ const CreateAssignment = () => {
                       
                       <div className="max-h-[400px] overflow-y-auto p-1 sm:p-2">
                         <div className="overflow-x-auto">
-                          <Table className="min-w-[400px]">
+                          <Table className="min-w-[400px] w-full">
                             <TableBody>
                               {filteredBankQuestions.length === 0 ? (<TableRow><TableCell className="text-center py-10 text-slate-400 italic">Không tìm thấy câu hỏi phù hợp.</TableCell></TableRow>) : filteredBankQuestions.map((q) => {
                                 const isSelected = bankSelected.includes(q._id);
                                 return (
                                   <TableRow key={q._id} className={`${isSelected ? 'bg-sky-50' : ''} cursor-pointer hover:bg-sky-50/50`} onClick={() => toggleBankSelection(q._id)}>
-                                    <TableCell className="w-10 sm:w-12 text-center align-top pt-4 sm:pt-3"><input type="checkbox" className="w-4 h-4 sm:w-5 sm:h-5 accent-sky-500 cursor-pointer" checked={isSelected} onChange={() => toggleBankSelection(q._id)} onClick={(e) => e.stopPropagation()} /></TableCell>
-                                    <TableCell className="font-medium text-slate-700 text-sm sm:text-base py-3">
+                                    
+                                    <TableCell className="w-10 sm:w-12 text-center align-top pt-4 sm:pt-3 shrink-0">
+                                      <input type="checkbox" className="w-4 h-4 sm:w-5 sm:h-5 accent-sky-500 cursor-pointer" checked={isSelected} onChange={() => toggleBankSelection(q._id)} onClick={(e) => e.stopPropagation()} />
+                                    </TableCell>
+
+                                    <TableCell className="font-medium text-slate-700 text-sm sm:text-base py-3 max-w-[200px] sm:max-w-[400px] lg:max-w-[600px]">
                                       <div className="flex flex-col gap-1.5">
                                         <div className="flex items-start gap-2">
                                           {q.imageUrl && <ImageIcon className="h-4 w-4 sm:h-5 sm:w-5 text-sky-500 shrink-0 mt-0.5" />}
-                                          <div className="line-clamp-2 leading-relaxed q-content-view" dangerouslySetInnerHTML={{ __html: q.content }} />
+                                          
+                                          <div className="line-clamp-2 leading-relaxed q-content-view break-words overflow-hidden" dangerouslySetInnerHTML={{ __html: q.content }} />
                                         </div>
                                         <div className="flex flex-wrap gap-2 mt-1">
-                                          <Badge variant="outline" className="bg-sky-50 border-sky-200 text-sky-700 text-[10px] font-bold truncate max-w-[120px]" title={q.folderName || "Thư mục chung"}>📁 {q.folderName || "Thư mục chung"}</Badge>
-                                          <Badge variant="outline" className="bg-indigo-50 border-indigo-200 text-indigo-700 text-[10px] font-bold truncate max-w-[120px]" title={q.examName || "Đề chung"}>📄 {q.examName || "Đề chung"}</Badge>
+                                          <Badge variant="outline" className="bg-indigo-50 border-indigo-200 text-indigo-700 text-[10px] font-bold truncate max-w-[120px]" title={q.examName || "Đề chung"}>📄 {q.examName || "Chưa có tập"}</Badge>
                                           <Badge variant="outline" className="bg-white border-slate-200 text-slate-500 text-[10px]">Khối {q.grade}</Badge>
                                           <Badge variant="outline" className="bg-amber-50 border-amber-200 text-amber-600 text-[10px]">HK {q.semester || "1"}</Badge>
                                           <Badge variant="outline" className="bg-sky-50 border-sky-100 text-sky-600 text-[10px]">{q.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'}</Badge>
                                         </div>
                                       </div>
                                     </TableCell>
-                                    <TableCell className="text-right pr-4 align-top pt-3"><Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-sky-600 hover:bg-sky-100 hover:text-sky-700 rounded-full" onClick={(e) => handleOpenViewQuestion(e, q)}><Eye className="w-5 h-5" /></Button></TableCell>
+
+                                    <TableCell className="text-right pr-2 sm:pr-4 align-top pt-3 w-14 shrink-0">
+                                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-sky-600 hover:bg-sky-100 hover:text-sky-700 rounded-full" onClick={(e) => handleOpenViewQuestion(e, q)}>
+                                        <Eye className="w-5 h-5" />
+                                      </Button>
+                                    </TableCell>
+
                                   </TableRow>
                                 )
                               })}
@@ -1482,21 +1543,22 @@ const CreateAssignment = () => {
                       {manualQuestions.map((q, index) => {
                         const isSlotEmpty = !q.content || q.content.replace(/<[^>]*>/g, '').trim() === "";
                         
-                        // Lấy URL thực tế để hiển thị preview
                         const currentVideoUrl = q.videoPreviewUrl || q.videoUrl;
 
                         return (
                         <Card key={q.tempId} className={`shadow-sm relative overflow-visible transition-all ${isSlotEmpty ? 'border-sky-300 bg-white shadow-md' : 'border-sky-200'}`}>
                           <div className={`absolute top-0 left-0 w-1.5 sm:w-2 h-full ${isSlotEmpty ? 'bg-sky-300' : 'bg-sky-500'}`}></div>
+                          
                           <CardHeader className="bg-slate-50/50 py-3 px-4 sm:px-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-sky-50 rounded-t-3xl">
                             <div className="flex flex-wrap items-center gap-3 sm:gap-4 w-full sm:w-auto">
                               <CardTitle className="text-sm sm:text-base font-black text-sky-900 whitespace-nowrap">Câu {index + 1} <span className="text-slate-400 font-medium text-xs sm:text-sm ml-1">({q.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'})</span></CardTitle>
                               {isSlotEmpty && <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 font-bold ml-2">Khung trống</Badge>}
+                              
                               <div className="flex items-center bg-white border border-sky-200 rounded-lg px-2 py-1 gap-2 shadow-sm ml-auto sm:ml-0">
                                 <Calculator className="w-4 h-4 text-sky-500" />
                                 <span className="text-sm font-bold text-slate-600 hidden sm:inline">Điểm:</span>
                                 {q.type === "essay" ? (
-                                  <input type="number" step="0.1" className="w-12 sm:w-16 text-center font-black text-sky-600 focus:outline-none" value={questionPoints[q.tempId] === 0 ? "" : questionPoints[q.tempId]} placeholder="Nhập" onChange={(e) => handleEssayPointChange(q.tempId, e.target.value)} />
+                                  <input type="number" step="0.25" min="0" className="w-12 sm:w-16 text-center font-black text-sky-600 focus:outline-none" value={questionPoints[q.tempId] === 0 ? "" : questionPoints[q.tempId]} placeholder="Nhập" onChange={(e) => handleEssayPointChange(q.tempId, e.target.value)} />
                                 ) : (
                                   <input type="number" className="w-12 sm:w-16 text-center font-black text-slate-400 bg-transparent focus:outline-none cursor-not-allowed" value={(questionPoints[q.tempId] || 0).toFixed(2)} readOnly title="Điểm trắc nghiệm được chia tự động" />
                                 )}
@@ -1532,8 +1594,8 @@ const CreateAssignment = () => {
                                           <div className="relative w-full max-w-[450px] mx-auto rounded-xl overflow-hidden border border-indigo-200 shadow-sm bg-black group flex flex-col items-center justify-center p-4">
                                               {isAudioFile(q.videoUrl) || (q.videoFile && q.videoFile.type.includes("audio")) ? (
                                                  <div className="bg-white p-4 w-full rounded-xl flex flex-col items-center">
-                                                   <FileAudio className="w-12 h-12 text-indigo-400 mb-3" />
-                                                   <audio controls className="w-full" src={currentVideoUrl} />
+                                                    <FileAudio className="w-12 h-12 text-indigo-400 mb-3" />
+                                                    <audio controls className="w-full" src={currentVideoUrl} />
                                                  </div>
                                               ) : (
                                                  <video className="w-full max-h-[300px] object-contain" controls src={currentVideoUrl} />
@@ -1561,6 +1623,9 @@ const CreateAssignment = () => {
                                                              <p className="text-slate-500 font-medium text-xs">Video bị chặn. Nhấn link để xem.</p>
                                                           </div>
                                                       </div>
+                                                      <a href={q.videoUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center justify-center h-10 px-6 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-sm transition-colors border border-indigo-200 shadow-sm">
+                                                         <Video className="w-4 h-4 mr-2" /> Click mở Video sang Tab mới
+                                                      </a>
                                                   </div>
                                               )}
                                           </div>
@@ -1584,13 +1649,6 @@ const CreateAssignment = () => {
                                    </div>
                                 )}
                               </div>
-                              <div className="w-full md:w-36 shrink-0 h-[120px] sm:h-[120px]">
-                                {q.previewUrl ? (
-                                  <div className="relative w-full h-full rounded-xl border border-sky-200 overflow-hidden shadow-sm group/img"><img src={q.previewUrl} alt="Preview" className="absolute inset-0 w-full h-full object-cover bg-white" /><div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center"><button type="button" onClick={() => handleRemoveManualImage(q.tempId)} className="bg-rose-500 text-white rounded-full p-2 hover:scale-110 transition-transform"><Trash2 className="w-4 h-4"/></button></div></div>
-                                ) : (
-                                  <label className="flex flex-col items-center justify-center w-full h-full rounded-xl border-2 border-dashed border-sky-200 hover:border-sky-400 bg-sky-50 cursor-pointer transition-all"><ImageIcon className="w-6 h-6 text-sky-400 mb-1" /><span className="text-xs font-bold text-sky-600 text-center px-1">Ảnh Phụ (Đề bài)</span><input type="file" className="hidden" accept="image/*" onChange={(e) => handleManualImageChange(q.tempId, e)} /></label>
-                                )}
-                              </div>
                             </div>
                             
                             <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-3">
@@ -1609,7 +1667,7 @@ const CreateAssignment = () => {
                                           <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base mt-2">{letter}.</span>
                                           <div className="flex-1 flex items-center gap-2">
                                             <Input className={`h-11 rounded-xl bg-white text-sm sm:text-base ${isSlotEmpty ? 'border-dashed border-slate-300' : 'border-sky-100'}`} value={q.options[optIdx]} onChange={(e) => handleManualOptionChange(q.tempId, optIdx, e.target.value)} placeholder={`Gõ đáp án ${letter}...`} />
-                                            <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: q.tempId, targetOptionIndex: optIdx, isExtracted: false })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
+                                            <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: q.tempId, targetOptionIndex: optIdx, isExtracted: false, isEditing: false })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
                                           </div>
                                           {q.options.length > 2 && (
                                               <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveManualOption(q.tempId, optIdx)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 mt-1.5"><Trash2 className="w-4 h-4"/></Button>
@@ -1619,7 +1677,11 @@ const CreateAssignment = () => {
                                   )})}
                                 </div>
                                 <div className="flex justify-between items-center pt-3 border-t border-sky-100 mt-2">
-                                  <Button type="button" variant="ghost" size="sm" onClick={() => handleAddManualOption(q.tempId)} className="text-sky-600 hover:bg-sky-100"><PlusCircle className="w-4 h-4 mr-2"/> Thêm đáp án</Button>
+                                  {/* Giới hạn tối đa 16 đáp án */}
+                                  {q.options.length < 16 ? (
+                                      <Button type="button" variant="ghost" size="sm" onClick={() => handleAddManualOption(q.tempId)} className="text-sky-600 hover:bg-sky-100"><PlusCircle className="w-4 h-4 mr-2"/> Thêm đáp án</Button>
+                                  ) : <div className="text-xs text-rose-500 font-bold">Đã đạt tối đa 16 đáp án</div>}
+
                                   <div className="flex items-center gap-2">
                                     <label className="text-sm font-bold text-rose-600">ĐÁP ÁN ĐÚNG:</label>
                                     <Select value={q.correctAnswer || ""} onValueChange={(val) => handleManualChange(q.tempId, 'correctAnswer', val)}>
@@ -1649,12 +1711,16 @@ const CreateAssignment = () => {
                 </div>
               )}
 
-              {/* Nút Submit */}
+              {/* NÚT PHÁT HÀNH \& LƯU NHÁP */}
               {manualQuestions.length > 0 && (
                 <div className="pt-6 sm:pt-8 border-t border-slate-200">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Button type="button" onClick={() => handleSubmit('draft')} disabled={loading} variant="outline" className="w-full h-14 sm:h-16 rounded-xl sm:rounded-2xl border-2 border-slate-300 text-slate-600 hover:bg-slate-50 hover:text-slate-800 font-black text-lg shadow-sm transition-all active:scale-95 disabled:opacity-50">{loading ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <Save className="mr-2 h-5 w-5" />}Lưu Nháp (Chưa giao)</Button>
-                    <Button type="button" onClick={() => handleSubmit('published')} disabled={loading || !isPointsValid} className="w-full h-14 sm:h-16 rounded-xl sm:rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-lg shadow-xl shadow-sky-200 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">{loading ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <CheckCircle className="mr-2 h-5 w-5" />}Phát hành {currentAssignmentType === "exam" ? "Đề Kiểm Tra" : "Bài Tập"}</Button>
+                    <Button type="button" onClick={() => handleSubmit('draft')} disabled={loading} variant="outline" className="w-full h-14 sm:h-16 rounded-xl sm:rounded-2xl border-2 border-slate-300 text-slate-600 hover:bg-slate-50 hover:text-slate-800 font-black text-lg shadow-sm transition-all active:scale-95 disabled:opacity-50">
+                      {loading ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <Save className="mr-2 h-5 w-5" />}Lưu Nháp (Chưa giao)
+                    </Button>
+                    <Button type="button" onClick={() => handleSubmit('published')} disabled={loading || !isPointsValid} className="w-full h-14 sm:h-16 rounded-xl sm:rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-lg shadow-xl shadow-sky-200 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                      {loading ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <CheckCircle2 className="mr-2 h-5 w-5" />}Phát hành {currentAssignmentType === "exam" ? "Đề Kiểm Tra" : "Bài Tập"}
+                    </Button>
                   </div>
                 </div>
               )}
@@ -1662,7 +1728,7 @@ const CreateAssignment = () => {
           </CardContent>
         </Card>
         
-        {/* MODAL VIEW QUESTION CÓ THÊM LỚP BẢO VỆ XEM VIDEO VÀ XEM AUDIO/VIDEO NATIVE */}
+        {/* MODAL VIEW QUESTION */}
         <Dialog open={!!viewQuestion} onOpenChange={(open) => { if(!open) setViewQuestion(null) }}>
           <DialogContent className="sm:max-w-[800px] w-[95%] rounded-[2rem] border-none p-0 bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader className="bg-slate-50 px-8 py-6 border-b border-slate-100"><DialogTitle className="text-2xl font-black text-sky-950 flex items-center gap-3"><Eye className="w-6 h-6 text-sky-500" /> Xem trước Nội dung</DialogTitle></DialogHeader>
@@ -1672,7 +1738,6 @@ const CreateAssignment = () => {
                     <div className="font-bold text-slate-800 text-lg leading-relaxed q-content-view" dangerouslySetInnerHTML={{ __html: viewQuestion.content }} />
                     {viewQuestion.imageUrl && <img src={getImageUrl(viewQuestion.imageUrl)} className="max-w-full max-h-72 mt-4 rounded-xl border border-slate-200 shadow-sm mx-auto" />}
                     
-                    {/* 👉 HIỂN THỊ TRÌNH PHÁT VIDEO / AUDIO */}
                     {viewQuestion.videoUrl && (
                       <div className="w-full mt-4 flex justify-center">
                          {(viewQuestion.videoUrl.includes("youtube.com") || viewQuestion.videoUrl.includes("youtu.be")) ? (
@@ -1744,13 +1809,11 @@ const CreateAssignment = () => {
           </DialogContent>
         </Dialog>
 
-        {/* ========================================================= */}
-        {/* MODAL GÕ TOÁN / KÝ TỰ CHO ĐÁP ÁN (A,B,C,D) */}
-        {/* ========================================================= */}
+        {/* MODAL BÀN PHÍM ẢO TOÁN HỌC */}
         <Dialog open={mathModal.isOpen} onOpenChange={(open) => {
             if (!open) {
                 if(mathFieldRef.current) mathFieldRef.current.value = '';
-                setMathModal({ isOpen: false, targetTempId: null, targetOptionIndex: null, isExtracted: false });
+                setMathModal({ isOpen: false, targetTempId: null, targetOptionIndex: null, isExtracted: false, isEditing: false });
             }
         }}>
           <DialogContent className="sm:max-w-[700px] w-[95%] rounded-3xl p-6 bg-white border-none shadow-2xl">
@@ -1780,7 +1843,7 @@ const CreateAssignment = () => {
             </div>
 
             <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
-              <Button variant="ghost" onClick={() => setMathModal({ isOpen: false, targetTempId: null, targetOptionIndex: null, isExtracted: false })} className="rounded-xl h-11 font-bold text-slate-500 hover:text-slate-700">Hủy bỏ</Button>
+              <Button variant="ghost" onClick={() => setMathModal({ isOpen: false, targetTempId: null, targetOptionIndex: null, isExtracted: false, isEditing: false })} className="rounded-xl h-11 font-bold text-slate-500 hover:text-slate-700">Hủy bỏ</Button>
               <Button onClick={confirmMathInsertion} className="bg-sky-500 hover:bg-sky-600 text-white rounded-xl h-11 px-8 font-black shadow-md transition-all active:scale-95">
                  <CheckCircle2 className="w-5 h-5 mr-2" /> Chèn vào Đáp án
               </Button>

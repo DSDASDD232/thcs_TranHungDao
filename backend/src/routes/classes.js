@@ -12,20 +12,27 @@ router.post("/create", verifyToken, async (req, res) => {
     try {
         const { name, grade, academicYear, homeroomTeacher } = req.body;
         
-        // Kiểm tra dữ liệu trống
         if (!name || !grade || !academicYear) {
             return res.status(400).json({ message: "Vui lòng nhập đủ Tên lớp, Khối và Năm học!" });
         }
+        if (!homeroomTeacher) {
+            return res.status(400).json({ message: "Vui lòng chọn giáo viên phụ trách cho lớp!" });
+        }
 
-        // Tạo lớp mới
+        const teacher = await User.findOne({ _id: homeroomTeacher, role: "teacher", status: { $ne: "inactive" } });
+        if (!teacher) {
+            return res.status(400).json({ message: "Giáo viên phụ trách không hợp lệ hoặc đang ngừng hoạt động!" });
+        }
+
         const newClass = new Class({ 
             name, 
             grade, 
             academicYear, 
-            homeroomTeacher: homeroomTeacher || null 
+            homeroomTeacher 
         });
         
         await newClass.save();
+        await User.findByIdAndUpdate(homeroomTeacher, { $addToSet: { assignedClasses: newClass._id } });
         res.status(201).json({ message: `✅ Đã tạo lớp ${name} thành công!`, classInfo: newClass });
     } catch (error) {
         // Lỗi 11000 của MongoDB là lỗi trùng lặp (Unique)
@@ -70,7 +77,7 @@ router.get("/:id/students", verifyToken, async (req, res) => {
     try {
         // Tìm tất cả User là học sinh và có classId khớp với ID truyền vào
         const students = await User.find({ classId: req.params.id, role: "student" })
-            .select("fullName username") 
+            .select("fullName username isLocked status") 
             .sort({ fullName: 1 }); 
 
         res.status(200).json({ students });
@@ -112,7 +119,22 @@ router.put("/:id", verifyToken, async (req, res) => {
 router.post("/:id/assign-teachers", verifyToken, async (req, res) => {
     try {
         const classId = req.params.id;
-        const { teacherIds } = req.body; // Mảng chứa ID các giáo viên được chọn
+        const { teacherIds } = req.body;
+        const uniqueTeacherIds = [...new Set((teacherIds || []).map((id) => String(id)))];
+
+        if (uniqueTeacherIds.length === 0) {
+            return res.status(400).json({ message: "Lớp học phải có ít nhất 1 giáo viên phụ trách!" });
+        }
+
+        const activeTeachers = await User.find({
+            _id: { $in: uniqueTeacherIds },
+            role: "teacher",
+            status: { $ne: "inactive" },
+        }).select("_id");
+
+        if (activeTeachers.length !== uniqueTeacherIds.length) {
+            return res.status(400).json({ message: "Có giáo viên đang ngừng hoạt động nên không thể phân công!" });
+        }
 
         // Bước 1: Gỡ classId này ra khỏi TẤT CẢ giáo viên (Reset trạng thái của lớp này)
         await User.updateMany(
@@ -121,12 +143,11 @@ router.post("/:id/assign-teachers", verifyToken, async (req, res) => {
         );
 
         // Bước 2: Gắn lại classId này vào những giáo viên mới được tick chọn
-        if (teacherIds && teacherIds.length > 0) {
-            await User.updateMany(
-                { _id: { $in: teacherIds }, role: 'teacher' },
-                { $addToSet: { assignedClasses: classId } } // Dùng $addToSet để đảm bảo ID lớp không bị trùng lặp
-            );
-        }
+        await User.updateMany(
+            { _id: { $in: activeTeachers.map((teacher) => teacher._id) }, role: 'teacher' },
+            { $addToSet: { assignedClasses: classId } }
+        );
+        await Class.findByIdAndUpdate(classId, { homeroomTeacher: activeTeachers[0]._id });
 
         res.status(200).json({ message: "Phân công giáo viên thành công!" });
     } catch (error) {

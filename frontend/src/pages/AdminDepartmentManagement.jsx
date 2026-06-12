@@ -49,17 +49,17 @@ const exportPDF = async (dataList, reportTitle, adminName) => {
     doc.addFont("Roboto-Medium.ttf", "Roboto", "bold");
     doc.setFont("Roboto", "normal");
   } catch (error) {
-    console.error("Lỗi tải font:", error);
+    void error;
   }
 
   const today = new Date();
   const dateStr = `Ngày ${today.getDate().toString().padStart(2, '0')} tháng ${(today.getMonth() + 1).toString().padStart(2, '0')} năm ${today.getFullYear()}`;
 
-  try { doc.addImage(schoolLogo, "JPEG", 20, 10, 22, 22); } catch (e) {}
+  try { doc.addImage(schoolLogo, "JPEG", 20, 10, 22, 22); } catch (error) { void error; }
 
   doc.setFontSize(12);
   doc.setFont("Roboto", "bold");
-  doc.text("UBND HUYỆN THỦY NGUYÊN", 70, 16, { align: "center" });
+  doc.text("PHƯỜNG THỦY NGUYÊN", 70, 16, { align: "center" });
   doc.text("TRƯỜNG THCS TRẦN HƯNG ĐẠO", 70, 22, { align: "center" });
 
   doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", 220, 16, { align: "center" });
@@ -179,7 +179,7 @@ const exportWord = async (dataList, reportTitle, adminName) => {
                         rows: [
                           new DocxTableRow({
                             children: [
-                              new DocxTableCell({ borders: { top: { style: "none" }, bottom: { style: "none" }, left: { style: "none" }, right: { style: "none" } }, children: [new Paragraph({ alignment: "center", children: [new TextRun({ text: "UBND HUYỆN THỦY NGUYÊN", bold: true, size: 22, font: "Times New Roman" })] })] }),
+                              new DocxTableCell({ borders: { top: { style: "none" }, bottom: { style: "none" }, left: { style: "none" }, right: { style: "none" } }, children: [new Paragraph({ alignment: "center", children: [new TextRun({ text: "PHƯỜNG THỦY NGUYÊN", bold: true, size: 22, font: "Times New Roman" })] })] }),
                               new DocxTableCell({ borders: { top: { style: "none" }, bottom: { style: "none" }, left: { style: "none" }, right: { style: "none" } }, children: [new Paragraph({ alignment: "center", children: [new TextRun({ text: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", bold: true, size: 22, font: "Times New Roman" })] })] }),
                             ],
                           }),
@@ -240,6 +240,7 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [searchDept, setSearchDept] = useState("all");
   const [searchSubject, setSearchSubject] = useState("all");
+  const [searchStatus, setSearchStatus] = useState("all");
 
   const [subjectList, setSubjectList] = useState([]);
   const [newSubjectName, setNewSubjectName] = useState("");
@@ -273,7 +274,7 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
       fetchSubjects();
   }, []);
 
-  const handleAddSubject = async () => {
+    const handleAddSubject = async () => {
       if (!newSubjectName.trim() || !newSubjectDept) return alert("Vui lòng nhập tên và chọn tổ!");
       setIsLoadingSubjects(true);
       try {
@@ -295,7 +296,7 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
           await axios.delete(`/admin/subjects/${id}`, getHeader());
           await fetchSubjects();
           await fetchData(); 
-      } catch (error) {
+        } catch {
           alert("Lỗi khi xóa môn học!");
       }
   };
@@ -348,15 +349,21 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
   const filteredTeachers = teachersList.filter(t => {
     const term = searchTerm.toLowerCase();
     const subs = getTeacherSubjects(t);
+    const teacherStatus = t.status || "active";
     const matchName = !searchTerm
       || (t.fullName && t.fullName.toLowerCase().includes(term))
       || (t.username && t.username.toLowerCase().includes(term))
       || subs.some((sub) => String(sub).toLowerCase().includes(term));
     const matchDept = searchDept === "all" || t.department === searchDept;
     const matchSubject = searchSubject === "all" || subs.includes(searchSubject);
+    const matchStatus = searchStatus === "all" || teacherStatus === searchStatus;
 
-    return matchName && matchDept && matchSubject;
+    return matchName && matchDept && matchSubject && matchStatus;
   });
+
+  const deptFilterLabel = searchDept === "all" ? "Tất cả tổ" : searchDept === "KHTN" ? "Tổ KHTN" : "Tổ KHXH";
+  const subjectFilterLabel = searchSubject === "all" ? "Tất cả môn" : searchSubject;
+  const statusFilterLabel = searchStatus === "all" ? "Tất cả trạng thái" : searchStatus === "active" ? "Đang hoạt động" : "Ngừng hoạt động";
 
   const handleHorizontalScroll = (direction) => {
     const wrapper = tableScrollRef.current;
@@ -405,11 +412,36 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Phân bổ chuyên môn', { views: [{ showGridLines: false }] });
 
-    // Chỉnh lại tỷ lệ cột: Cột A chứa Logo và STT
-    sheet.columns = [ { width: 8 }, { width: 20 }, { width: 30 }, { width: 20 }, { width: 30 }, { width: 30 } ];
+    const dataToExport = getExportData();
+    const classRowsByTeacher = dataToExport.map((teacher) => {
+      const classList = String(teacher["Lớp đang phụ trách"] || "")
+        .split(/\s*,\s*/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+      return {
+        teacher,
+        classes: classList.length > 0 ? classList : ["Chưa phân công"],
+      };
+    });
+
+    const longestName = dataToExport.reduce((max, teacher) => Math.max(max, String(teacher["Họ và tên"] || "").length), 0);
+    const longestSubject = dataToExport.reduce((max, teacher) => Math.max(max, String(teacher["Môn giảng dạy"] || "").length), 0);
+    const longestClass = classRowsByTeacher.reduce((max, item) => Math.max(max, item.classes.join(", ").length), 0);
+
+    // Bố cục bảng: 6 cột thông tin chung + 1 cột lớp (mỗi lớp một dòng)
+    sheet.columns = [
+      { width: 8 },
+      { width: 18 },
+      { width: Math.min(Math.max(longestName + 4, 22), 32) },
+      { width: 18 },
+      { width: 20 },
+      { width: Math.min(Math.max(longestSubject + 4, 22), 32) },
+      { width: Math.min(Math.max(longestClass + 4, 18), 30) },
+    ];
 
     // Thêm các dòng tiêu đề (Dịch text sang cột B để chừa chỗ cho Logo ở cột A)
-    sheet.addRow(["", "UBND HUYỆN THỦY NGUYÊN", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"]);
+    sheet.addRow(["", "PHƯỜNG THỦY NGUYÊN", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"]);
     sheet.addRow(["", "TRƯỜNG THCS TRẦN HƯNG ĐẠO", "", "ĐỘC LẬP - TỰ DO - HẠNH PHÚC"]);
     sheet.mergeCells('B1:C1'); sheet.mergeCells('B2:C2');
     sheet.mergeCells('D1:F1'); sheet.mergeCells('D2:F2');
@@ -443,7 +475,7 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
     sheet.addRow([]);
 
     const titleRow = sheet.addRow([reportTitle]);
-    sheet.mergeCells('A4:F4');
+    sheet.mergeCells('A4:G4');
     titleRow.height = 35;
     const titleCell = sheet.getCell('A4');
     titleCell.font = { name: 'Times New Roman', size: 16, bold: true, color: { argb: 'FF0070C0' } };
@@ -451,7 +483,6 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
 
     sheet.addRow([]); 
 
-    const dataToExport = getExportData();
     const tableHeaders = Object.keys(dataToExport[0]);
     const headerRow = sheet.addRow(tableHeaders);
     headerRow.height = 25;
@@ -462,15 +493,50 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
       cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
     });
 
-    dataToExport.forEach((t) => {
-      const row = sheet.addRow(Object.values(t));
-      row.height = 25;
-      row.eachCell((cell, colNumber) => {
-        cell.font = { name: 'Times New Roman', size: 12 };
-        cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
-        if (colNumber === 1 || colNumber === 4) cell.alignment = { vertical: 'middle', horizontal: 'center' };
-        else cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+    classRowsByTeacher.forEach(({ teacher, classes }) => {
+      const startRowNumber = sheet.rowCount + 1;
+
+      classes.forEach((className) => {
+        const row = sheet.addRow([
+          teacher["STT"],
+          teacher["Tài khoản"],
+          teacher["Họ và tên"],
+          teacher["Tổ chuyên môn"],
+          teacher["Chức vụ trong tổ"],
+          teacher["Môn giảng dạy"],
+          className,
+        ]);
+
+        row.height = 22;
+        row.eachCell((cell, colNumber) => {
+          cell.font = { name: 'Times New Roman', size: 12 };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FF000000' } },
+            left: { style: 'thin', color: { argb: 'FF000000' } },
+            bottom: { style: 'thin', color: { argb: 'FF000000' } },
+            right: { style: 'thin', color: { argb: 'FF000000' } },
+          };
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          if (colNumber === 7) {
+            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+          }
+        });
       });
+
+      const endRowNumber = sheet.rowCount;
+      if (endRowNumber > startRowNumber) {
+        [1, 2, 3, 4, 5, 6].forEach((col) => {
+          sheet.mergeCells(startRowNumber, col, endRowNumber, col);
+          const mergedCell = sheet.getCell(startRowNumber, col);
+          mergedCell.alignment = { vertical: 'middle', horizontal: 'center' };
+          mergedCell.border = {
+            top: { style: 'thin', color: { argb: 'FF000000' } },
+            left: { style: 'thin', color: { argb: 'FF000000' } },
+            bottom: { style: 'thin', color: { argb: 'FF000000' } },
+            right: { style: 'thin', color: { argb: 'FF000000' } },
+          };
+        });
+      }
     });
 
     sheet.addRow([]); 
@@ -648,18 +714,18 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
               />
             </div>
             <CardTitle className="text-lg font-bold h- text-slate-800 flex items-center gap-3">
-              <Search className="w-4 h-4 text-slate-500" /> Lọc theo tiêu chí
+              <Search className="w-4 h-4 text-slate-500" /> Lọc theo: tổ, môn, trạng thái
             </CardTitle>
 
             <Select value={searchDept} onValueChange={setSearchDept}>
                <SelectTrigger className="h-10 w-[150px] bg-white border-slate-200 rounded-xl font-medium">
                   <div className="flex items-center">
                     <Filter className="w-4 h-4 mr-2 text-slate-400 shrink-0" />
-                    <SelectValue placeholder="all" />
+                  <span className="truncate">{deptFilterLabel}</span>
                   </div>
                </SelectTrigger>
                <SelectContent>
-                  <SelectItem value="all">all</SelectItem>
+                  <SelectItem value="all">Tất cả tổ</SelectItem>
                   <SelectItem value="KHTN">Tổ KHTN</SelectItem>
                   <SelectItem value="KHXH">Tổ KHXH</SelectItem>
                </SelectContent>
@@ -669,15 +735,29 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
                <SelectTrigger className="h-10 w-[160px] bg-white border-slate-200 rounded-xl font-medium">
                   <div className="flex items-center">
                     <Filter className="w-4 h-4 mr-2 text-slate-400 shrink-0" />
-                    <SelectValue placeholder="all" />
+                  <span className="truncate">{subjectFilterLabel}</span>
                   </div>
                </SelectTrigger>
                <SelectContent>
-                  <SelectItem value="all">all</SelectItem>
+                  <SelectItem value="all">Tất cả môn</SelectItem>
                   {subjectList.map(sub => (
                     <SelectItem key={sub._id} value={sub.name}>{sub.name}</SelectItem>
                   ))}
                </SelectContent>
+            </Select>
+
+            <Select value={searchStatus} onValueChange={setSearchStatus}>
+              <SelectTrigger className="h-10 w-[180px] bg-white border-slate-200 rounded-xl font-medium">
+                <div className="flex items-center">
+                  <Filter className="w-4 h-4 mr-2 text-slate-400 shrink-0" />
+                  <span className="truncate">{statusFilterLabel}</span>
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tất cả trạng thái</SelectItem>
+                <SelectItem value="active">Đang hoạt động</SelectItem>
+                <SelectItem value="inactive">Ngừng hoạt động</SelectItem>
+              </SelectContent>
             </Select>
           </div>
         </CardHeader>
@@ -703,6 +783,7 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
                   const isAssigned = teacher.assignedClasses && teacher.assignedClasses.length > 0;
                   const isEditing = editingTeacherId === teacher._id;
                   const isRowSelected = selectedTeacherRowId === teacher._id;
+                  const isInactive = teacher.status === "inactive";
                   const teacherSubs = isEditing ? tempEditData.subjects : getTeacherSubjects(teacher);
                   const teacherDept = isEditing ? tempEditData.department : teacher.department;
                   
@@ -715,6 +796,8 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
                       className={`cursor-pointer transition-colors ${
                         isRowSelected
                           ? '!bg-blue-50 [&>td]:!bg-blue-50 [&>td]:text-slate-800'
+                          : isInactive
+                            ? 'bg-slate-50/80 opacity-80'
                           : isEditing
                             ? 'bg-sky-50/50'
                             : 'hover:bg-slate-50/50'
@@ -725,6 +808,11 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
                       <TableCell className="align-top pt-4">
                          <p className="font-bold text-slate-700">{teacher.fullName}</p>
                          <p className="text-sky-600 font-medium text-xs mt-0.5">{teacher.username}</p>
+                         {isInactive && (
+                           <Badge variant="outline" className="mt-2 bg-rose-50 text-rose-600 border-rose-200 text-[10px] font-bold uppercase">
+                             Ngừng hoạt động
+                           </Badge>
+                         )}
                       </TableCell>
 
                       <TableCell className="align-top pt-4 text-center">
@@ -762,9 +850,16 @@ const AdminDepartmentManagement = ({ teachersList, fetchData }) => {
                             {isAssigned && <span className="text-[10px] text-rose-500 italic font-medium leading-tight">Đang có lớp, không được đổi tổ</span>}
                           </div>
                         ) : (
-                          <Badge className={`${teacherDept === 'KHTN' ? 'bg-blue-100 text-blue-700' : teacherDept === 'KHXH' ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500'} text-xs font-bold shadow-none border-0`}>
-                            {teacherDept === 'KHTN' ? 'Tổ KHTN' : teacherDept === 'KHXH' ? 'Tổ KHXH' : 'Chưa phân tổ'}
-                          </Badge>
+                          <div className="flex flex-wrap gap-1.5">
+                            <Badge className={`${teacherDept === 'KHTN' ? 'bg-blue-100 text-blue-700' : teacherDept === 'KHXH' ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500'} text-xs font-bold shadow-none border-0`}>
+                              {teacherDept === 'KHTN' ? 'Tổ KHTN' : teacherDept === 'KHXH' ? 'Tổ KHXH' : 'Chưa phân tổ'}
+                            </Badge>
+                            {isInactive && (
+                              <Badge className="bg-rose-100 text-rose-600 text-xs font-bold shadow-none border-0">
+                                Ngừng hoạt động
+                              </Badge>
+                            )}
+                          </div>
                         )}
                       </TableCell>
                       

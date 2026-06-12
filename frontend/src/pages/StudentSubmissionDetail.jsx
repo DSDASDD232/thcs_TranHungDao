@@ -7,8 +7,8 @@ import { Card } from "@/components/ui/card";
 import { 
     ArrowLeft, Loader2, CheckCircle2, MessageSquareText, 
     AlertCircle, Clock, BookOpen, PenTool, XCircle, Video, FileAudio,
-    FileCheck, CalendarDays // 👉 Import thêm icon
-} from "lucide-react"; 
+    FileCheck, CalendarDays, FileX // 👉 Thêm FileX vào đây
+} from "lucide-react";
 
 import katex from 'katex';
 import 'katex/dist/katex.min.css';

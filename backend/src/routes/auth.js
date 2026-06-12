@@ -7,12 +7,67 @@ import Class from "../models/Class.js";
 import Subject from "../models/Subject.js";
 import { verifyToken } from "../middleware/auth.js"; // <--- Bổ sung middleware để xác thực
 
-const hasSpecialChar = (password) => /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password);
+const isStrongPassword = (password) => {
+    const value = String(password ?? "");
+    return (
+        value.length >= 6 &&
+        !/\s/.test(value) &&
+        /[A-Z]/.test(value) &&
+        /\d/.test(value) &&
+        /[!@#$%^&*(),.?":{}|<>]/.test(value)
+    );
+};
 
 const removeAccents = (str) => {
     if (!str) return "";
     // Chuẩn hóa, bỏ dấu, và xóa các ký tự không phải chữ/số để làm username an toàn
     return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').replace(/[^a-zA-Z0-9]/g, '');
+};
+
+const normalizeDuplicateName = (str) => {
+    if (!str) return "";
+    return String(str)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/Đ/g, 'D')
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, ' ');
+};
+
+const normalizeDuplicatePhone = (str) => {
+    if (!str) return "";
+    return String(str).trim().replace(/\s+/g, '');
+};
+
+const buildDuplicateAccountKey = (fullName, phone) => {
+    return `${normalizeDuplicateName(fullName)}|${normalizeDuplicatePhone(phone)}`;
+};
+
+const hasDuplicateAccountByNameAndPhone = async (fullName, phone) => {
+    const normalizedPhone = normalizeDuplicatePhone(phone);
+    if (!normalizedPhone) return false;
+
+    const duplicateAccounts = await User.find({ phone: normalizedPhone })
+        .select('fullName phone')
+        .lean();
+
+    const incomingKey = buildDuplicateAccountKey(fullName, normalizedPhone);
+    return duplicateAccounts.some((account) => buildDuplicateAccountKey(account.fullName, account.phone) === incomingKey);
+};
+
+const isValidUsernameFormat = (username) => {
+    const value = String(username ?? "").trim();
+    if (!value) return false;
+
+    const normalized = value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/Đ/g, 'D');
+
+    return !/\s/.test(value) && value === normalized;
 };
 
 const router = express.Router();
@@ -30,11 +85,15 @@ router.post("/register", async (req, res) => {
             return res.status(400).json({ message: "Tên đăng nhập đã tồn tại! Vui lòng chọn tên khác." });
         }
 
+        if (!isValidUsernameFormat(username)) {
+            return res.status(400).json({ message: "Tên đăng nhập không được có dấu hoặc khoảng trắng." });
+        }
+
         if (!password) {
             return res.status(400).json({ message: "Mật khẩu không được để trống." });
         }
-        if (!hasSpecialChar(password)) {
-            return res.status(400).json({ message: "Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt." });
+        if (!isStrongPassword(password)) {
+            return res.status(400).json({ message: "Mật khẩu phải có ít nhất 6 ký tự, gồm 1 chữ in hoa, 1 chữ số và 1 ký tự đặc biệt." });
         }
 
         // Mã hóa mật khẩu (Băm 10 vòng)
@@ -83,6 +142,12 @@ router.post("/register", async (req, res) => {
             });
         }
 
+        if (await hasDuplicateAccountByNameAndPhone(fullName, phoneStr)) {
+            return res.status(400).json({
+                message: "Tài khoản đã tồn tại vì trùng cả họ tên và SĐT."
+            });
+        }
+
         // Tạo User mới
         const newUser = new User({
             username,
@@ -125,7 +190,7 @@ router.post("/login", async (req, res) => {
         }
 
         // 👉 CHỐT CHẶN: Kiểm tra xem tài khoản có bị khóa không?
-        if (user.isLocked) {
+        if (user.isLocked || user.status === "inactive") {
             return res.status(403).json({ 
                 message: "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ Quản trị viên để biết thêm chi tiết!" 
             });
@@ -138,7 +203,8 @@ router.post("/login", async (req, res) => {
 
         const payload = {
             id: user._id,
-            role: user.role
+            role: user.role,
+            tokenVersion: user.tokenVersion || 0
         };
 
         const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1d" });
@@ -150,7 +216,8 @@ router.post("/login", async (req, res) => {
                 id: user._id,
                 username: user.username,
                 fullName: user.fullName,
-                role: user.role
+                role: user.role,
+                tokenVersion: user.tokenVersion || 0
             }
         });
 
@@ -218,11 +285,8 @@ router.put("/profile", verifyToken, async (req, res) => {
             if (newPassword !== confirmPassword) {
                 return res.status(400).json({ message: "Mật khẩu mới và xác nhận mật khẩu không khớp!" });
             }
-            if (newPassword.length < 6) {
-                return res.status(400).json({ message: "Mật khẩu mới phải có ít nhất 6 ký tự!" });
-            }
-            if (!hasSpecialChar(newPassword)) {
-                return res.status(400).json({ message: "Mật khẩu mới phải chứa ít nhất 1 ký tự đặc biệt." });
+            if (!isStrongPassword(newPassword)) {
+                return res.status(400).json({ message: "Mật khẩu mới phải có ít nhất 6 ký tự, gồm 1 chữ in hoa, 1 chữ số và 1 ký tự đặc biệt." });
             }
 
             const isMatch = await bcrypt.compare(oldPassword, user.password);

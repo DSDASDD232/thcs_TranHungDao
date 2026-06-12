@@ -25,29 +25,52 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, adminName = "Q
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Danh Sách', { views: [{ showGridLines: false }] });
 
-  sheet.columns = [ { width: 10 }, { width: 35 }, { width: 35 } ];
+  sheet.pageSetup = {
+    orientation: 'landscape',
+    paperSize: 9,
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    horizontalCentered: false,
+    verticalCentered: false,
+    margins: {
+      left: 0.7,
+      right: 0.3,
+      top: 0.5,
+      bottom: 0.5,
+      header: 0.2,
+      footer: 0.2,
+    },
+  };
 
-  sheet.addRow(["UBND HUYỆN THỦY NGUYÊN", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"]);
-  sheet.addRow(["TRƯỜNG THCS TRẦN HƯNG ĐẠO", "", "Độc lập - Tự do - Hạnh phúc"]);
-  sheet.mergeCells('A1:B1'); sheet.mergeCells('A2:B2'); 
+  sheet.columns = [ { width: 6 }, { width: 6 }, { width: 10 }, { width: 24 }, { width: 28 }, { width: 18 } ];
+
+  sheet.addRow(["", "", "PHƯỜNG THỦY NGUYÊN", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", ""]);
+  sheet.addRow(["", "", "TRƯỜNG THCS TRẦN HƯNG ĐẠO", "", "Độc lập - Tự do - Hạnh phúc", ""]);
+  sheet.mergeCells('C1:D1'); sheet.mergeCells('C2:D2'); 
+  sheet.mergeCells('E1:F1'); sheet.mergeCells('E2:F2');
 
   const formatGovHeader = (rowNum, isBold) => {
     const row = sheet.getRow(rowNum); row.height = 25; 
     row.eachCell(cell => { cell.font = { name: 'Times New Roman', size: 12, bold: isBold }; cell.alignment = { vertical: 'middle', horizontal: 'center' }; });
   };
   formatGovHeader(1, true); formatGovHeader(2, true);
-  sheet.getCell('C2').font = { name: 'Times New Roman', size: 13, bold: true, underline: true }; 
+  sheet.getCell('C1').alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('C2').alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('E1').alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('E2').font = { name: 'Times New Roman', size: 13, bold: true, underline: true }; 
+  sheet.getCell('E2').alignment = { vertical: 'middle', horizontal: 'center' };
 
   sheet.addRow([]); 
-  const titleRow = sheet.addRow([reportTitle.toUpperCase()]);
-  sheet.mergeCells('A4:C4'); titleRow.height = 40;
-  const titleCell = sheet.getCell('A4');
+  const titleRow = sheet.addRow(["", "", reportTitle.toUpperCase(), "", "", ""]);
+  sheet.mergeCells('C4:F4'); titleRow.height = 40;
+  const titleCell = sheet.getCell('C4');
   titleCell.font = { name: 'Times New Roman', size: 16, bold: true, color: { argb: 'FF0070C0' } }; 
   titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
   sheet.addRow([]); 
   const tableHeaders = Object.keys(dataList[0]);
-  const headerRow = sheet.addRow(tableHeaders); headerRow.height = 30; 
+  const headerRow = sheet.addRow(["", "", ...tableHeaders]); headerRow.height = 30; 
   headerRow.eachCell((cell) => {
     cell.font = { name: 'Times New Roman', size: 12, bold: true, color: { argb: 'FFFFFFFF' } }; 
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0070C0' } }; 
@@ -56,31 +79,36 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, adminName = "Q
   });
 
   dataList.forEach(obj => {
-    const row = sheet.addRow(Object.values(obj)); row.height = 25; 
+    const row = sheet.addRow(["", "", ...Object.values(obj)]); row.height = 26; 
     row.eachCell((cell, colNumber) => {
       cell.font = { name: 'Times New Roman', size: 12 };
       cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
-      if(colNumber === 1) cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      else cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+      if (colNumber === 3) cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      else if (colNumber === 6) cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true, indent: 1 };
+      else if (colNumber === 4 || colNumber === 5) cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+      else cell.alignment = { vertical: 'middle', horizontal: 'center' };
     });
   });
 
   sheet.addRow([]); sheet.addRow([]);
   const dateRowNum = sheet.rowCount + 1;
-  sheet.addRow(["", "", dateStr]);
-  sheet.getCell(`C${dateRowNum}`).font = { name: 'Times New Roman', size: 12, italic: true };
-  sheet.getCell(`C${dateRowNum}`).alignment = { horizontal: 'center' };
+  sheet.addRow(["", "", "", dateStr, "", ""]);
+  sheet.mergeCells(`D${dateRowNum}:E${dateRowNum}`);
+  sheet.getCell(`D${dateRowNum}`).font = { name: 'Times New Roman', size: 12, italic: true };
+  sheet.getCell(`D${dateRowNum}`).alignment = { horizontal: 'right' };
 
   const signRowNum = sheet.rowCount + 1;
-  sheet.addRow(["", "", "Người xuất danh sách"]);
-  sheet.getCell(`C${signRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
-  sheet.getCell(`C${signRowNum}`).alignment = { horizontal: 'center' };
+  sheet.addRow(["", "", "", "Người xuất danh sách", "", ""]);
+  sheet.mergeCells(`D${signRowNum}:E${signRowNum}`);
+  sheet.getCell(`D${signRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
+  sheet.getCell(`D${signRowNum}`).alignment = { horizontal: 'right' };
 
   sheet.addRow([]); sheet.addRow([]); sheet.addRow([]); sheet.addRow([]);
   const nameRowNum = sheet.rowCount + 1;
-  sheet.addRow(["", "", adminName]);
-  sheet.getCell(`C${nameRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
-  sheet.getCell(`C${nameRowNum}`).alignment = { horizontal: 'center' };
+  sheet.addRow(["", "", "", adminName, "", ""]);
+  sheet.mergeCells(`D${nameRowNum}:E${nameRowNum}`);
+  sheet.getCell(`D${nameRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
+  sheet.getCell(`D${nameRowNum}`).alignment = { horizontal: 'right' };
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -99,30 +127,55 @@ const exportClassesListExcel = async (dataList, reportTitle, fileName, adminName
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Danh Sách Lớp', { views: [{ showGridLines: false }] });
 
-  sheet.columns = [ { width: 10 }, { width: 25 }, { width: 20 }, { width: 25 }, { width: 40 } ];
+  sheet.pageSetup = {
+    orientation: 'landscape',
+    paperSize: 9,
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    horizontalCentered: false,
+    verticalCentered: false,
+    margins: {
+      left: 0.75,
+      right: 0.25,
+      top: 0.5,
+      bottom: 0.5,
+      header: 0.2,
+      footer: 0.2,
+    },
+  };
 
-  sheet.addRow(["UBND HUYỆN THỦY NGUYÊN", "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"]);
-  sheet.addRow(["TRƯỜNG THCS TRẦN HƯNG ĐẠO", "", "", "Độc lập - Tự do - Hạnh phúc"]);
-  sheet.mergeCells('A1:C1'); sheet.mergeCells('A2:C2'); 
-  sheet.mergeCells('D1:E1'); sheet.mergeCells('D2:E2');
+  // Remove the trailing spacer column and give the right header more width.
+  sheet.columns = [ { width: 6 }, { width: 4 }, { width: 16 }, { width: 20 }, { width: 18 }, { width: 18 }, { width: 34 } ];
+
+  sheet.addRow(["", "", "PHƯỜNG THỦY NGUYÊN", "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", ""]);
+  sheet.addRow(["", "", "TRƯỜNG THCS TRẦN HƯNG ĐẠO", "", "", "Độc lập - Tự do - Hạnh phúc", ""]);
+  // Make the left header span three columns so the school name fits.
+  sheet.mergeCells('C1:E1'); sheet.mergeCells('C2:E2'); 
+  // Expand the government header block one column further.
+  sheet.mergeCells('F1:G1'); sheet.mergeCells('F2:G2');
 
   const formatGovHeader = (rowNum, isBold) => {
     const row = sheet.getRow(rowNum); row.height = 25; 
     row.eachCell(cell => { cell.font = { name: 'Times New Roman', size: 12, bold: isBold }; cell.alignment = { vertical: 'middle', horizontal: 'center' }; });
   };
   formatGovHeader(1, true); formatGovHeader(2, true);
-  sheet.getCell('D2').font = { name: 'Times New Roman', size: 13, bold: true, underline: true }; 
+  sheet.getCell('C1').alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('C2').alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('F1').alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('F2').font = { name: 'Times New Roman', size: 13, bold: true, underline: true }; 
+  sheet.getCell('F2').alignment = { vertical: 'middle', horizontal: 'center' };
 
   sheet.addRow([]); 
-  const titleRow = sheet.addRow([reportTitle.toUpperCase()]);
-  sheet.mergeCells('A4:E4'); titleRow.height = 40;
-  const titleCell = sheet.getCell('A4');
+  const titleRow = sheet.addRow(["", "", reportTitle.toUpperCase(), "", "", "", ""]);
+  sheet.mergeCells('C4:G4'); titleRow.height = 40;
+  const titleCell = sheet.getCell('C4');
   titleCell.font = { name: 'Times New Roman', size: 16, bold: true, color: { argb: 'FF0070C0' } }; 
   titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
   sheet.addRow([]); 
   const tableHeaders = Object.keys(dataList[0]);
-  const headerRow = sheet.addRow(tableHeaders); headerRow.height = 30; 
+  const headerRow = sheet.addRow(["", "", ...tableHeaders]); headerRow.height = 32; 
   headerRow.eachCell((cell) => {
     cell.font = { name: 'Times New Roman', size: 12, bold: true, color: { argb: 'FFFFFFFF' } }; 
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0070C0' } }; 
@@ -131,38 +184,62 @@ const exportClassesListExcel = async (dataList, reportTitle, fileName, adminName
   });
 
   dataList.forEach(obj => {
-    const row = sheet.addRow(Object.values(obj)); row.height = 25; 
+    const teacherText = String(obj["Giáo viên phụ trách"] || "");
+    const row = sheet.addRow(["", "", ...Object.values(obj)]); row.height = teacherText.length > 22 ? 38 : 26; 
     row.eachCell((cell, colNumber) => {
       cell.font = { name: 'Times New Roman', size: 12 };
       cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
-      if(colNumber === 1 || colNumber === 3 || colNumber === 4) cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      else cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+      if (colNumber <= 2) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      } else if (colNumber === 3 || colNumber === 5 || colNumber === 6) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      } else if (colNumber === 7) {
+        cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true, indent: 1 };
+      } else {
+        cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+      }
     });
   });
 
+  sheet.views = [{ state: 'normal', x: 1, y: 0, zoomScale: 95 }];
+
   sheet.addRow([]); sheet.addRow([]);
   const dateRowNum = sheet.rowCount + 1;
-  sheet.addRow(["", "", "", dateStr]);
-  sheet.mergeCells(`D${dateRowNum}:E${dateRowNum}`);
-  sheet.getCell(`D${dateRowNum}`).font = { name: 'Times New Roman', size: 12, italic: true };
-  sheet.getCell(`D${dateRowNum}`).alignment = { horizontal: 'center' };
+  sheet.addRow(["", "", "", "", dateStr, "", ""]);
+  sheet.mergeCells(`E${dateRowNum}:F${dateRowNum}`);
+  sheet.getCell(`E${dateRowNum}`).font = { name: 'Times New Roman', size: 12, italic: true };
+  sheet.getCell(`E${dateRowNum}`).alignment = { horizontal: 'right' };
 
   const signRowNum = sheet.rowCount + 1;
-  sheet.addRow(["", "", "", "Quản trị viên"]);
-  sheet.mergeCells(`D${signRowNum}:E${signRowNum}`);
-  sheet.getCell(`D${signRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
-  sheet.getCell(`D${signRowNum}`).alignment = { horizontal: 'center' };
+  sheet.addRow(["", "", "", "", "Quản trị viên", "", ""]);
+  sheet.mergeCells(`E${signRowNum}:F${signRowNum}`);
+  sheet.getCell(`E${signRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
+  sheet.getCell(`E${signRowNum}`).alignment = { horizontal: 'right' };
 
   sheet.addRow([]); sheet.addRow([]); sheet.addRow([]); sheet.addRow([]);
   const nameRowNum = sheet.rowCount + 1;
-  sheet.addRow(["", "", "", adminName]);
-  sheet.mergeCells(`D${nameRowNum}:E${nameRowNum}`);
-  sheet.getCell(`D${nameRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
-  sheet.getCell(`D${nameRowNum}`).alignment = { horizontal: 'center' };
+  sheet.addRow(["", "", "", "", adminName, "", ""]);
+  sheet.mergeCells(`E${nameRowNum}:F${nameRowNum}`);
+  sheet.getCell(`E${nameRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
+  sheet.getCell(`E${nameRowNum}`).alignment = { horizontal: 'right' };
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   saveAs(blob, `${fileName}.xlsx`);
+};
+
+const getStudentLockState = (student) => {
+  const isLocked = Boolean(student?.isLocked)
+    || student?.status === "inactive"
+    || student?.status === "locked"
+    || student?.status === "blocked"
+    || student?.lockStatus === "locked";
+
+  return {
+    isLocked,
+    lockLabel: isLocked ? "Đã khóa" : "Đang hoạt động",
+    lockNote: isLocked ? "Tài khoản này đang bị khóa bởi quản trị viên." : "",
+  };
 };
 
 
@@ -170,10 +247,11 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
   const [loading, setLoading] = useState(false);
   const [searchClassQuery, setSearchClassQuery] = useState("");
   const [filterClassGrade, setFilterClassGrade] = useState("all");
+  const [filterAcademicYear, setFilterAcademicYear] = useState("all");
 
   const [isClassDialogOpen, setIsClassDialogOpen] = useState(false);
   const [isEditClassDialogOpen, setIsEditClassDialogOpen] = useState(false);
-  const [newClass, setNewClass] = useState({ name: "", grade: "6", academicYear: "" });
+  const [newClass, setNewClass] = useState({ name: "", grade: "6", academicYear: "", homeroomTeacher: "" });
   const [editClass, setEditClass] = useState(null);
 
   // VIEW STUDENTS
@@ -195,13 +273,15 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
 
   const adminName = localStorage.getItem("fullName") || "Quản trị viên";
 
+  const activeTeachers = teachersList.filter((teacher) => teacher.status !== "inactive");
+
   const getHeader = () => {
     const token = localStorage.getItem("token");
     return { headers: { Authorization: `Bearer ${token}` } };
   };
 
   const currentYear = new Date().getFullYear();
-  const suggestedYears = Array.from({ length: 5 }, (_, i) => `${currentYear + i}-${currentYear + i + 1}`);
+  const suggestedYears = Array.from({ length: 20 }, (_, i) => `${currentYear + i}-${currentYear + i + 1}`);
 
   // ==========================
   // HÀM HỖ TRỢ HIỂN THỊ TỔ VÀ MÔN
@@ -222,12 +302,13 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
   const handleCreateClass = async (e) => {
     e.preventDefault();
     if (!newClass.name.startsWith(newClass.grade)) return alert(`❌ Sai định dạng!\nTên lớp phải bắt đầu bằng số Khối.\nVí dụ: Khối ${newClass.grade} -> Lớp ${newClass.grade}A1`);
+    if (!newClass.homeroomTeacher) return alert("Vui lòng chọn giáo viên phụ trách cho lớp!");
     setLoading(true);
     try {
       await axios.post("/classes/create", newClass, getHeader());
       alert("✅ Đã tạo lớp học thành công!"); 
       setIsClassDialogOpen(false); 
-      setNewClass({ name: "", grade: "6", academicYear: "" }); 
+      setNewClass({ name: "", grade: "6", academicYear: "", homeroomTeacher: "" }); 
       fetchData(); 
     } catch (error) { 
       alert(error.response?.data?.message || "Lỗi tạo lớp!"); 
@@ -245,7 +326,7 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
       alert("✅ Cập nhật lớp học thành công!");
       setIsEditClassDialogOpen(false);
       fetchData();
-    } catch (err) {
+    } catch {
       alert("Lỗi cập nhật lớp!");
     } finally {
       setLoading(false);
@@ -258,8 +339,8 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
       await axios.delete(`/classes/${classId}`, getHeader());
       fetchData();
       alert("✅ Đã xóa lớp thành công!");
-    } catch (err) {
-      alert(err.response?.data?.message || "Lỗi xóa lớp học!");
+    } catch (error) {
+      alert(error.response?.data?.message || "Lỗi xóa lớp học!");
     }
   };
 
@@ -281,7 +362,13 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
       };
     });
 
-    let title = filterClassGrade === "all" ? "DANH SÁCH TỔNG HỢP LỚP HỌC TOÀN TRƯỜNG" : `DANH SÁCH LỚP HỌC KHỐI ${filterClassGrade}`;
+    let title = filterClassGrade === "all" && filterAcademicYear === "all"
+      ? "DANH SÁCH TỔNG HỢP LỚP HỌC TOÀN TRƯỜNG"
+      : filterClassGrade !== "all" && filterAcademicYear !== "all"
+        ? `DANH SÁCH LỚP HỌC KHỐI ${filterClassGrade} - NĂM HỌC ${filterAcademicYear}`
+        : filterClassGrade !== "all"
+          ? `DANH SÁCH LỚP HỌC KHỐI ${filterClassGrade}`
+          : `DANH SÁCH LỚP HỌC NĂM HỌC ${filterAcademicYear}`;
     await exportClassesListExcel(dataToExport, title, `Danh_Sach_Lop_Hoc`, adminName);
   };
 
@@ -295,7 +382,10 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
       setIsStudentListOpen(true);
       try {
           const res = await axios.get(`/classes/${cls._id}/students`, getHeader());
-          setStudentsInClass(res.data.students || []);
+        setStudentsInClass((res.data.students || []).map((student) => ({
+        ...student,
+        ...getStudentLockState(student),
+        })));
       } catch (err) {
           console.error("Lỗi tải học sinh", err);
       }
@@ -308,7 +398,7 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
           setStudentsInClass(prev => prev.filter(s => s._id !== studentId)); 
           fetchData(); 
           alert("✅ Đã xóa tài khoản học sinh thành công!");
-      } catch (err) {
+        } catch {
           alert("Lỗi xóa tài khoản!");
       }
   };
@@ -339,7 +429,7 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
           setStudentsInClass(prev => prev.filter(s => s._id !== studentToTransfer._id));
           setIsTransferDialogOpen(false);
           fetchData(); 
-      } catch (error) {
+      } catch {
           alert("Lỗi khi chuyển lớp!");
       } finally {
           setLoading(false);
@@ -351,7 +441,8 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
       const dataToExport = studentsInClass.map((s, idx) => ({
           "STT": idx + 1,
           "Tài khoản đăng nhập": s.username,
-          "Họ và Tên": s.fullName
+          "Họ và Tên": s.fullName,
+          "Trạng thái": s.lockLabel || (s.isLocked ? "Đã khóa" : "Đang hoạt động")
       }));
       await exportFormalExcel(dataToExport, `DANH SÁCH LỚP ${selectedClassForStudents.name}`, `Danh_Sach_Lop_${selectedClassForStudents.name}`, adminName);
   };
@@ -365,7 +456,7 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
       setAssignSearchQuery("");
       setIsAssignTeacherDialogOpen(true);
       
-      const currentAssigned = teachersList.filter(t => {
+      const currentAssigned = activeTeachers.filter(t => {
          if(!t.assignedClasses) return false;
          return t.assignedClasses.some(ac => (ac._id || ac) === cls._id);
       }).map(t => t._id);
@@ -378,10 +469,12 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
   };
 
   const handleRemoveTeacherFromClass = (teacherId) => {
+      if (assignedTeacherIds.length <= 1) return alert("Lớp phải có ít nhất 1 giáo viên phụ trách!");
       setAssignedTeacherIds(prev => prev.filter(id => id !== teacherId));
   };
 
   const handleSaveTeacherAssignment = async () => {
+      if (assignedTeacherIds.length === 0) return alert("Lớp học phải có ít nhất 1 giáo viên phụ trách!");
       setLoading(true);
       try {
           await axios.post(`/classes/${selectedClassForAssign._id}/assign-teachers`, { teacherIds: assignedTeacherIds }, getHeader());
@@ -389,7 +482,7 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
           setIsAssignTeacherDialogOpen(false);
           fetchData(); 
       } catch (err) {
-          alert("Lỗi phân công giáo viên!");
+          alert(err.response?.data?.message || "Lỗi phân công giáo viên!");
       } finally {
           setLoading(false);
       }
@@ -398,11 +491,12 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
   const filteredClassesDisplay = classesList.filter(c => {
      const matchName = c.name.toLowerCase().includes(searchClassQuery.toLowerCase());
      const matchGrade = filterClassGrade === "all" || String(c.grade) === filterClassGrade;
-     return matchName && matchGrade;
+      const matchAcademicYear = filterAcademicYear === "all" || c.academicYear === filterAcademicYear;
+      return matchName && matchGrade && matchAcademicYear;
   });
 
-  const assignedTeachers = teachersList.filter(t => assignedTeacherIds.includes(t._id));
-  const unassignedTeachers = teachersList.filter(t => !assignedTeacherIds.includes(t._id) && (t.fullName.toLowerCase().includes(assignSearchQuery.toLowerCase()) || t.username.toLowerCase().includes(assignSearchQuery.toLowerCase())));
+  const assignedTeachers = activeTeachers.filter(t => assignedTeacherIds.includes(t._id));
+  const unassignedTeachers = activeTeachers.filter(t => !assignedTeacherIds.includes(t._id) && (t.fullName.toLowerCase().includes(assignSearchQuery.toLowerCase()) || t.username.toLowerCase().includes(assignSearchQuery.toLowerCase())));
 
   const filteredStudentsInClass = studentsInClass.filter(s => 
      s.fullName.toLowerCase().includes(studentSearchQuery.toLowerCase()) || 
@@ -422,12 +516,24 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
               <SelectTrigger className="w-[110px] sm:w-[140px] rounded-xl bg-white h-11"><span className="truncate">{filterClassGrade === "all" ? "Tất cả Khối" : `Khối ${filterClassGrade}`}</span></SelectTrigger>
               <SelectContent><SelectItem value="all">Tất cả Khối</SelectItem><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent>
             </Select>
+
+            <Select value={filterAcademicYear} onValueChange={setFilterAcademicYear}>
+              <SelectTrigger className="w-[150px] sm:w-[180px] rounded-xl bg-white h-11">
+                <span className="truncate">{filterAcademicYear === "all" ? "Tất cả năm học" : filterAcademicYear}</span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tất cả năm học</SelectItem>
+                {suggestedYears.map((year) => (
+                  <SelectItem key={year} value={year}>{year}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
              <Button onClick={handleExportAllClasses} className="bg-teal-500 hover:bg-teal-600 text-white h-11 px-4 sm:px-6 rounded-xl shadow-md font-bold whitespace-nowrap">
                <Download className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> <span className="hidden sm:inline">Xuất Excel</span>
              </Button>
-             <Button onClick={() => { setNewClass({ name: "", grade: "6", academicYear: suggestedYears[0] }); setIsClassDialogOpen(true); }} className="bg-sky-500 whitespace-nowrap hover:bg-sky-600 text-white h-11 px-4 sm:px-6 rounded-xl shadow-md flex items-center font-bold">
+             <Button onClick={() => { setNewClass({ name: "", grade: "6", academicYear: suggestedYears[0], homeroomTeacher: "" }); setIsClassDialogOpen(true); }} className="bg-sky-500 whitespace-nowrap hover:bg-sky-600 text-white h-11 px-4 sm:px-6 rounded-xl shadow-md flex items-center font-bold">
                <PlusCircle className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Tạo lớp mới
              </Button>
           </div>
@@ -438,7 +544,7 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
             <TableHeader className="bg-sky-50/80"><TableRow><TableHead className="pl-4 sm:pl-8 font-bold text-sky-800">Tên Lớp</TableHead><TableHead className="font-bold text-center text-sky-800">Khối</TableHead><TableHead className="font-bold text-center text-sky-800">Năm học</TableHead><TableHead className="font-bold text-center text-sky-800">Giáo viên phụ trách</TableHead><TableHead className="font-bold text-center text-sky-800">Sĩ số</TableHead><TableHead className="text-right pr-4 sm:pr-8 font-bold text-sky-800">Thao tác</TableHead></TableRow></TableHeader>
             <TableBody>
               {filteredClassesDisplay.map(cls => {
-                const classAssignedTeachers = teachersList.filter(t => t.assignedClasses?.some(c => (c._id || c) === cls._id));
+                const classAssignedTeachers = activeTeachers.filter(t => t.assignedClasses?.some(c => (c._id || c) === cls._id));
                 return (
                 <TableRow key={cls._id} className="hover:bg-sky-50/50">
                   <TableCell className="font-black text-base sm:text-lg pl-4 sm:pl-8 text-sky-900">{cls.name}</TableCell>
@@ -492,7 +598,26 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
                  <Input list="year-options" placeholder="VD: 2024-2025" className="h-12 rounded-xl font-bold border-sky-100 bg-white" value={newClass.academicYear} onChange={(e) => setNewClass({...newClass, academicYear: e.target.value})} required />
               </div>
             </div>
-            <Button type="submit" disabled={loading} className="w-full h-14 rounded-xl bg-sky-500 hover:bg-sky-600 font-black text-lg text-white mt-4 shadow-md">{loading ? <Loader2 className="animate-spin" /> : "Xác nhận tạo lớp"}</Button>
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-slate-500">Giáo viên phụ trách *</label>
+              <Select value={newClass.homeroomTeacher || undefined} onValueChange={(v) => setNewClass({...newClass, homeroomTeacher: v})}>
+                <SelectTrigger className="h-12 rounded-xl font-bold border-sky-100 bg-white">
+                  <span className={`truncate ${newClass.homeroomTeacher ? "text-slate-900" : "text-slate-400"}`}>
+                    {newClass.homeroomTeacher ? teachersList.find(t => String(t._id) === String(newClass.homeroomTeacher))?.fullName : "Chọn giáo viên phụ trách"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {activeTeachers.length === 0 ? (
+                    <SelectItem value="none" disabled>Chưa có giáo viên</SelectItem>
+                  ) : (
+                    activeTeachers.map(t => (
+                      <SelectItem key={t._id} value={String(t._id)}>{t.fullName}</SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button type="submit" disabled={loading || !newClass.homeroomTeacher} className="w-full h-14 rounded-xl bg-sky-500 hover:bg-sky-600 font-black text-lg text-white mt-4 shadow-md">{loading ? <Loader2 className="animate-spin" /> : "Xác nhận tạo lớp"}</Button>
           </form>
         </DialogContent>
       </Dialog>
@@ -544,20 +669,43 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <Table className="min-w-[500px]">
-                    <TableHeader className="bg-slate-50 sticky top-0 z-10"><TableRow><TableHead className="font-bold text-slate-700 w-16 text-center">STT</TableHead><TableHead className="font-bold text-slate-700">Tài khoản</TableHead><TableHead className="font-bold text-slate-700">Họ và Tên</TableHead><TableHead className="font-bold text-slate-700 text-right pr-6">Thao tác</TableHead></TableRow></TableHeader>
+                  <Table className="min-w-[640px]">
+                    <TableHeader className="bg-slate-50 sticky top-0 z-10"><TableRow><TableHead className="font-bold text-slate-700 w-16 text-center">STT</TableHead><TableHead className="font-bold text-slate-700">Tài khoản</TableHead><TableHead className="font-bold text-slate-700">Họ và Tên</TableHead><TableHead className="font-bold text-slate-700 w-[140px] text-center">Trạng thái</TableHead><TableHead className="font-bold text-slate-700 text-right pr-6">Thao tác</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {filteredStudentsInClass.map((student, idx) => (
-                        <TableRow key={student._id} className="hover:bg-slate-50 transition-colors">
+                      {filteredStudentsInClass.map((student, idx) => {
+                        const { isLocked: isStudentLocked, lockLabel, lockNote } = getStudentLockState(student);
+
+                        return (
+                        <TableRow key={student._id} className={`hover:bg-slate-50 transition-colors ${isStudentLocked ? "bg-rose-50/60" : ""}`}>
                           <TableCell className="font-medium text-slate-400 text-center">{idx + 1}</TableCell>
-                          <TableCell className="font-bold text-sky-600">{student.username}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-sky-600">{student.username}</span>
+                                {isStudentLocked && (
+                                  <Badge variant="destructive" className="text-[10px] uppercase">Đã khóa</Badge>
+                                )}
+                              </div>
+                              {isStudentLocked && (
+                                <span className="text-[11px] font-medium text-rose-500">{lockNote}</span>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell className="font-bold text-sky-900">{student.fullName}</TableCell>
+                          <TableCell className="text-center">
+                            {isStudentLocked ? (
+                              <Badge variant="destructive" className="text-[10px] uppercase">{lockLabel}</Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] uppercase border-emerald-200 text-emerald-600 bg-emerald-50">Đang hoạt động</Badge>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right pr-6">
                              <Button onClick={() => handleOpenTransferDialog(student)} variant="ghost" size="icon" title="Chuyển học sinh sang lớp khác" className="h-8 w-8 text-sky-500 hover:bg-sky-50 hover:text-sky-600 mr-1"><ArrowRightLeft className="h-4 w-4" /></Button>
                              <Button onClick={() => handleDeleteStudent(student._id, student.fullName)} variant="ghost" size="icon" title="Xóa khỏi lớp và Xóa tài khoản" className="h-8 w-8 text-rose-400 hover:bg-rose-50 hover:text-rose-500"><UserMinus className="h-4 w-4" /></Button>
                           </TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>

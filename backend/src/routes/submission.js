@@ -32,7 +32,33 @@ const uploadSubmission = multer({
 });
 
 // ======================================================================
-// 1. [POST] API NỘP BÀI VÀ TỰ ĐỘNG CHẤM ĐIỂM (LAI TRẮC NGHIỆM & TỰ LUẬN)
+// 1. [GET] API XEM LỊCH SỬ ĐIỂM SỐ CÁ NHÂN (DÀNH CHO HỌC SINH)
+// ======================================================================
+router.get("/my-submissions", verifyToken, async (req, res) => {
+    try {
+        if (req.user.role !== "student") {
+            return res.status(403).json({ message: "Chỉ học sinh mới có lịch sử điểm cá nhân!" });
+        }
+
+        const mySubmissions = await Submission.find({ student: req.user.id })
+            .populate("assignment", "title subject dueDate") 
+            .sort({ createdAt: -1 }); 
+
+        res.status(200).json({
+            message: "✅ Lấy lịch sử điểm số thành công!",
+            total: mySubmissions.length,
+            submissions: mySubmissions
+        });
+
+    } catch (error) {
+        console.error("Lỗi lấy lịch sử điểm:", error);
+        res.status(500).json({ message: "Lỗi server", error });
+    }
+});
+
+// ======================================================================
+// 2. [POST] API NỘP BÀI VÀ TỰ ĐỘNG CHẤM ĐIỂM 
+// 👉 ĐÃ FIX LỖI 0 ĐIỂM TRẮC NGHIỆM TẠI ĐÂY
 // ======================================================================
 router.post("/submit", verifyToken, uploadSubmission.any(), async (req, res) => {
     try {
@@ -50,7 +76,7 @@ router.post("/submit", verifyToken, uploadSubmission.any(), async (req, res) => 
         }
 
         // 1. Tìm bài tập
-        const assignment = await Assignment.findById(assignmentId);
+        const assignment = await Assignment.findById(assignmentId).populate('questions.questionId');
         if (!assignment) {
             return res.status(404).json({ message: "Không tìm thấy bài tập này!" });
         }
@@ -67,7 +93,6 @@ router.post("/submit", verifyToken, uploadSubmission.any(), async (req, res) => 
             student: req.user.id
         });
 
-        // Nếu đã có bài nộp và KHÔNG cho phép làm nhiều lần -> Chặn
         if (existingSubmission && !assignment.allowMultipleSubmissions) {
             return res.status(400).json({ message: "Em đã nộp bài này rồi, bài tập này không cho phép nộp lại!" });
         }
@@ -77,12 +102,19 @@ router.post("/submit", verifyToken, uploadSubmission.any(), async (req, res) => 
         let processedAnswers = [];
         let hasEssayQuestion = false;
 
-        const questionIds = assignment.questions.map(q => q.questionId);
+        const questionIds = assignment.questions.map(q => q.questionId._id || q.questionId);
         const questionsInDb = await Question.find({ _id: { $in: questionIds } });
 
         for (let ans of parsedAnswers) {
             const questionDoc = questionsInDb.find(q => q._id.toString() === ans.question);
-            const assignmentQuestion = assignment.questions.find(q => q.questionId.toString() === ans.question);
+            
+            // 👉 ĐÂY LÀ CHỖ ĐÃ FIX: Lấy chuẩn ID để không bị rớt mất Điểm của câu hỏi
+            const assignmentQuestion = assignment.questions.find(q => {
+                const qIdStr = q.questionId._id ? q.questionId._id.toString() : q.questionId.toString();
+                return qIdStr === ans.question;
+            });
+            
+            // Nếu lấy thành công, gán maxPoints (VD: 0.4), nếu lỗi thì bằng 0
             const maxPoints = assignmentQuestion ? assignmentQuestion.points : 0;
 
             let isCorrect = false;
@@ -107,7 +139,7 @@ router.post("/submit", verifyToken, uploadSubmission.any(), async (req, res) => 
                         (ans.studentAnswer && ans.studentAnswer.toUpperCase() === questionDoc.correctAnswer.toUpperCase())
                     ) {
                         isCorrect = true;
-                        pointsAwarded = maxPoints; 
+                        pointsAwarded = maxPoints; // Trả về đúng 0.4 điểm
                         totalScore += maxPoints; 
                     }
                 } 
@@ -118,7 +150,6 @@ router.post("/submit", verifyToken, uploadSubmission.any(), async (req, res) => 
                     if (imageFile) {
                         finalImageUrl = `/uploads/submissions/${imageFile.filename}`;
                     } else if (existingSubmission) {
-                        // Nếu đang nộp lại và không upload ảnh mới, cố gắng lấy lại ảnh cũ
                         const oldAns = existingSubmission.answers.find(a => a.question.toString() === ans.question);
                         if (oldAns && oldAns.studentImage) {
                             finalImageUrl = oldAns.studentImage;
@@ -184,13 +215,13 @@ router.post("/submit", verifyToken, uploadSubmission.any(), async (req, res) => 
 });
 
 // ======================================================================
-// 2. [GET] API XEM DANH SÁCH ĐIỂM CỦA 1 BÀI TẬP (DÀNH CHO GIÁO VIÊN & ADMIN)
+// 3. [GET] API XEM DANH SÁCH ĐIỂM CỦA 1 BÀI TẬP (DÀNH CHO GIÁO VIÊN & ADMIN)
 // ======================================================================
 router.get("/assignment/:id/grades", verifyToken, isTeacherOrAdmin, async (req, res) => {
     try {
         const assignmentId = req.params.id;
 
-        const assignment = await Assignment.findById(assignmentId);
+        const assignment = await Assignment.findById(assignmentId).populate('questions.questionId');
         if (!assignment) {
             return res.status(404).json({ message: "Không tìm thấy bài tập này!" });
         }
@@ -213,7 +244,7 @@ router.get("/assignment/:id/grades", verifyToken, isTeacherOrAdmin, async (req, 
 });
 
 // ======================================================================
-// [MỚI] API LƯU ĐIỂM CHẤM THỦ CÔNG CỦA GIÁO VIÊN (CHẤM TỰ LUẬN)
+// 4. [PUT] API LƯU ĐIỂM CHẤM THỦ CÔNG CỦA GIÁO VIÊN (CHẤM TỰ LUẬN)
 // ======================================================================
 router.put("/grade/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
     try {
@@ -250,32 +281,7 @@ router.put("/grade/:id", verifyToken, isTeacherOrAdmin, async (req, res) => {
 });
 
 // ======================================================================
-// 3. [GET] API XEM LỊCH SỬ ĐIỂM SỐ CÁ NHÂN (DÀNH CHO HỌC SINH)
-// ======================================================================
-router.get("/my-submissions", verifyToken, async (req, res) => {
-    try {
-        if (req.user.role !== "student") {
-            return res.status(403).json({ message: "Chỉ học sinh mới có lịch sử điểm cá nhân!" });
-        }
-
-        const mySubmissions = await Submission.find({ student: req.user.id })
-            .populate("assignment", "title subject dueDate") 
-            .sort({ createdAt: -1 }); 
-
-        res.status(200).json({
-            message: "✅ Lấy lịch sử điểm số thành công!",
-            total: mySubmissions.length,
-            submissions: mySubmissions
-        });
-
-    } catch (error) {
-        console.error("Lỗi lấy lịch sử điểm:", error);
-        res.status(500).json({ message: "Lỗi server", error });
-    }
-});
-
-// ======================================================================
-// 4. [GET] API LẤY BẢNG XẾP HẠNG THI ĐUA CỦA 1 LỚP (CÓ BỘ LỌC THỜI GIAN, MÔN, LOẠI BÀI)
+// 5. [GET] API LẤY BẢNG XẾP HẠNG THI ĐUA CỦA 1 LỚP 
 // ======================================================================
 router.get("/class/:classId/leaderboard", verifyToken, isTeacherOrAdmin, async (req, res) => {
     try {
@@ -289,12 +295,14 @@ router.get("/class/:classId/leaderboard", verifyToken, isTeacherOrAdmin, async (
         let dateFilter = {};
         const now = new Date();
 
-        if (timeframe === 'week') {
-            const day = now.getDay();
-            const diff = now.getDate() - day + (day === 0 ? -6 : 1); 
-            const firstDayOfWeek = new Date(now.setDate(diff));
-            firstDayOfWeek.setHours(0, 0, 0, 0);
-            dateFilter = { createdAt: { $gte: firstDayOfWeek } };
+        if (timeframe && timeframe.includes('_')) {
+            const [startStr, endStr] = timeframe.split('_');
+            dateFilter = { 
+                createdAt: { 
+                    $gte: new Date(startStr), 
+                    $lte: new Date(endStr) 
+                } 
+            };
         } else if (timeframe === 'month') {
             const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1); 
             dateFilter = { createdAt: { $gte: firstDayOfMonth } };
@@ -356,7 +364,7 @@ router.get("/class/:classId/leaderboard", verifyToken, isTeacherOrAdmin, async (
 });
 
 // ======================================================================
-// 5. [GET] API XEM CHI TIẾT LỊCH SỬ LÀM BÀI CỦA 1 HỌC SINH (Cho Giáo viên)
+// 6. [GET] API XEM CHI TIẾT LỊCH SỬ LÀM BÀI CỦA 1 HỌC SINH (Cho Giáo viên)
 // ======================================================================
 router.get("/student/:studentId", verifyToken, isTeacherOrAdmin, async (req, res) => {
     try {
@@ -373,7 +381,7 @@ router.get("/student/:studentId", verifyToken, isTeacherOrAdmin, async (req, res
 });
 
 // ======================================================================
-// 6. [GET] API XEM CHI TIẾT 1 BÀI NỘP (Dành cho Học sinh xem lại bài)
+// 7. [GET] API XEM CHI TIẾT 1 BÀI NỘP (Dành cho Học sinh & Giáo viên)
 // ======================================================================
 router.get("/detail/:id", verifyToken, async (req, res) => {
     try {

@@ -78,18 +78,19 @@ const questionSchema = new mongoose.Schema(
         },
 
         // ==========================================
-        // CẤU TRÚC LƯU TRỮ TRONG KHO (MỚI)
+        // CẤU TRÚC LƯU TRỮ TRONG KHO (PHẲNG HÓA)
         // ==========================================
-        // Tên Thư mục chứa câu hỏi này
-        folderName: { 
-            type: String, 
-            default: "" 
+        questionSetId: { 
+            type: mongoose.Schema.Types.ObjectId, 
+            ref: 'QuestionSet', 
+            // ĐÃ FIX: Chuyển sang không bắt buộc để Bài tập có thể lưu được
+            default: null 
         },
-        
-        // Tên Đề thi chứa câu hỏi này (nằm trong thư mục trên)
+
         examName: { 
             type: String, 
-            default: "" 
+            // ĐÃ FIX: Chuyển sang không bắt buộc
+            default: ""
         },
         // ==========================================
         
@@ -110,6 +111,12 @@ const questionSchema = new mongoose.Schema(
         isBank: { 
             type: Boolean, 
             default: false 
+        },
+
+        // Đánh dấu trạng thái Khóa / Mở khóa của Admin
+        isActive: {
+            type: Boolean,
+            default: true
         }
     },
     { timestamps: true }

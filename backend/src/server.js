@@ -83,7 +83,7 @@ app.use("/api/submissions", submissionRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/classes", classRoutes); 
 app.use("/api/teacher", teacherRoutes);
-app.use("/api/question-sets", questionSetRoutes);
+app.use("/api/questionSet", questionSetRoutes);
 app.use("/api/upload", uploadRoutes); 
 
 // ==========================================

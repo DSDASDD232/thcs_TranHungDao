@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "../lib/axios";
-import ExcelJS from 'exceljs';
-import { saveAs } from 'file-saver';
+import { exportFormalExcel } from "../lib/exportExcel"; 
 
-// Import các UI Component
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -13,17 +11,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-// Import các Icon
 import { 
   BookOpen, FileQuestion, LogOut, CheckSquare, School,
-  Loader2, PlusCircle, Trash2, Pencil, X,
+  Loader2, PlusCircle, Trash2, PenTool, X,
   UserCircle, Users, CheckCircle2, ArrowUpDown, Menu, Trophy, History, Database, Search, Filter,
-  CalendarClock, Calendar, Lock, AlertCircle, FileCheck, Clock, Eye, Download, Sparkles, Medal, BarChart, PenTool, Settings, Key, Save, Edit, FileText
+  CalendarClock, Calendar, Lock, AlertCircle, FileCheck, Clock, Eye, Download, Sparkles, Medal, BarChart, Settings, Key, Save, Edit, FileText
 } from "lucide-react";
 
-// ==========================================
-// CÁC HÀM HỖ TRỢ CHUNG
-// ==========================================
 const getRankMedal = (index) => {
   if (index === 0) return <Medal className="w-8 h-8 text-amber-400 drop-shadow-md" fill="currentColor" />;
   if (index === 1) return <Medal className="w-8 h-8 text-slate-300 drop-shadow-md" fill="currentColor" />;
@@ -31,7 +25,6 @@ const getRankMedal = (index) => {
   return <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold">{index + 1}</div>;
 };
 
-// Hàm định dạng ngày giờ an toàn (Chống lỗi Invalid Date)
 const formatSafeDateTime = (dateString) => {
   if (!dateString) return { time: "--", date: "--" };
   const d = new Date(dateString);
@@ -47,112 +40,6 @@ const getPrimarySubject = (profile) => {
   if (profile.subject) return profile.subject;
   return "";
 };
-
-const exportFormalExcel = async (dataList, reportTitle, fileName, teacherName) => {
-  if (!dataList || dataList.length === 0) return alert("Không có dữ liệu để xuất báo cáo!");
-
-  const today = new Date();
-  const dateStr = `Ngày ${today.getDate().toString().padStart(2, '0')} tháng ${(today.getMonth() + 1).toString().padStart(2, '0')} năm ${today.getFullYear()}`;
-
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet('Báo Cáo', { views: [{ showGridLines: false }] });
-
-  sheet.columns = [ { width: 10 }, { width: 35 }, { width: 25 }, { width: 25 }, { width: 20 } ];
-
-  sheet.addRow(["UBND HUYỆN THỦY NGUYÊN", "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"]);
-  sheet.addRow(["TRƯỜNG THCS TRẦN HƯNG ĐẠO", "", "", "Độc lập - Tự do - Hạnh phúc"]);
-  sheet.mergeCells('A1:C1'); sheet.mergeCells('A2:C2'); sheet.mergeCells('D1:E1'); sheet.mergeCells('D2:E2');
-
-  const formatGovHeader = (rowNum, isBold) => {
-    const row = sheet.getRow(rowNum); row.height = 25; 
-    row.eachCell(cell => { cell.font = { name: 'Times New Roman', size: 12, bold: isBold }; cell.alignment = { vertical: 'middle', horizontal: 'center' }; });
-  };
-  formatGovHeader(1, true); formatGovHeader(2, true);
-  sheet.getCell('D2').font = { name: 'Times New Roman', size: 13, bold: true, underline: true }; 
-
-  sheet.addRow([]); 
-  const titleRow = sheet.addRow([reportTitle.toUpperCase()]);
-  sheet.mergeCells('A4:E4'); titleRow.height = 40;
-  
-  const titleCell = sheet.getCell('A4');
-  titleCell.font = { name: 'Times New Roman', size: 16, bold: true, color: { argb: 'FF0070C0' } }; 
-  titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
-
-  sheet.addRow([]); 
-  const tableHeaders = Object.keys(dataList[0]);
-  const headerRow = sheet.addRow(tableHeaders); headerRow.height = 30; 
-  headerRow.eachCell((cell) => {
-    cell.font = { name: 'Times New Roman', size: 12, bold: true, color: { argb: 'FFFFFFFF' } }; 
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0070C0' } }; 
-    cell.alignment = { vertical: 'middle', horizontal: 'center' };
-    cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }; 
-  });
-
-  dataList.forEach(obj => {
-    const row = sheet.addRow(Object.values(obj)); row.height = 25; 
-    row.eachCell((cell, colNumber) => {
-      cell.font = { name: 'Times New Roman', size: 12 };
-      cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
-      if(colNumber === 1 || colNumber >= 4) cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      else cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
-    });
-  });
-
-  sheet.addRow([]); sheet.addRow([]);
-  const dateRowNum = sheet.rowCount + 1;
-  sheet.addRow(["", "", "", dateStr]);
-  sheet.mergeCells(`D${dateRowNum}:E${dateRowNum}`);
-  sheet.getCell(`D${dateRowNum}`).font = { name: 'Times New Roman', size: 12, italic: true };
-  sheet.getCell(`D${dateRowNum}`).alignment = { horizontal: 'center' };
-
-  const signRowNum = sheet.rowCount + 1;
-  sheet.addRow(["", "", "", "Người xuất báo cáo"]);
-  sheet.mergeCells(`D${signRowNum}:E${signRowNum}`);
-  sheet.getCell(`D${signRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
-  sheet.getCell(`D${signRowNum}`).alignment = { horizontal: 'center' };
-
-  sheet.addRow([]); sheet.addRow([]); sheet.addRow([]); sheet.addRow([]);
-  const nameRowNum = sheet.rowCount + 1;
-  sheet.addRow(["", "", "", teacherName]);
-  sheet.mergeCells(`D${nameRowNum}:E${nameRowNum}`);
-  sheet.getCell(`D${nameRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
-  sheet.getCell(`D${nameRowNum}`).alignment = { horizontal: 'center' };
-
-  const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  saveAs(blob, `${fileName}.xlsx`);
-};
-
-// 👉 HÀM TẠO DANH SÁCH CÁC TUẦN TRONG QUÁ KHỨ (CHO BẢNG THI ĐUA)
-const generatePastWeeks = () => {
-    const weeks = [];
-    let currentDate = new Date();
-    
-    for (let i = 0; i < 12; i++) {
-        const day = currentDate.getDay();
-        const diffToMonday = currentDate.getDate() - day + (day === 0 ? -6 : 1);
-        const monday = new Date(currentDate.setDate(diffToMonday));
-        monday.setHours(0, 0, 0, 0);
-
-        const sunday = new Date(monday);
-        sunday.setDate(monday.getDate() + 6);
-        sunday.setHours(23, 59, 59, 999);
-
-        const month = monday.getMonth() + 1;
-        const year = monday.getFullYear();
-        const weekOfMonth = Math.ceil(monday.getDate() / 7);
-
-        weeks.push({
-            id: `${monday.toISOString()}_${sunday.toISOString()}`,
-            label: `Tuần ${weekOfMonth} Tháng ${month} Năm ${year}`,
-            subLabel: `(${monday.toLocaleDateString('vi-VN', {day:'2-digit', month:'2-digit'})} - ${sunday.toLocaleDateString('vi-VN', {day:'2-digit', month:'2-digit'})})`,
-        });
-
-        currentDate.setDate(monday.getDate() - 7);
-    }
-    return weeks;
-};
-const pastWeeksList = generatePastWeeks();
 
 const CustomDateInput = ({ label, value, onChange, min }) => {
   const [textVal, setTextVal] = useState("");
@@ -223,18 +110,10 @@ const CustomDateInput = ({ label, value, onChange, min }) => {
   );
 };
 
-// ==========================================
-// COMPONENT CHÍNH TEACHER DASHBOARD
-// ==========================================
 const TeacherDashboard = () => {
   const navigate = useNavigate();
   const fullName = localStorage.getItem("fullName") || "Giáo viên";
 
-  // Thời gian động cho bộ lọc Bảng Thi đua
-  const currentMonthStr = `Tháng ${new Date().getMonth() + 1} Năm ${new Date().getFullYear()}`;
-  const currentYearStr = `Năm ${new Date().getFullYear()}`;
-
-  // STATE ĐIỀU HƯỚNG
   const [activeTab, setActiveTab] = useState("my-classes"); 
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -244,10 +123,8 @@ const TeacherDashboard = () => {
   const [teacherProfile, setTeacherProfile] = useState(null);
   const [allClasses, setAllClasses] = useState([]);
 
-  // BỘ LỌC BÀI TẬP 
   const [assignmentFilter, setAssignmentFilter] = useState("all");
 
-  // STATE DANH SÁCH LỚP
   const [currentViewClassId, setCurrentViewClassId] = useState(null);
   const [isStudentListOpen, setIsStudentListOpen] = useState(false);
   const [classStudents, setClassStudents] = useState([]);
@@ -259,30 +136,33 @@ const TeacherDashboard = () => {
   const [studentHistory, setStudentHistory] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
-  // STATE SỬA HỌC SINH
   const [isEditStudentModalOpen, setIsEditStudentModalOpen] = useState(false);
   const [selectedStudentForEdit, setSelectedStudentForEdit] = useState(null);
   const [editStudentForm, setEditStudentForm] = useState({ fullName: '', phone: '', address: '', newPassword: '' });
   const [isUpdatingStudent, setIsUpdatingStudent] = useState(false);
 
-  // STATE CÀI ĐẶT THÔNG TIN CÁ NHÂN
   const [profileForm, setProfileForm] = useState({ fullName: '', phone: '', address: '' });
   const [passwordData, setPasswordData] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
-  // STATE BẢNG THI ĐUA
+  // 👉 CẬP NHẬT STATE BỘ LỌC BẢNG THI ĐUA (NĂM -> THÁNG -> TUẦN)
+  const currentYear = new Date().getFullYear().toString();
+  const currentMonthNum = (new Date().getMonth() + 1).toString();
+  
   const [leaderboardData, setLeaderboardData] = useState([]);
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(false);
   const [selectedLeaderboardClass, setSelectedLeaderboardClass] = useState("");
-  const [leaderboardTimeFilter, setLeaderboardTimeFilter] = useState("all");
   const [leaderboardSubjectFilter, setLeaderboardSubjectFilter] = useState("all"); 
   const [leaderboardTypeFilter, setLeaderboardTypeFilter] = useState("all"); 
+
+  const [lbYear, setLbYear] = useState(currentYear);
+  const [lbMonth, setLbMonth] = useState("all"); // 'all' = Cả năm
+  const [lbWeek, setLbWeek] = useState("all");   // 'all' = Cả tháng
 
   const [searchClassQuery, setSearchClassQuery] = useState("");
   const [classStatsMap, setClassStatsMap] = useState({});
   const [isFetchingStats, setIsFetchingStats] = useState(false);
 
-  // STATE HẠN NỘP VÀ MẬT KHẨU
   const [isDeadlineModalOpen, setIsDeadlineModalOpen] = useState(false);
   const [selectedAssignmentForDeadline, setSelectedAssignmentForDeadline] = useState(null);
   const [newDeadlineDate, setNewDeadlineDate] = useState("");
@@ -356,14 +236,72 @@ const TeacherDashboard = () => {
     fetchAllClassStats();
   }, [activeTab, teacherProfile]);
 
+  // 👉 HÀM TÍNH TOÁN CÁC TUẦN TRONG THÁNG ĐƯỢC CHỌN
+  const weeksInMonth = useMemo(() => {
+      if (lbMonth === "all") return [];
+      const weeks = [];
+      const year = parseInt(lbYear);
+      const month = parseInt(lbMonth);
+      
+      // Ngày đầu và ngày cuối tháng
+      const firstDate = new Date(year, month - 1, 1);
+      const lastDate = new Date(year, month, 0);
+      
+      let current = new Date(firstDate);
+      let weekNum = 1;
+
+      while (current <= lastDate) {
+          const weekStart = new Date(current);
+          const weekEnd = new Date(current);
+          // Tìm Chủ nhật của tuần đó
+          const day = weekEnd.getDay();
+          const diffToSunday = day === 0 ? 0 : 7 - day;
+          weekEnd.setDate(weekEnd.getDate() + diffToSunday);
+          
+          // Không vượt quá ngày cuối tháng
+          if (weekEnd > lastDate) weekEnd.setTime(lastDate.getTime());
+          
+          weekEnd.setHours(23, 59, 59, 999);
+          
+          weeks.push({
+              id: `${weekStart.toISOString()}_${weekEnd.toISOString()}`,
+              label: `Tuần ${weekNum}`,
+              subLabel: `${weekStart.toLocaleDateString('vi-VN')} - ${weekEnd.toLocaleDateString('vi-VN')}`
+          });
+
+          current = new Date(weekEnd);
+          current.setDate(current.getDate() + 1);
+          current.setHours(0,0,0,0);
+          weekNum++;
+      }
+      return weeks;
+  }, [lbYear, lbMonth]);
+
+  // 👉 TỰ ĐỘNG FETCH DATA KHI CÁC FILTER THAY ĐỔI
   useEffect(() => {
-    const fetchLeaderboard = async (classId, timeFilter, subjectFilter, typeFilter) => {
+    const fetchLeaderboard = async (classId) => {
       if (!classId) return;
       setIsLoadingLeaderboard(true);
       try {
+        // Tính toán timeframe chuỗi gửi cho backend
+        let computedTimeframe = "all";
+        if (lbWeek !== "all") {
+            computedTimeframe = lbWeek; // Đây là chuỗi 'StartISO_EndISO'
+        } else if (lbMonth !== "all") {
+            // Lấy từ ngày 1 đến ngày cuối của tháng
+            const start = new Date(parseInt(lbYear), parseInt(lbMonth) - 1, 1);
+            const end = new Date(parseInt(lbYear), parseInt(lbMonth), 0, 23, 59, 59);
+            computedTimeframe = `${start.toISOString()}_${end.toISOString()}`;
+        } else if (lbYear) {
+            // Lấy cả năm
+            const start = new Date(parseInt(lbYear), 0, 1);
+            const end = new Date(parseInt(lbYear), 11, 31, 23, 59, 59);
+            computedTimeframe = `${start.toISOString()}_${end.toISOString()}`;
+        }
+
         const [studentsRes, leaderboardRes] = await Promise.all([
           axios.get(`/classes/${classId}/students`, getHeader()),
-          axios.get(`/submissions/class/${classId}/leaderboard?timeframe=${timeFilter}&subject=${subjectFilter}&type=${typeFilter}`, getHeader()).catch(() => ({ data: { leaderboard: [] } }))
+          axios.get(`/submissions/class/${classId}/leaderboard?timeframe=${computedTimeframe}&subject=${leaderboardSubjectFilter}&type=${leaderboardTypeFilter}`, getHeader()).catch(() => ({ data: { leaderboard: [] } }))
         ]);
 
         const baseStudents = studentsRes.data.students || [];
@@ -385,9 +323,22 @@ const TeacherDashboard = () => {
     };
 
     if (activeTab === "leaderboard" && selectedLeaderboardClass) {
-        fetchLeaderboard(selectedLeaderboardClass, leaderboardTimeFilter, leaderboardSubjectFilter, leaderboardTypeFilter);
+        fetchLeaderboard(selectedLeaderboardClass);
     }
-  }, [activeTab, selectedLeaderboardClass, leaderboardTimeFilter, leaderboardSubjectFilter, leaderboardTypeFilter]);
+  }, [activeTab, selectedLeaderboardClass, lbYear, lbMonth, lbWeek, leaderboardSubjectFilter, leaderboardTypeFilter]);
+
+  // Xử lý Reset khi đổi Năm / Tháng
+  const handleYearChange = (val) => {
+      setLbYear(val);
+      setLbMonth("all"); // Đổi năm thì reset tháng
+      setLbWeek("all");
+  };
+
+  const handleMonthChange = (val) => {
+      setLbMonth(val);
+      setLbWeek("all"); // Đổi tháng thì reset tuần
+  };
+
 
   const handleLogout = () => { localStorage.clear(); navigate("/login"); };
   const handleMenuClick = (tab) => { setActiveTab(tab); setIsMobileMenuOpen(false); };
@@ -513,7 +464,13 @@ const TeacherDashboard = () => {
     const dataToExport = stats.leaderboard.map((st, idx) => ({
       "Hạng": idx + 1, "Họ và Tên": st.fullName, "Tài Khoản": st.username || "", "Số lượt nộp": st.totalTests, "Điểm Trung Bình": parseFloat(st.averageScore || 0)
     }));
-    exportFormalExcel(dataToExport, `BÁO CÁO HỌC TẬP LỚP ${className}`, `Bao_Cao_Hoc_Tap_Lop_${className}`, teacherProfile?.fullName || fullName || "Giáo viên phụ trách");
+    exportFormalExcel(
+        dataToExport, 
+        `BÁO CÁO HỌC TẬP LỚP ${className}`, 
+        `Bao_Cao_Hoc_Tap_Lop_${className}`, 
+        teacherProfile?.fullName || fullName || "Giáo viên phụ trách",
+        "Giáo viên"
+    );
   };
 
   const handleExportLeaderboardExcel = () => {
@@ -525,7 +482,13 @@ const TeacherDashboard = () => {
     const dataToExport = leaderboardData.map((st, idx) => ({
       "Hạng": idx + 1, "Họ và Tên": st.fullName, "Tài Khoản": st.username || "", "Số lượt nộp bài": st.totalTests, "Điểm Trung Bình": parseFloat(st.averageScore || 0)
     }));
-    exportFormalExcel(dataToExport, `BẢNG THI ĐUA LỚP ${className}`, `Bang_Thi_Dua_${className}`, teacherProfile?.fullName || fullName || "Giáo viên phụ trách");
+    exportFormalExcel(
+        dataToExport, 
+        `BẢNG THI ĐUA LỚP ${className}`, 
+        `Bang_Thi_Dua_${className}`, 
+        teacherProfile?.fullName || fullName || "Giáo viên phụ trách",
+        "Giáo viên"
+    );
   };
 
   const handleDeleteAssignment = async (id, title) => {
@@ -607,10 +570,6 @@ const TeacherDashboard = () => {
     return teacherProfile.department === "KHTN" ? "Tổ KHTN" : teacherProfile.department === "KHXH" ? "Tổ KHXH" : "Chưa phân tổ";
   };
 
-  const teacherSubjects = Array.isArray(teacherProfile?.subjects) && teacherProfile.subjects.length > 0 
-    ? teacherProfile.subjects : teacherProfile?.subject ? [teacherProfile.subject] : [];
-
-  // LỌC BÀI TẬP (MỚI)
   const displayedAssignments = assignments.filter(a => {
       if (assignmentFilter === "all") return true;
       return a.assignmentType === assignmentFilter;
@@ -1329,31 +1288,50 @@ const TeacherDashboard = () => {
                   </SelectContent>
                 </Select>
 
-                {/* 👉 BỘ LỌC THỜI GIAN THEO TUẦN ĐÃ ĐƯỢC CHIA NHỎ */}
-                <Select value={leaderboardTimeFilter || "all"} onValueChange={setLeaderboardTimeFilter}>
-                  <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[200px] border-none font-bold text-sky-800 shadow-sm [&>span]:truncate">
+                {/* 👉 LỌC NĂM */}
+                <Select value={lbYear} onValueChange={handleYearChange}>
+                  <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[120px] border-none font-bold text-sky-800 shadow-sm">
+                    <span className="truncate">Năm {lbYear}</span>
+                  </SelectTrigger>
+                  <SelectContent position="popper" className="bg-white z-50 max-h-[400px]">
+                      {Array.from({length: 10}, (_, i) => currentYear - 5 + i).map(year => (
+                         <SelectItem key={year} value={String(year)} className="font-bold">Năm {year}</SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+
+                {/* 👉 LỌC THÁNG */}
+                <Select value={lbMonth} onValueChange={handleMonthChange}>
+                  <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[130px] border-none font-bold text-sky-800 shadow-sm">
+                    <span className="truncate">{lbMonth === "all" ? "Cả năm" : `Tháng ${lbMonth}`}</span>
+                  </SelectTrigger>
+                  <SelectContent position="popper" className="bg-white z-50 max-h-[400px]">
+                      <SelectItem value="all" className="font-bold text-sky-600">-- Cả năm --</SelectItem>
+                      {Array.from({length: 12}, (_, i) => i + 1).map(month => (
+                         <SelectItem key={month} value={String(month)} className="font-bold">Tháng {month}</SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+
+                {/* 👉 LỌC TUẦN (CHỈ HIỂN THỊ KHI ĐÃ CHỌN THÁNG CỤ THỂ) */}
+                <Select value={lbWeek} onValueChange={setLbWeek} disabled={lbMonth === "all"}>
+                  <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[200px] border-none font-bold text-sky-800 shadow-sm">
                     <span className="truncate">
-                        {leaderboardTimeFilter === 'all' ? 'Tất cả thời gian' : 
-                         leaderboardTimeFilter === 'month' ? currentMonthStr : 
-                         leaderboardTimeFilter === 'year' ? currentYearStr :
-                         pastWeeksList.find(w => w.id === leaderboardTimeFilter)?.label || 'Chọn thời gian'}
+                        {lbMonth === "all" 
+                            ? "Chọn tháng trước" 
+                            : lbWeek === "all" 
+                                ? "Tất cả các tuần" 
+                                : weeksInMonth.find(w => w.id === lbWeek)?.label || 'Chọn tuần'}
                     </span>
                   </SelectTrigger>
                   <SelectContent position="popper" className="bg-white z-50 max-h-[400px]">
-                    <SelectGroup>
-                        <SelectItem value="all" className="font-bold">Tất cả thời gian</SelectItem>
-                        <SelectItem value="month" className="font-bold">{currentMonthStr}</SelectItem>
-                        <SelectItem value="year" className="font-bold">{currentYearStr}</SelectItem>
-                    </SelectGroup>
-                    <SelectGroup>
-                        <SelectLabel className="font-black text-sky-600 bg-sky-50 uppercase tracking-wider py-2 mt-2">Thống kê theo Tuần</SelectLabel>
-                        {pastWeeksList.map(week => (
-                            <SelectItem key={week.id} value={week.id}>
-                                <span className="font-bold">{week.label}</span>
-                                <span className="text-slate-400 text-xs ml-2">{week.subLabel}</span>
-                            </SelectItem>
-                        ))}
-                    </SelectGroup>
+                    <SelectItem value="all" className="font-bold text-sky-600">-- Cả tháng --</SelectItem>
+                    {weeksInMonth.map(week => (
+                        <SelectItem key={week.id} value={week.id}>
+                            <span className="font-bold">{week.label}</span>
+                            <span className="text-slate-400 text-xs ml-2">{week.subLabel}</span>
+                        </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 

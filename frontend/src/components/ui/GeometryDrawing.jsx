@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Camera, Loader2 } from "lucide-react";
+import { Camera, Loader2, Sparkles } from "lucide-react";
 
 const GeometryDrawing = ({ onSaveImage, onCancel }) => {
   const [isSaving, setIsSaving] = useState(false);
@@ -11,8 +11,8 @@ const GeometryDrawing = ({ onSaveImage, onCancel }) => {
     const loadGeoGebra = () => {
       const parameters = {
         id: "ggbApplet",
-        width: 900,        // Chiều rộng bảng vẽ
-        height: 600,       // Chiều cao bảng vẽ
+        width: 940,        // Mở rộng bề ngang tối đa cho học sinh vẽ thoải mái
+        height: 500,       // Chiều cao chuẩn để không bị Modal cắt mất
         showToolBar: true,
         showAlgebraInput: true,
         showMenuBar: false,
@@ -60,28 +60,34 @@ const GeometryDrawing = ({ onSaveImage, onCancel }) => {
   };
 
   return (
-    <div className="flex flex-col gap-4 w-full">
+    <div className="flex flex-col gap-3 w-full">
+      {/* 👉 ĐƯA NÚT NỘP BÀI LÊN TRÊN CÙNG ĐỂ KHÔNG BAO GIỜ BỊ KHUẤT */}
+      <div className="flex items-center justify-between bg-sky-50 px-4 py-2.5 rounded-xl border border-sky-100 shadow-sm">
+         <p className="text-sm font-bold text-sky-800 hidden sm:flex items-center gap-1.5">
+            <Sparkles className="w-4 h-4 text-amber-500" /> Vẽ xong hãy bấm nút bên phải để nộp 👉
+         </p>
+         <div className="flex items-center gap-2 w-full sm:w-auto">
+           <Button variant="ghost" onClick={onCancel} className="flex-1 sm:flex-none h-10 rounded-lg text-slate-500 font-bold hover:bg-slate-200">
+             Đóng lại
+           </Button>
+           <Button onClick={captureDrawing} disabled={isSaving || isLoading} className="flex-1 sm:flex-none h-10 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-bold shadow-sm px-4">
+             {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Camera className="w-4 h-4 mr-2" />}
+             Chụp & Nộp hình này
+           </Button>
+         </div>
+      </div>
+
       {/* Màn hình chờ load */}
       {isLoading && (
         <div className="flex flex-col items-center justify-center py-20 bg-slate-50 rounded-2xl border border-dashed border-slate-300">
           <Loader2 className="w-10 h-10 animate-spin text-sky-500 mb-3" />
-          <p className="text-slate-500 font-medium animate-pulse">Đang nạp công cụ Vẽ hình GeoGebra...</p>
+          <p className="text-slate-500 font-medium animate-pulse">Đang nạp bảng vẽ siêu to khổng lồ...</p>
         </div>
       )}
       
       {/* Vùng chứa bảng vẽ */}
-      <div className={`w-full flex justify-center rounded-2xl overflow-hidden border-2 border-sky-200 shadow-inner bg-white ${isLoading ? 'hidden' : 'block'}`}>
+      <div className={`w-full flex justify-center rounded-xl overflow-hidden border-2 border-slate-200 shadow-sm bg-white ${isLoading ? 'hidden' : 'block'}`}>
         <div id="ggb-element" style={{ margin: '0 auto' }}></div>
-      </div>
-
-      <div className="flex items-center justify-end gap-3 mt-2">
-        <Button variant="outline" onClick={onCancel} className="h-12 rounded-xl text-slate-500 font-bold border-slate-200 hover:bg-slate-100">
-          Hủy bỏ
-        </Button>
-        <Button onClick={captureDrawing} disabled={isSaving || isLoading} className="h-12 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-bold shadow-md shadow-sky-200 px-6 transition-all">
-          {isSaving ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Camera className="w-5 h-5 mr-2" />}
-          Chụp và nộp hình này
-        </Button>
       </div>
     </div>
   );

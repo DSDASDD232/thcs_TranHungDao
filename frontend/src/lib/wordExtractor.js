@@ -1,15 +1,15 @@
 import mammoth from "mammoth";
 
-// 1. HÀM TỰ ĐỘNG CẮT CÁC CHỮ BỊ DÍNH TRONG WORD
+// 1. HÀM TỰ ĐỘNG CẮT CÁC CHỮ BỊ DÍNH VÀ XUỐNG DÒNG TRONG WORD
 export const sanitizeRawText = (text) => {
+  if (!text) return "";
   let t = text;
   
-  // Sửa lỗi dính chữ trước "Câu X:" (VD: "2026Câu 1:" -> "2026\nCâu 1:")
-  t = t.replace(/([^\n\s])\s*(Câu\s+\d+\s*[:.])/gi, "$1\n$2");
+  // Ép xuống 2 dòng trước chữ "Câu X:" để dễ nhìn trên UI (VD: "2026Câu 1:" -> "2026\n\nCâu 1:")
+  t = t.replace(/([^\n\s])\s*(Câu\s+\d+\s*[:.])/gi, "$1\n\n$2");
   
-  // Sửa lỗi dính chữ trước đáp án A., B., C... (VD: "là:A." -> "là:\nA.")
-  // Quét rộng từ A đến P (16 đáp án tối đa)
-  t = t.replace(/([^\n\s])\s*(\*?[A-P][.)]\s)/g, "$1\n$2");
+  // Ép xuống 1 dòng trước đáp án A., B., C... nếu nó bị dính chữ (VD: "sángB. Chỉ" -> "sáng\nB. Chỉ")
+  t = t.replace(/([^\n\s])\s*(\*?[A-P][.)])/g, "$1\n$2");
   
   return t;
 };
@@ -31,25 +31,26 @@ export const extractQuestionsFromText = (text, isForPreview = false) => {
   if (textParts.length > 1) {
       const answerPart = textParts.slice(1).join("\n");
       
-      // Kịch bản 1: Đáp án ghi rõ ràng (1. A | Câu 2: B)
-      const numberedAnsRegex = /(?:Câu\s*)?(\d+)\s*[:.-]?\s*([A-P])(?!\w)/gi;
-      let match;
-      let foundNumbered = false;
-      while ((match = numberedAnsRegex.exec(answerPart)) !== null) {
-          globalAnswers[match[1]] = match[2].toUpperCase(); 
-          foundNumbered = true;
+      // Kịch bản 1: Quét đáp án dạng bảng / cột dọc (A, B, C đứng 1 mình 1 dòng, hoặc 1. A, 2. B)
+      // 👉 FIX LỖI \r TRÊN WINDOWS: Thêm \r vào regex để không bị trượt dấu xuống dòng
+      const answerListPart = answerPart.split(/(?:^|\n)\s*(?:Câu|Bài)\s+1\s*[:.]/i)[0];
+      const lineRegex = /^[ \t]*(?:(?:\d+)[ \t]*[:.-]?[ \t]*)?([A-P])[ \t\r]*[.)]?[ \t\r]*$/gm;
+      let letMatch;
+      let qIndex = 1;
+      let foundVertical = false;
+      while ((letMatch = lineRegex.exec(answerListPart)) !== null) {
+          globalAnswers[qIndex] = letMatch[1].toUpperCase();
+          qIndex++;
+          foundVertical = true;
       }
 
-      // Kịch bản 2: Đáp án chỉ là cột chữ dọc trơ trọi (A \n B \n C)
-      if (!foundNumbered) {
-          // Lấy đoạn đầu tiên trước khi vào phần "Câu 1: Lời giải..."
-          const answerListPart = answerPart.split(/(?:^|\n)\s*(?:Câu|Bài)\s+1\s*[:.]/i)[0];
-          const letterRegex = /^[ \t]*([A-P])[ \t]*$/gm;
-          let letMatch;
-          let qIndex = 1;
-          while ((letMatch = letterRegex.exec(answerListPart)) !== null) {
-              globalAnswers[qIndex] = letMatch[1].toUpperCase();
-              qIndex++;
+      // Kịch bản 2: Nếu không có cột dọc, tìm dạng nằm ngang "Câu 1: A"
+      if (!foundVertical) {
+          // 👉 FIX LỖI BẮT NHẦM CHỮ M (Mặt Trời): Bắt buộc sau chữ A-P phải là khoảng trắng hoặc dấu câu
+          const numberedAnsRegex = /(?:Câu|Bài)\s*(\d+)\s*[:.-]\s*([A-P])(?=[\s\n\r.,;]|$)/gi;
+          let match;
+          while ((match = numberedAnsRegex.exec(answerPart)) !== null) {
+              globalAnswers[match[1]] = match[2].toUpperCase(); 
           }
       }
 
@@ -61,8 +62,8 @@ export const extractQuestionsFromText = (text, isForPreview = false) => {
                const qNum = qMatch[1];
                let explanation = ansBlock.replace(/^\s*(?:Câu|Bài)\s+\d+(?:\s*[([].*?[)\]])?\s*[:.]\s*/i, "").trim();
                
-               // Dò tìm "Đáp án đúng là X" trong lời giải
-               const ansLetterMatch = explanation.match(/(?:đáp án(?: đúng)? (?:là|chọn)|chọn đáp án|chọn)\s*([A-P])\b/i);
+               // 👉 FIX LỖI TƯƠNG TỰ Ở PHẦN LỜI GIẢI
+               const ansLetterMatch = explanation.match(/(?:đáp án(?: đúng)? (?:là|chọn)|chọn đáp án|chọn)\s*([A-P])(?=[\s\n\r.,;]|$)/i);
                if (ansLetterMatch) {
                    globalAnswers[qNum] = ansLetterMatch[1].toUpperCase();
                }
@@ -98,8 +99,7 @@ export const extractQuestionsFromText = (text, isForPreview = false) => {
         essayAnswerText = partsByExplanation[1].trim();
     }
 
-    // TÁCH CÁC ĐÁP ÁN ĐỘNG (Bao nhiêu đáp án lấy bấy nhiêu, max 16)
-    const optionSplitRegex = /(?:^|\n|\t|\s+)\s*(\*?)\s*([A-P])[.)]\s+/;
+    const optionSplitRegex = /(?:^|\n|\t|\s+)\s*(\*?)\s*([A-P])[.)]\s*/;
     const optionParts = questionBody.split(optionSplitRegex);
     
     content = optionParts[0].replace(/^\s*(?:Câu|Bài|Question)\s+\d+(?:\s*[([].*?[)\]])?\s*[:.]\s*/i, "").trim();
@@ -113,23 +113,22 @@ export const extractQuestionsFromText = (text, isForPreview = false) => {
         let letter = optionParts[i + 1].toUpperCase();
         let optText = optionParts[i + 2] ? optionParts[i + 2].trim() : "";
 
-        // Tránh bắt nhầm phần tiêu đề kế tiếp
         optText = optText.split(/\n\s*PHẦN\s+[IVXLCDM]+\b/i)[0].trim();
         options.push(optText);
 
         if (isCorrectMark) detectedCorrectAnswer = letter;
     }
 
-    // Đối chiếu đáp án
+    // Đối chiếu đáp án chuẩn xác
     if (detectedCorrectAnswer) {
         correctAnswer = detectedCorrectAnswer;
-    } else if (essayAnswerText.match(/^[A-P]$/i)) { 
-        correctAnswer = essayAnswerText.toUpperCase();
-        essayAnswerText = ""; 
     } else if (qNumber && globalAnswers[qNumber]) {
         correctAnswer = globalAnswers[qNumber];
+    } else if (essayAnswerText && essayAnswerText.match(/^[A-P]$/i)) { 
+        correctAnswer = essayAnswerText.toUpperCase();
+        essayAnswerText = ""; 
     } else {
-        correctAnswer = "A"; // Mặc định
+        correctAnswer = "A"; 
     }
 
     if (qNumber && globalEssayAnswers[qNumber]) {
@@ -167,9 +166,15 @@ export const processWordFile = (file, isForPreview = false) => {
       try {
         const arrayBuffer = event.target.result;
         const result = await mammoth.extractRawText({ arrayBuffer });
-        const text = result.value;
-        const questions = extractQuestionsFromText(text, isForPreview);
-        resolve({ text, questions });
+        
+        // 👉 FIX LỖI GIAO DIỆN VĂN BẢN THÔ BỊ DÍNH CỤC: 
+        // Dọn dẹp text NGAY LÚC NÀY trước khi ném lên UI
+        const cleanText = sanitizeRawText(result.value);
+        
+        const questions = extractQuestionsFromText(cleanText, isForPreview);
+        
+        // Trả về cleanText (đã xuống dòng đẹp đẽ) thay vì text gốc
+        resolve({ text: cleanText, questions });
       } catch (error) {
         reject(error);
       }

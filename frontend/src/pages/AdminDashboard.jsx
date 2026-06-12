@@ -2354,7 +2354,7 @@ const AdminDashboard = () => {
               <CardContent className="p-4 sm:p-6">
                 <div className="mb-4 flex flex-col sm:flex-row gap-3 sm:items-center">
                   <span className="text-sm font-semibold text-slate-600">Chọn lớp:</span>
-                  <Select value={selectedLbClassId || undefined} onValueChange={setSelectedLbClassId}>
+                  <Select value={selectedLbClassId || ""} onValueChange={setSelectedLbClassId}>
                     <SelectTrigger className="w-full sm:w-[220px] bg-white border-slate-200 rounded-xl">
                       <span className="truncate">
                         {selectedLbClassId
@@ -2814,7 +2814,7 @@ const AdminDashboard = () => {
                       <SelectTrigger className="h-11 rounded-xl border-sky-100 bg-white"><span className="truncate">{newUser.grade ? `Khối ${newUser.grade}` : "Chọn Khối"}</span></SelectTrigger>
                       <SelectContent><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent>
                     </Select>
-                    <Select value={newUser.classId ? String(newUser.classId) : undefined} onValueChange={(val) => setNewUser({...newUser, classId: val})} disabled={!newUser.grade}>
+                    <Select value={newUser.classId ? String(newUser.classId) : ""} onValueChange={(val) => setNewUser({...newUser, classId: val})} disabled={!newUser.grade}>
                       <SelectTrigger className="h-11 rounded-xl border-sky-100 bg-white"><span className="truncate">{newUser.classId ? classesList.find(c => String(c._id) === String(newUser.classId))?.name : "Chọn Lớp"}</span></SelectTrigger>
                       <SelectContent>{filteredClassesForDropdown.length === 0 ? <SelectItem value="none" disabled>Chưa có lớp</SelectItem> : filteredClassesForDropdown.map(c => (<SelectItem key={c._id} value={String(c._id)}>{c.name}</SelectItem>))}</SelectContent>
                     </Select>
@@ -3030,7 +3030,7 @@ const AdminDashboard = () => {
                     <SelectTrigger className="h-11 rounded-xl bg-white"><span className="truncate">{editUser.grade ? `Khối ${editUser.grade}` : "Chọn khối"}</span></SelectTrigger>
                     <SelectContent><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent>
                   </Select>
-                  <Select value={editUser.classId ? String(editUser.classId) : undefined} onValueChange={(val) => setEditUser({...editUser, classId: val})} disabled={!editUser.grade}>
+                  <Select value={editUser.classId ? String(editUser.classId) : ""} onValueChange={(val) => setEditUser({...editUser, classId: val})} disabled={!editUser.grade}>
                     <SelectTrigger className="h-11 rounded-xl bg-white"><span className="truncate">{editUser.classId ? classesList.find(c => String(c._id) === String(editUser.classId))?.name : "Chọn Lớp"}</span></SelectTrigger>
                     <SelectContent>{filteredClassesForDropdown.length === 0 ? <SelectItem value="none" disabled>Chưa có lớp</SelectItem> : filteredClassesForDropdown.map(c => (<SelectItem key={c._id} value={String(c._id)}>{c.name}</SelectItem>))}</SelectContent>
                   </Select>

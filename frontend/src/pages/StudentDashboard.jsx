@@ -148,7 +148,7 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
     { width: 20 }, 
   ];
 
-  sheet.addRow(["", "UBND HUYỆN THỦY NGUYÊN", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"]);
+  sheet.addRow(["", "UBND PHƯỜNG LƯU KIẾM", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"]);
   sheet.addRow(["", "TRƯỜNG THCS TRẦN HƯNG ĐẠO", "", "ĐỘC LẬP - TỰ DO - HẠNH PHÚC"]);
 
   sheet.mergeCells("B1:C1");
@@ -213,20 +213,28 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
 
   sheet.addRow([]);
   sheet.addRow([]);
-  const dateRowNum = sheet.rowCount + 1;
-  sheet.addRow(["", "", "", "", "", "", dateStr]);
+
+  // 👉 ĐÃ SỬA: Đẩy text vào đúng cột F (vị trí số 6 trong mảng) và lấy chuẩn ID của dòng vừa tạo
+  const dateRow = sheet.addRow(["", "", "", "", "", dateStr]);
+  const dateRowNum = dateRow.number;
   sheet.mergeCells(`F${dateRowNum}:G${dateRowNum}`);
   sheet.getCell(`F${dateRowNum}`).font = { name: "Times New Roman", size: 12, italic: true };
   sheet.getCell(`F${dateRowNum}`).alignment = { horizontal: "center" };
 
-  const signRowNum = sheet.rowCount + 1;
-  sheet.addRow(["", "", "", "", "", "", "Học sinh"]);
+  const signRow = sheet.addRow(["", "", "", "", "", "Học sinh"]);
+  const signRowNum = signRow.number;
   sheet.mergeCells(`F${signRowNum}:G${signRowNum}`);
   sheet.getCell(`F${signRowNum}`).font = { name: "Times New Roman", size: 12, bold: true };
   sheet.getCell(`F${signRowNum}`).alignment = { horizontal: "center" };
 
-  const nameRowNum = sheet.rowCount + 4; 
-  sheet.addRow(["", "", "", "", "", "", studentName]);
+  // Thêm 3 dòng trống để chừa chỗ ký tên
+  sheet.addRow([]);
+  sheet.addRow([]);
+  sheet.addRow([]);
+
+  // 👉 ĐÃ SỬA: Lấy chuẩn ID dòng của tên học sinh
+  const nameRow = sheet.addRow(["", "", "", "", "", studentName]);
+  const nameRowNum = nameRow.number;
   sheet.mergeCells(`F${nameRowNum}:G${nameRowNum}`);
   sheet.getCell(`F${nameRowNum}`).font = { name: "Times New Roman", size: 12, bold: true };
   sheet.getCell(`F${nameRowNum}`).alignment = { horizontal: "center" };
@@ -274,7 +282,7 @@ const exportPDF = async (dataList, reportTitle, studentName) => {
 
   doc.setFontSize(12);
   doc.setFont("Roboto", "bold");
-  doc.text("UBND HUYỆN THỦY NGUYÊN", 65, 16, { align: "center" });
+  doc.text("UBND PHƯỜNG LƯU KIẾM", 65, 16, { align: "center" });
   doc.text("TRƯỜNG THCS TRẦN HƯNG ĐẠO", 65, 22, { align: "center" });
 
   doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", 150, 16, { align: "center" });
@@ -368,7 +376,7 @@ const printPDF = async (dataList, reportTitle, studentName) => {
 
   doc.setFontSize(12);
   doc.setFont("Roboto", "bold");
-  doc.text("UBND HUYỆN THỦY NGUYÊN", 65, 16, { align: "center" });
+  doc.text("UBND PHƯỜNG LƯU KIẾM", 65, 16, { align: "center" });
   doc.text("TRƯỜNG THCS TRẦN HƯNG ĐẠO", 65, 22, { align: "center" });
 
   doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", 150, 16, { align: "center" });
@@ -620,7 +628,7 @@ const exportWord = async (dataList, reportTitle, studentName) => {
 
                                     children: [
                                       new TextRun({
-                                        text: "UBND HUYỆN THỦY NGUYÊN",
+                                        text: "UBND PHƯỜNG LƯU KIẾM",
                                         bold: true,
                                         size: 22,
                                         font: "Times New Roman",

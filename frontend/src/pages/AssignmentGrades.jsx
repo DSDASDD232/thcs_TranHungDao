@@ -8,8 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
-  ArrowLeft, Loader2, Search, Edit3, Eye, CheckCircle2, AlertCircle, Clock, Lock, FileText, CalendarDays, Users, Tag, Hourglass, Image as ImageIcon
+  ArrowLeft, Loader2, Search, Edit3, Eye, CheckCircle2, AlertCircle, Clock, Lock, FileText, CalendarDays, Users, Tag, Hourglass, Download
 } from "lucide-react";
+
+// 👉 IMPORT HÀM XUẤT EXCEL CHUẨN
+import { exportFormalExcel } from "../lib/exportExcel"; 
 
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -42,7 +45,7 @@ const renderLatexContent = (htmlString) => {
 };
 
 // ==========================================
-// HÀM XỬ LÝ NGÀY THÁNG AN TOÀN (CHỐNG LỖI INVALID DATE)
+// HÀM XỬ LÝ NGÀY THÁNG AN TOÀN
 // ==========================================
 const formatSafeDate = (dateString, fallbackString = "Không giới hạn") => {
     if (!dateString) return fallbackString;
@@ -55,6 +58,7 @@ const AssignmentGrades = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const serverUrl = axios.defaults.baseURL?.replace('/api', '') || '';
+  const teacherName = localStorage.getItem("fullName") || "Giáo viên";
 
   const [loading, setLoading] = useState(true);
   const [assignment, setAssignment] = useState(null);
@@ -99,6 +103,32 @@ const AssignmentGrades = () => {
     });
   };
 
+  // 👉 HÀM XUẤT EXCEL BẢNG ĐIỂM
+  const handleExportGrades = () => {
+    if (!filteredSubmissions || filteredSubmissions.length === 0) {
+       return alert("Không có dữ liệu điểm để xuất báo cáo!");
+    }
+
+    const dataToExport = filteredSubmissions.map((sub, idx) => ({
+      "STT": idx + 1,
+      "Họ và Tên": sub.student?.fullName || "Học sinh ẩn danh",
+      "Tài Khoản": sub.student?.username || "",
+      "Thời Gian Nộp": formatSafeDate(sub.createdAt),
+      "Trạng Thái": sub.status === 'pending' ? "Chờ chấm" : "Đã chấm",
+      "Điểm Số": sub.status === 'pending' ? "?" : sub.score
+    }));
+
+    const cleanTitle = assignment?.title?.replace(/[^a-zA-Z0-9\u00C0-\u024F\s]/g, "") || "Bai_Tap";
+    
+    exportFormalExcel(
+      dataToExport, 
+      `BẢNG ĐIỂM CHI TIẾT: ${assignment?.title}`, 
+      `Bang_Diem_${cleanTitle}`, 
+      teacherName,
+      "Giáo viên"
+    );
+  };
+
   if (loading) return <div className="min-h-screen bg-sky-50/50 flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-sky-500" /></div>;
 
   const isPastDeadline = assignment?.dueDate ? new Date() >= new Date(assignment.dueDate) : true;
@@ -123,6 +153,15 @@ const AssignmentGrades = () => {
                   className="h-8 border-sky-200 text-sky-600 hover:bg-sky-100 hover:text-sky-700 rounded-lg shadow-sm font-bold"
                 >
                   <FileText className="w-4 h-4 mr-1.5" /> Chi tiết đề
+                </Button>
+
+                {/* 👉 NÚT XUẤT EXCEL BẢNG ĐIỂM */}
+                <Button 
+                  onClick={handleExportGrades}
+                  size="sm" 
+                  className="h-8 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg shadow-sm font-bold"
+                >
+                  <Download className="w-4 h-4 mr-1.5" /> Xuất điểm Excel
                 </Button>
               </div>
               <p className="text-slate-500 font-medium mt-1">Sĩ số nộp: {submissions.length}</p>

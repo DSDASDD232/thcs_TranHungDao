@@ -1318,7 +1318,7 @@ const TeacherDashboard = () => {
                   <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[200px] border-none font-bold text-sky-800 shadow-sm">
                     <span className="truncate">
                         {lbMonth === "all" 
-                            ? "Chọn tháng trước" 
+                            ? "Chọn ngày" 
                             : lbWeek === "all" 
                                 ? "Tất cả các tuần" 
                                 : weeksInMonth.find(w => w.id === lbWeek)?.label || 'Chọn tuần'}
@@ -1355,7 +1355,7 @@ const TeacherDashboard = () => {
                 </Select>
                 
                 <Button onClick={handleExportLeaderboardExcel} className="h-10 sm:h-12 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl shadow-sm shrink-0">
-                  <Download className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Xuất Excel</span>
+                  <Download className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">In báo cáo</span>
                 </Button>
               </div>
             </div>

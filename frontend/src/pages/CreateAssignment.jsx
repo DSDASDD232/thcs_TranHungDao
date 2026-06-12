@@ -38,6 +38,9 @@ const renderLatexContent = (htmlString) => {
   return parsedHtml;
 };
 
+// HÀM KIỂM TRA TEXT CÓ CHỨA LATEX KHÔNG
+const hasLatex = (text) => text && (text.includes('$$') || text.includes('$'));
+
 // ==========================================
 // HÀM XỬ LÝ LINK YOUTUBE VÀ GOOGLE DRIVE & KIỂM TRA AUDIO
 // ==========================================
@@ -65,43 +68,6 @@ const getDriveEmbedUrl = (url) => {
 const isAudioFile = (url) => {
   if (!url) return false;
   return url.toLowerCase().match(/\.(mp3|wav|m4a|ogg)$/) != null;
-};
-
-const renderVideoUrl = (url) => {
-    if(!url) return null;
-    if(url.includes("youtube.com/watch?v=") || url.includes("youtu.be/")) {
-        let videoId = url.split("v=")[1] || url.split("youtu.be/")[1];
-        if(videoId) {
-            let ampersandPosition = videoId.indexOf('&');
-            if(ampersandPosition !== -1) videoId = videoId.substring(0, ampersandPosition);
-            return <iframe className="w-full aspect-video rounded-xl shadow-sm mt-2 border border-slate-200" src={`https://www.youtube.com/embed/${videoId}`} title="YouTube video player" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>;
-        }
-    }
-    if (url.includes("drive.google.com")) {
-        return (
-            <div className="w-full flex flex-col items-center mt-2">
-                <div className="h-[200px] sm:h-[350px] w-full rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-slate-100 flex items-center justify-center relative">
-                    <iframe className="w-full h-full relative z-10" src={getDriveEmbedUrl(url)} allow="autoplay; fullscreen; encrypted-media" allowFullScreen referrerPolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>
-                </div>
-            </div>
-        );
-    }
-    if (isAudioFile(url) || (url.includes("/video/upload/") && url.match(/\.(mp3|wav|m4a|ogg)$/i))) {
-        return (
-            <div className="bg-white p-6 w-full max-w-md mx-auto rounded-xl flex flex-col items-center mt-2 border border-slate-200 shadow-sm">
-                <FileAudio className="w-12 h-12 text-indigo-400 mb-4" />
-                <audio controls className="w-full" src={url} />
-            </div>
-        );
-    }
-    if (url.includes("/video/upload/") || url.match(/\.(mp4|mov|webm)$/i)) {
-        return (
-            <div className="relative w-full rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-black flex justify-center mt-2">
-                <video className="w-full max-h-[400px] object-contain" controls src={url} preload="metadata" playsInline />
-            </div>
-        );
-    }
-    return <a href={url} target="_blank" rel="noopener noreferrer" className="text-sky-600 font-bold hover:underline break-all mt-2 inline-block">{url}</a>;
 };
 
 // ==========================================
@@ -200,6 +166,10 @@ const CreateAssignment = () => {
   
   const [openMediaPanels, setOpenMediaPanels] = useState({});
   const [openExtractedMediaPanels, setOpenExtractedMediaPanels] = useState({});
+  const [bankPoints, setBankPoints] = useState("");
+
+  // STATE QUẢN LÝ LỚP PHỦ CỦA RICHTEXTEDITOR
+  const [activeRTE, setActiveRTE] = useState(null);
 
   useEffect(() => {
     const style = document.createElement('style');
@@ -473,7 +443,6 @@ const CreateAssignment = () => {
   const teacherSubjects = Array.isArray(teacherProfile?.subjects) && teacherProfile.subjects.length > 0 
     ? teacherProfile.subjects : teacherProfile?.subject ? [teacherProfile.subject] : [];
 
-  // 👉 TỰ ĐỘNG KHÓA VÀ ĐỒNG BỘ BỘ LỌC KHO CÂU HỎI VỚI THÔNG TIN CHUNG
   const selectedGrade = useMemo(() => {
       if (!newAssignment.targetClass || !allClasses.length) return "";
       const cls = allClasses.find(c => c.name === newAssignment.targetClass);
@@ -1282,7 +1251,25 @@ const CreateAssignment = () => {
                                       </CardHeader>
                                       <CardContent className="p-4 space-y-4 bg-white">
                                         <div className="flex flex-col">
-                                            <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={q.content} onChange={(val) => handleExtractedChange(q.tempId, 'content', val)} />
+                                            <div 
+                                                className="relative w-full"
+                                                onFocusCapture={() => setActiveRTE(`extract-content-${q.tempId}`)}
+                                                onBlurCapture={(e) => {
+                                                    if (!e.currentTarget.contains(e.relatedTarget)) {
+                                                        setActiveRTE(null);
+                                                    }
+                                                }}
+                                            >
+                                                <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={q.content} onChange={(val) => handleExtractedChange(q.tempId, 'content', val)} />
+                                                {/* LỚP PHỦ RICH TEXT EDITOR CHỮ TO RÕ */}
+                                                {activeRTE !== `extract-content-${q.tempId}` && hasLatex(q.content) && (
+                                                    <div 
+                                                        className="absolute inset-0 z-10 bg-white border border-slate-200 rounded-lg p-4 cursor-text overflow-y-auto q-content-view shadow-sm text-lg leading-relaxed"
+                                                        onClick={() => setActiveRTE(`extract-content-${q.tempId}`)}
+                                                        dangerouslySetInnerHTML={{ __html: renderLatexContent(q.content) }}
+                                                    />
+                                                )}
+                                            </div>
                                             
                                             {!openExtractedMediaPanels[q.tempId] && !q.videoFile && !q.videoUrl && (
                                                <Button type="button" variant="ghost" size="sm" onClick={() => setOpenExtractedMediaPanels(prev => ({...prev, [q.tempId]: true}))} className="mt-2 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 font-bold self-start w-max">
@@ -1361,23 +1348,58 @@ const CreateAssignment = () => {
                                         
                                         <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-3">
                                           <h4 className="text-sm font-bold text-emerald-700 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Hướng dẫn giải</h4>
-                                          <RichTextEditor value={q.essayAnswerText} onChange={(val) => handleExtractedChange(q.tempId, 'essayAnswerText', val)} />
+                                          <div 
+                                              className="relative w-full"
+                                              onFocusCapture={() => setActiveRTE(`extract-essay-${q.tempId}`)}
+                                              onBlurCapture={(e) => {
+                                                  if (!e.currentTarget.contains(e.relatedTarget)) {
+                                                      setActiveRTE(null);
+                                                  }
+                                              }}
+                                          >
+                                              <RichTextEditor value={q.essayAnswerText} onChange={(val) => handleExtractedChange(q.tempId, 'essayAnswerText', val)} />
+                                              {/* LỚP PHỦ RICH TEXT EDITOR CHỮ TO RÕ */}
+                                              {activeRTE !== `extract-essay-${q.tempId}` && hasLatex(q.essayAnswerText) && (
+                                                  <div 
+                                                      className="absolute inset-0 z-10 bg-white border border-slate-200 rounded-lg p-4 cursor-text overflow-y-auto q-content-view shadow-sm text-lg leading-relaxed"
+                                                      onClick={() => setActiveRTE(`extract-essay-${q.tempId}`)}
+                                                      dangerouslySetInnerHTML={{ __html: renderLatexContent(q.essayAnswerText) }}
+                                                  />
+                                              )}
+                                          </div>
                                         </div>
 
                                         {q.type === 'multiple_choice' && (
                                           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3 mt-4">
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                               {q.options.map((opt, i) => {
                                                 const letter = String.fromCharCode(65 + i);
+                                                const mathExists = hasLatex(q.options[i]);
+                                                
                                                 return (
-                                                <div key={i} className="flex flex-col gap-1">
-                                                    <div className="flex items-center gap-2">
-                                                      <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base mt-2">{letter}.</span>
-                                                      <div className="flex-1 flex items-center gap-2">
-                                                        <Input className={`h-11 rounded-xl bg-white text-sm sm:text-base ${isSlotEmpty ? 'border-dashed border-slate-300' : 'border-sky-100'}`} value={q.options[i]} onChange={(e) => handleExtractedOptionChange(q.tempId, i, e.target.value)} />
-                                                        <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: q.tempId, targetOptionIndex: i, isExtracted: true, isEditing: false })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
+                                                <div key={i} className="flex flex-col gap-1 w-full mt-1">
+                                                    <div className="flex items-start gap-2">
+                                                      <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base mt-3 shrink-0">{letter}.</span>
+                                                      
+                                                      <div className="flex-1 flex flex-col gap-2 min-w-0">
+                                                        {/* Ô NHẬP VÀ NÚT BẤM */}
+                                                        <div className="flex items-center gap-2">
+                                                          <Input 
+                                                            className="h-11 rounded-xl bg-white text-sm sm:text-base border-sky-100 flex-1" 
+                                                            value={q.options[i]} 
+                                                            onChange={(e) => handleExtractedOptionChange(q.tempId, i, e.target.value)} 
+                                                          />
+                                                          <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: q.tempId, targetOptionIndex: i, isExtracted: true, isEditing: false })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
+                                                          {q.options.length > 2 && <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveExtractedOption(q.tempId, i)} className="h-11 w-11 text-rose-400 hover:bg-rose-100 shrink-0 rounded-xl"><Trash2 className="w-4 h-4"/></Button>}
+                                                        </div>
+                                                        
+                                                        {/* KHUNG PREVIEW ĐÁP ÁN TOÁN HỌC TRỐNG CHỮ */}
+                                                        {mathExists && (
+                                                          <div className="w-full px-4 py-3 bg-slate-50/80 border border-slate-200 rounded-xl flex items-center min-h-[48px] overflow-x-auto shadow-sm text-slate-800">
+                                                            <div className="q-content-view text-base font-medium" dangerouslySetInnerHTML={{ __html: renderLatexContent(q.options[i]) }} />
+                                                          </div>
+                                                        )}
                                                       </div>
-                                                      {q.options.length > 2 && <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveExtractedOption(q.tempId, i)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 mt-1.5"><Trash2 className="w-4 h-4"/></Button>}
                                                     </div>
                                                 </div>
                                               )})}
@@ -1542,7 +1564,6 @@ const CreateAssignment = () => {
                     <div className="w-full space-y-4 sm:space-y-6 mt-4">
                       {manualQuestions.map((q, index) => {
                         const isSlotEmpty = !q.content || q.content.replace(/<[^>]*>/g, '').trim() === "";
-                        
                         const currentVideoUrl = q.videoPreviewUrl || q.videoUrl;
 
                         return (
@@ -1573,7 +1594,26 @@ const CreateAssignment = () => {
                           <CardContent className="p-4 sm:p-5 space-y-4 relative z-10">
                             <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
                               <div className={`flex-1 transition-all ${isSlotEmpty ? 'border-dashed border-2 border-slate-300 rounded-xl p-1 bg-white' : ''}`}>
-                                <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={q.content} onChange={(val) => handleManualChange(q.tempId, 'content', val)} />
+                                
+                                <div 
+                                    className="relative w-full"
+                                    onFocusCapture={() => setActiveRTE(`manual-content-${q.tempId}`)}
+                                    onBlurCapture={(e) => {
+                                        if (!e.currentTarget.contains(e.relatedTarget)) {
+                                            setActiveRTE(null);
+                                        }
+                                    }}
+                                >
+                                    <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={q.content} onChange={(val) => handleManualChange(q.tempId, 'content', val)} />
+                                    {/* LỚP PHỦ RICH TEXT EDITOR CHỮ TO RÕ */}
+                                    {activeRTE !== `manual-content-${q.tempId}` && hasLatex(q.content) && (
+                                        <div 
+                                            className="absolute inset-0 z-10 bg-white border border-slate-200 rounded-lg p-4 cursor-text overflow-y-auto q-content-view shadow-sm text-lg leading-relaxed"
+                                            onClick={() => setActiveRTE(`manual-content-${q.tempId}`)}
+                                            dangerouslySetInnerHTML={{ __html: renderLatexContent(q.content) }}
+                                        />
+                                    )}
+                                </div>
                                 
                                 {!openMediaPanels[q.tempId] && !q.videoFile && !q.videoUrl && (
                                    <Button type="button" variant="ghost" size="sm" onClick={() => setOpenMediaPanels(prev => ({...prev, [q.tempId]: true}))} className="mt-2 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 font-bold self-start w-max">
@@ -1653,31 +1693,66 @@ const CreateAssignment = () => {
                             
                             <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-3">
                               <h4 className="text-sm font-bold text-emerald-700 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Hướng dẫn giải</h4>
-                              <RichTextEditor value={q.essayAnswerText} onChange={(val) => handleManualChange(q.tempId, 'essayAnswerText', val)} />
+                              <div 
+                                  className="relative w-full"
+                                  onFocusCapture={() => setActiveRTE(`manual-essay-${q.tempId}`)}
+                                  onBlurCapture={(e) => {
+                                      if (!e.currentTarget.contains(e.relatedTarget)) {
+                                          setActiveRTE(null);
+                                      }
+                                  }}
+                              >
+                                  <RichTextEditor value={q.essayAnswerText} onChange={(val) => handleManualChange(q.tempId, 'essayAnswerText', val)} />
+                                  {/* LỚP PHỦ RICH TEXT EDITOR CHỮ TO RÕ */}
+                                  {activeRTE !== `manual-essay-${q.tempId}` && hasLatex(q.essayAnswerText) && (
+                                      <div 
+                                          className="absolute inset-0 z-10 bg-white border border-slate-200 rounded-lg p-4 cursor-text overflow-y-auto q-content-view shadow-sm text-lg leading-relaxed"
+                                          onClick={() => setActiveRTE(`manual-essay-${q.tempId}`)}
+                                          dangerouslySetInnerHTML={{ __html: renderLatexContent(q.essayAnswerText) }}
+                                      />
+                                  )}
+                              </div>
                             </div>
 
                             {q.type === 'multiple_choice' && (
                               <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3 mt-4">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                   {q.options.map((optLabel, optIdx) => {
                                     const letter = String.fromCharCode(65 + optIdx);
+                                    const mathExists = hasLatex(q.options[optIdx]);
+
                                     return (
-                                    <div key={optIdx} className="flex flex-col gap-1">
+                                    <div key={optIdx} className="flex flex-col gap-1 w-full mt-1">
                                         <div className="flex items-start gap-2">
-                                          <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base mt-2">{letter}.</span>
-                                          <div className="flex-1 flex items-center gap-2">
-                                            <Input className={`h-11 rounded-xl bg-white text-sm sm:text-base ${isSlotEmpty ? 'border-dashed border-slate-300' : 'border-sky-100'}`} value={q.options[optIdx]} onChange={(e) => handleManualOptionChange(q.tempId, optIdx, e.target.value)} placeholder={`Gõ đáp án ${letter}...`} />
-                                            <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: q.tempId, targetOptionIndex: optIdx, isExtracted: false, isEditing: false })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
+                                          <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base mt-3 shrink-0">{letter}.</span>
+                                          
+                                          <div className="flex-1 flex flex-col gap-2 min-w-0">
+                                            {/* Ô NHẬP VÀ NÚT BẤM */}
+                                            <div className="flex items-center gap-2">
+                                              <Input 
+                                                className={`h-11 rounded-xl bg-white text-sm sm:text-base flex-1 ${isSlotEmpty ? 'border-dashed border-slate-300' : 'border-sky-100'}`} 
+                                                value={q.options[optIdx]} 
+                                                onChange={(e) => handleManualOptionChange(q.tempId, optIdx, e.target.value)} 
+                                                placeholder={`Gõ đáp án ${letter}...`} 
+                                              />
+                                              <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: q.tempId, targetOptionIndex: optIdx, isExtracted: false, isEditing: false })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
+                                              {q.options.length > 2 && (
+                                                  <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveManualOption(q.tempId, optIdx)} className="h-11 w-11 text-rose-400 hover:bg-rose-100 shrink-0 rounded-xl"><Trash2 className="w-4 h-4"/></Button>
+                                              )}
+                                            </div>
+                                            
+                                            {/* KHUNG PREVIEW ĐÁP ÁN TOÁN HỌC TRỐNG CHỮ */}
+                                            {mathExists && (
+                                              <div className="w-full px-4 py-3 bg-slate-50/80 border border-slate-200 rounded-xl flex items-center min-h-[48px] overflow-x-auto shadow-sm text-slate-800 text-base">
+                                                <div className="q-content-view font-medium" dangerouslySetInnerHTML={{ __html: renderLatexContent(q.options[optIdx]) }} />
+                                              </div>
+                                            )}
                                           </div>
-                                          {q.options.length > 2 && (
-                                              <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveManualOption(q.tempId, optIdx)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 mt-1.5"><Trash2 className="w-4 h-4"/></Button>
-                                          )}
                                         </div>
                                     </div>
                                   )})}
                                 </div>
                                 <div className="flex justify-between items-center pt-3 border-t border-sky-100 mt-2">
-                                  {/* Giới hạn tối đa 16 đáp án */}
                                   {q.options.length < 16 ? (
                                       <Button type="button" variant="ghost" size="sm" onClick={() => handleAddManualOption(q.tempId)} className="text-sky-600 hover:bg-sky-100"><PlusCircle className="w-4 h-4 mr-2"/> Thêm đáp án</Button>
                                   ) : <div className="text-xs text-rose-500 font-bold">Đã đạt tối đa 16 đáp án</div>}
@@ -1711,7 +1786,7 @@ const CreateAssignment = () => {
                 </div>
               )}
 
-              {/* NÚT PHÁT HÀNH \& LƯU NHÁP */}
+              {/* NÚT PHÁT HÀNH & LƯU NHÁP */}
               {manualQuestions.length > 0 && (
                 <div className="pt-6 sm:pt-8 border-t border-slate-200">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

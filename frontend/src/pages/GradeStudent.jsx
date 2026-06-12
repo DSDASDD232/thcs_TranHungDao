@@ -13,31 +13,85 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
 // ==========================================
-// HÀM DỊCH MÃ LATEX THÀNH CÔNG THỨC TOÁN HỌC (ĐÃ ÉP KÍCH THƯỚC TO)
+// HÀM DỊCH MÃ LATEX CẬP NHẬT "SIÊU CẤP"
 // ==========================================
 const renderLatexContent = (htmlString) => {
   if (!htmlString) return "";
-  
-  // Xử lý công thức Toán block $$...$$
-  let parsedHtml = htmlString.replace(/\$\$([\s\S]*?)\$\$/g, (match, math) => {
-    try {
-      // Dùng \displaystyle để ép phân số to ra, kết hợp displayMode: false để giữ nó trên cùng 1 dòng
-      return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false });
-    } catch (e) {
-      return match;
-    }
+  let processedHtml = htmlString;
+
+  // 1. DÀNH RIÊNG CHO ĐÁP ÁN: Tự động dịch nếu là chuỗi Toán học thô (VD: "\frac{1}{5}", "\sqrt3")
+  if (!/<[a-z][\s\S]*>/i.test(processedHtml) && (processedHtml.includes('\\') || processedHtml.includes('^') || processedHtml.includes('_'))) {
+      try {
+          const cleanMath = processedHtml.replace(/\$/g, '').trim();
+          return katex.renderToString(`\\displaystyle ${cleanMath}`, { displayMode: false, throwOnError: true });
+      } catch (e) {
+          // Bỏ qua để xử lý ở bước 4 nếu có chữ xen lẫn
+      }
+  }
+
+  // 2. Xử lý các thẻ của khung soạn thảo Quill (<span class="ql-formula">)
+  if (processedHtml.includes('ql-formula')) {
+      try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(processedHtml, 'text/html');
+          const formulas = doc.querySelectorAll('.ql-formula');
+          formulas.forEach(formula => {
+              const latex = formula.getAttribute('data-value') || formula.textContent;
+              if (latex) {
+                  try {
+                      formula.innerHTML = katex.renderToString(`\\displaystyle ${latex}`, { displayMode: false, throwOnError: false });
+                  } catch (e) { console.error("Lỗi render công thức:", e); }
+              }
+          });
+          processedHtml = doc.body.innerHTML;
+      } catch (e) { console.error("Lỗi parse DOM:", e); }
+  }
+
+  // 3. Xử lý khi được bọc thủ công bằng $$...$$ hoặc $...$
+  processedHtml = processedHtml.replace(/\$\$([\s\S]*?)\$\$/g, (match, math) => {
+    try { return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false }); } 
+    catch (e) { return match; }
+  });
+  processedHtml = processedHtml.replace(/\$([^\$]+)\$/g, (match, math) => {
+    try { return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false }); } 
+    catch (e) { return match; }
   });
 
-  // Xử lý công thức Toán inline $...$ (nếu có)
-  parsedHtml = parsedHtml.replace(/\$([^\$]+)\$/g, (match, math) => {
-    try {
-      return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false });
-    } catch (e) {
-      return match;
-    }
-  });
+  // 4. QUÉT SÂU BẮT MÃ THÔ: Quét tìm cụm \frac, \sqrt, x^2... rải rác bên trong text
+  if (processedHtml.includes('\\') || processedHtml.includes('^') || processedHtml.includes('_')) {
+      try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(processedHtml, 'text/html');
+          
+          const walkTextNodes = (node) => {
+              if (node.nodeType === 3) { 
+                  let text = node.nodeValue;
+                  if (node.parentNode && !node.parentNode.closest('.katex')) {
+                       const simpleMathRegex = /(\\(?:[a-zA-Z]+)[0-9a-zA-Z\+\-\*\/\^\_\{\}\(\)\.=]*|[a-zA-Z][\^_][0-9a-zA-Z\{\}]+[\+\-\*\/\^\_\{\}\(\)\.=0-9a-zA-Z]*)/g;
+                       if (simpleMathRegex.test(text)) {
+                          const newHtml = text.replace(simpleMathRegex, (match) => {
+                              try { 
+                                 return katex.renderToString(`\\displaystyle ${match}`, { displayMode: false, throwOnError: true }); 
+                              } catch (e) { return match; }
+                          });
+                          const span = document.createElement('span');
+                          span.innerHTML = newHtml;
+                          node.replaceWith(span);
+                       }
+                  }
+              } else if (node.nodeType === 1) { 
+                  if (!node.classList.contains('katex') && !node.classList.contains('ql-formula')) {
+                      Array.from(node.childNodes).forEach(walkTextNodes);
+                  }
+              }
+          };
+
+          Array.from(doc.body.childNodes).forEach(walkTextNodes);
+          processedHtml = doc.body.innerHTML;
+      } catch (e) { console.error("DOMParser Error in Raw Math:", e); }
+  }
   
-  return parsedHtml;
+  return processedHtml;
 };
 
 // ==========================================

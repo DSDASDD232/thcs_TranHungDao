@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "../lib/axios";
 import { processWordFile, extractQuestionsFromText } from "../lib/wordExtractor"; 
@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 import { 
   ArrowLeft, PenTool, FileText, UploadCloud, Sparkles, PlusCircle, Trash2, 
-  Loader2, Database, Image as ImageIcon, CheckCircle2, FolderOpen, Layers, Save, Pencil, Search, FileQuestion, Filter, Eye, ArrowRight, Sigma, Settings, Calculator, AlertTriangle, CheckSquare, BookCopy, LibraryBig, Video, FileAudio, X, Eraser
+  Loader2, Database, Image as ImageIcon, CheckCircle2, FolderOpen, Layers, Save, Pencil, Search, FileQuestion, Filter, Eye, ArrowRight, Sigma, Settings, Calculator, CheckSquare, LibraryBig, Video, FileAudio, X, Eraser
 } from "lucide-react";
 
 import RichTextEditor from "@/components/ui/RichTextEditor";
@@ -21,30 +21,72 @@ import 'katex/dist/katex.min.css';
 import 'mathlive';
 
 // ==========================================
-// HÀM DỊCH MÃ LATEX & KIỂM TRA NỘI DUNG RỖNG
+// HÀM DỊCH MÃ LATEX "SIÊU CẤP"
 // ==========================================
 const renderLatexContent = (htmlString) => {
   if (!htmlString) return "";
-  const decodeHtmlEntities = (text) => {
-    const textArea = document.createElement("textarea");
-    textArea.innerHTML = text;
-    let decoded = textArea.value;
-    decoded = decoded.replace(/<[^>]*>?/gm, ''); 
-    decoded = decoded.replace(/\\\\/g, '\\'); 
-    return decoded;
-  };
-  let parsedHtml = htmlString;
-  const renderMath = (math) => {
+  let processedHtml = htmlString;
+
+  if (!/<[a-z][\s\S]*>/i.test(processedHtml) && (processedHtml.includes('\\') || processedHtml.includes('^') || processedHtml.includes('_'))) {
       try {
-        const cleanMath = decodeHtmlEntities(math);
-        return katex.renderToString(`\\displaystyle ${cleanMath}`, { displayMode: false, throwOnError: false, output: "html" });
-      } catch(e) { return math; }
-  };
-  parsedHtml = parsedHtml.replace(/\$\$([\s\S]*?)\$\$/g, (match, math) => renderMath(math));
-  parsedHtml = parsedHtml.replace(/\$([^\$]+)\$/g, (match, math) => renderMath(math));
-  parsedHtml = parsedHtml.replace(/\\frac{[^{}]+}{[^{}]+}/g, (match) => renderMath(match));
-  parsedHtml = parsedHtml.replace(/\\sqrt{[^{}]+}/g, (match) => renderMath(match));
-  return parsedHtml;
+          const cleanMath = processedHtml.replace(/\$/g, '').trim();
+          return katex.renderToString(`\\displaystyle ${cleanMath}`, { displayMode: false, throwOnError: true });
+      } catch (e) {}
+  }
+
+  if (processedHtml.includes('ql-formula')) {
+      try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(processedHtml, 'text/html');
+          const formulas = doc.querySelectorAll('.ql-formula');
+          formulas.forEach(formula => {
+              const latex = formula.getAttribute('data-value') || formula.textContent;
+              if (latex) {
+                  try { formula.innerHTML = katex.renderToString(`\\displaystyle ${latex}`, { displayMode: false, throwOnError: false }); } 
+                  catch (e) {}
+              }
+          });
+          processedHtml = doc.body.innerHTML;
+      } catch (e) {}
+  }
+
+  processedHtml = processedHtml.replace(/\$\$([\s\S]*?)\$\$/g, (match, math) => {
+    try { return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false }); } 
+    catch (e) { return match; }
+  });
+  processedHtml = processedHtml.replace(/\$([^\$]+)\$/g, (match, math) => {
+    try { return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false }); } 
+    catch (e) { return match; }
+  });
+
+  if (processedHtml.includes('\\') || processedHtml.includes('^') || processedHtml.includes('_')) {
+      try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(processedHtml, 'text/html');
+          const walkTextNodes = (node) => {
+              if (node.nodeType === 3) { 
+                  let text = node.nodeValue;
+                  if (node.parentNode && !node.parentNode.closest('.katex')) {
+                       const simpleMathRegex = /(\\(?:[a-zA-Z]+)[0-9a-zA-Z\+\-\*\/\^\_\{\}\(\)\.=]*|[a-zA-Z][\^_][0-9a-zA-Z\{\}]+[\+\-\*\/\^\_\{\}\(\)\.=0-9a-zA-Z]*)/g;
+                       if (simpleMathRegex.test(text)) {
+                          const newHtml = text.replace(simpleMathRegex, (match) => {
+                              try { return katex.renderToString(`\\displaystyle ${match}`, { displayMode: false, throwOnError: true }); } 
+                              catch (e) { return match; }
+                          });
+                          const span = document.createElement('span');
+                          span.innerHTML = newHtml;
+                          node.replaceWith(span);
+                       }
+                  }
+              } else if (node.nodeType === 1) { 
+                  if (!node.classList.contains('katex') && !node.classList.contains('ql-formula')) Array.from(node.childNodes).forEach(walkTextNodes);
+              }
+          };
+          Array.from(doc.body.childNodes).forEach(walkTextNodes);
+          processedHtml = doc.body.innerHTML;
+      } catch (e) {}
+  }
+  return processedHtml;
 };
 
 const hasContent = (htmlString) => {
@@ -52,6 +94,7 @@ const hasContent = (htmlString) => {
     const strippedText = htmlString.replace(/<[^>]*>?/gm, '').trim();
     return strippedText.length > 0;
 };
+const hasLatex = (text) => text && (text.includes('$$') || text.includes('$') || text.includes('\\') || text.includes('^') || text.includes('_') || text.includes('ql-formula'));
 
 const stripHtmlForCompare = (html) => {
     if (!html) return "";
@@ -88,7 +131,6 @@ const isAudioFile = (url) => {
 
 const renderVideoUrl = (url) => {
     if(!url) return null;
-
     if(url.includes("youtube.com/watch?v=") || url.includes("youtu.be/")) {
         let videoId = url.split("v=")[1] || url.split("youtu.be/")[1];
         if(videoId) {
@@ -97,7 +139,6 @@ const renderVideoUrl = (url) => {
             return <iframe className="w-full aspect-video rounded-xl shadow-sm mt-2 border border-slate-200" src={`https://www.youtube.com/embed/${videoId}`} title="YouTube video player" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>;
         }
     }
-
     if (url.includes("drive.google.com")) {
         return (
             <div className="w-full flex flex-col items-center mt-2">
@@ -107,7 +148,6 @@ const renderVideoUrl = (url) => {
             </div>
         );
     }
-
     if (isAudioFile(url) || (url.includes("/video/upload/") && url.match(/\.(mp3|wav|m4a|ogg)$/i))) {
         return (
             <div className="bg-white p-6 w-full max-w-md mx-auto rounded-xl flex flex-col items-center mt-2 border border-slate-200 shadow-sm">
@@ -116,7 +156,6 @@ const renderVideoUrl = (url) => {
             </div>
         );
     }
-
     if (url.includes("/video/upload/") || url.match(/\.(mp4|mov|webm)$/i)) {
         return (
             <div className="relative w-full rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-black flex justify-center mt-2">
@@ -124,7 +163,6 @@ const renderVideoUrl = (url) => {
             </div>
         );
     }
-
     return <a href={url} target="_blank" rel="noopener noreferrer" className="text-sky-600 font-bold hover:underline break-all mt-2 inline-block">{url}</a>;
 };
 
@@ -151,7 +189,7 @@ const QuestionBank = () => {
 
   // TẠO TẬP MỚI & SỬA TẬP
   const [isCreateSetModalOpen, setIsCreateSetModalOpen] = useState(false);
-  const [newSetInfo, setNewSetInfo] = useState({ examName: "", subject: "", grade: "6", semester: "1" });
+  const [newSetInfo, setNewSetInfo] = useState({ examName: "", subject: "", grade: "", semester: "1" });
   const [isEditSetModalOpen, setIsEditSetModalOpen] = useState(false);
   const [editSetInfo, setEditSetInfo] = useState(null);
 
@@ -159,7 +197,7 @@ const QuestionBank = () => {
   const [creationMethod, setCreationMethod] = useState("manual"); 
   const [assignmentFile, setAssignmentFile] = useState(null);
   
-  // DỮ LIỆU SOẠN THẢO
+  // DỮ LIỆU SOẠN THẢO & SỬA CHỮA
   const [draftQuestions, setDraftQuestions] = useState([]); 
   const [extractedQuestions, setExtractedQuestions] = useState([]);
   const [isReviewingExtraction, setIsReviewingExtraction] = useState(false);
@@ -167,6 +205,11 @@ const QuestionBank = () => {
 
   const [openMediaPanels, setOpenMediaPanels] = useState({});
   const [openExtractedMediaPanels, setOpenExtractedMediaPanels] = useState({});
+  const [openEditMediaPanel, setOpenEditMediaPanel] = useState(false);
+
+  // LỚP PHỦ THÔNG MINH (OVERLAY) CHO SOẠN/SỬA
+  const [activeRTE, setActiveRTE] = useState(null);
+  const [focusedOption, setFocusedOption] = useState({ tempId: null, optIdx: null, isExtracted: false });
 
   // DỮ LIỆU CHỈNH SỬA CÂU HỎI
   const initialQuestionState = { 
@@ -177,10 +220,8 @@ const QuestionBank = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingQuestionId, setEditingQuestionId] = useState(null);
   const [editQuestionData, setEditQuestionData] = useState(initialQuestionState);
-  
   const [editVideoFile, setEditVideoFile] = useState(null);
   const [editVideoPreviewUrl, setEditVideoPreviewUrl] = useState("");
-  const [openEditMediaPanel, setOpenEditMediaPanel] = useState(false);
 
   const [viewQuestion, setViewQuestion] = useState(null);
   const [mathModal, setMathModal] = useState({ isOpen: false, targetTempId: null, targetOptionIndex: null, isExtracted: false, isEditing: false });
@@ -308,6 +349,13 @@ const QuestionBank = () => {
     return `${deptStr} • ${subStr}`;
   };
 
+  // 👉 TỰ ĐỘNG PHÂN TÍCH KHỐI DỰA TRÊN LỚP ĐƯỢC PHÂN CÔNG (KHÔNG GIỚI HẠN)
+  const allowedGrades = useMemo(() => {
+    if (!teacherProfile?.assignedClasses || teacherProfile.assignedClasses.length === 0) return ["6", "7", "8", "9"];
+    const grades = teacherProfile.assignedClasses.map(c => c.grade || c.name?.match(/\d+/)?.[0]).filter(Boolean);
+    return [...new Set(grades)].sort();
+  }, [teacherProfile]);
+
   const availableExams = [...new Set(groupedSets.filter(s => (filterSubject === "all" || s.subject === filterSubject)).map(s => s.examName))];
 
   const filteredOverviewQuestions = questions.filter(q => {
@@ -362,7 +410,7 @@ const QuestionBank = () => {
     try {
         await axios.delete(`/questionSet/delete-set/${set._id}`, getHeader());
         alert(`✅ Đã xóa Tập câu hỏi "${set.examName}" thành công!`);
-        if (viewMode === "set_detail") setViewMode("sets_list");
+        if (viewMode === "set_detail") { setViewMode("sets_list"); setSearchQuery(""); }
         fetchBankData();
     } catch (err) { alert("Có lỗi xảy ra khi xóa Tập câu hỏi!"); }
     setLoading(false);
@@ -370,7 +418,7 @@ const QuestionBank = () => {
 
   const openCreateSetModal = () => {
     setIsCreateSetModalOpen(true);
-    setNewSetInfo({ examName: "", subject: teacherSubjects[0] || "", grade: "6", semester: "1" });
+    setNewSetInfo({ examName: "", subject: teacherSubjects[0] || "", grade: allowedGrades[0] || "6", semester: "1" });
   };
 
   const handleCreateNewSet = async () => {
@@ -390,6 +438,7 @@ const QuestionBank = () => {
       const createdSet = { ...res.data.questionSet, questions: [] };
       setCurrentExam(createdSet);
       setViewMode("set_detail");
+      setSearchQuery("");
       setIsCreateSetModalOpen(false);
       setIsAddingNew(true);
       setDraftQuestions([{ tempId: `draft_${Date.now()}`, content: "", type: "multiple_choice", options: ["", "", "", ""], correctAnswer: "A", difficulty: "medium", videoUrl: "", videoFile: null, videoPreviewUrl: "", points: "", essayAnswerText: "", essayAnswerImageFile: null, essayAnswerPreviewUrl: "" }]);
@@ -444,6 +493,7 @@ const QuestionBank = () => {
     }
     
     setEditQuestionData({
+      tempId: 'edit',
       examName: q.examName || "", 
       content: q.content, subject: q.subject || teacherSubjects[0] || "Chung", difficulty: q.difficulty, grade: q.grade || "6", semester: q.semester || "1", type: q.type || "multiple_choice",
       options: parsedOptions, correctAnswer: correctKey, points: q.points || "", videoUrl: q.videoUrl || "", essayAnswerText: q.essayAnswerText || "", essayAnswerImageFile: null, essayAnswerPreviewUrl: getImageUrl(q.essayAnswerImageUrl) || "" 
@@ -584,9 +634,6 @@ const QuestionBank = () => {
       const file = e.target.files[0];
       if (file) setExtractedQuestions(extractedQuestions.map(q => q.tempId === tempId ? { ...q, videoFile: file, videoPreviewUrl: URL.createObjectURL(file) } : q));
   };
-  const handleRemoveExtractedVideo = (tempId) => {
-      setExtractedQuestions(extractedQuestions.map(q => q.tempId === tempId ? { ...q, videoFile: null, videoPreviewUrl: "", videoUrl: "" } : q));
-  };
 
   const handleSaveDraftsToBank = async () => {
     let questionsValid = true;
@@ -598,7 +645,7 @@ const QuestionBank = () => {
 
         if (!textContent) {
             if (q.videoFile || q.videoUrl || q.content.includes('<img')) {
-                // Hợp lệ do có hình/video đính kèm
+                // Hợp lệ do có hình/video
             } else {
                 alert(`LỖI: Câu số ${i + 1} đang bị bỏ trống nội dung đề bài! Vui lòng gõ chữ hoặc tải file đính kèm trước khi lưu.`);
                 questionsValid = false;
@@ -613,7 +660,6 @@ const QuestionBank = () => {
 
     if (!currentExam) return alert("Không tìm thấy Tập câu hỏi để lưu!");
 
-    // BỎ QUA CÁC CÂU LÀ AUTO-FILL KHI CHECK TRÙNG LẶP GLOBAL
     const draftContents = updatedDrafts.map(q => stripHtmlForCompare(q.content)).filter(c => c !== "" && !c.includes("dựa vào dữ liệu đính kèm bên dưới"));
     const globalDbContents = questions.map(q => stripHtmlForCompare(q.content)).filter(c => c !== "" && !c.includes("dựa vào dữ liệu đính kèm bên dưới"));
 
@@ -624,7 +670,7 @@ const QuestionBank = () => {
 
     for (let content of draftContents) {
         if (globalDbContents.includes(content)) {
-            return alert(`🚨 CẢNH BÁO TRÙNG LẶP: Câu hỏi "${content.substring(0, 40)}..." ĐÃ TỒN TẠI TRONG KHO (có thể nằm ở Tập khác)! Vui lòng xóa hoặc sửa lại.`);
+            return alert(`🚨 CẢNH BÁO TRÙNG LẶP: Câu hỏi "${content.substring(0, 40)}..." ĐÃ TỒN TẠI TRONG KHO! Vui lòng xóa hoặc sửa lại.`);
         }
     }
     
@@ -680,12 +726,12 @@ const QuestionBank = () => {
                 <ArrowLeft className="w-4 h-4 mr-2" /> Về Trang chính
              </Button>
              {viewMode === "sets_list" && (
-               <Button onClick={() => setViewMode("overview")} className="bg-sky-50 border border-sky-100 text-sky-700 hover:bg-sky-100 font-bold rounded-xl h-11">
+               <Button onClick={() => { setViewMode("overview"); setSearchQuery(""); }} className="bg-sky-50 border border-sky-100 text-sky-700 hover:bg-sky-100 font-bold rounded-xl h-11">
                  <Database className="w-4 h-4 mr-2" /> Về Bảng Tổng quan
                </Button>
              )}
              {viewMode === "set_detail" && (
-               <Button onClick={() => { setViewMode("sets_list"); setIsAddingNew(false); }} className="bg-indigo-50 border border-indigo-100 text-indigo-700 hover:bg-indigo-100 font-bold rounded-xl h-11">
+               <Button onClick={() => { setViewMode("sets_list"); setIsAddingNew(false); setSearchQuery(""); }} className="bg-indigo-50 border border-indigo-100 text-indigo-700 hover:bg-indigo-100 font-bold rounded-xl h-11">
                  <LibraryBig className="w-4 h-4 mr-2" /> Về Danh sách Tập
                </Button>
              )}
@@ -701,7 +747,7 @@ const QuestionBank = () => {
                      <h3 className="font-bold text-sky-900 text-lg flex items-center gap-2">
                        <Layers className="w-5 h-5 text-sky-500"/> Tất cả câu hỏi ({filteredOverviewQuestions.length})
                      </h3>
-                     <Button onClick={() => setViewMode("sets_list")} className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl shadow-md h-11 px-6 w-full sm:w-auto">
+                     <Button onClick={() => { setViewMode("sets_list"); setSearchQuery(""); }} className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl shadow-md h-11 px-6 w-full sm:w-auto">
                         <LibraryBig className="w-5 h-5 mr-2"/> Quản lý Tập câu hỏi
                      </Button>
                   </div>
@@ -718,8 +764,13 @@ const QuestionBank = () => {
                      </Select>
 
                      <Select value={filterGrade} onValueChange={setFilterGrade}>
-                       <SelectTrigger className="h-10 w-[120px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl"><span className="truncate">{filterGrade === 'all' ? 'Khối (Tất cả)' : `Khối ${filterGrade}`}</span></SelectTrigger>
-                       <SelectContent position="popper" className="bg-white z-50"><SelectItem value="all">Khối (Tất cả)</SelectItem><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent>
+                       <SelectTrigger className="h-10 w-[140px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl"><span className="truncate">{filterGrade === 'all' ? 'Khối (Tất cả)' : `Khối ${filterGrade}`}</span></SelectTrigger>
+                       <SelectContent position="popper" className="bg-white z-50">
+                          <SelectItem value="all">Khối (Tất cả)</SelectItem>
+                          {allowedGrades.map(g => (
+                              <SelectItem key={g} value={g}>Khối {g}</SelectItem>
+                          ))}
+                       </SelectContent>
                      </Select>
 
                      <Select value={filterType} onValueChange={(val) => setFilterType(val)}>
@@ -728,9 +779,9 @@ const QuestionBank = () => {
                      </Select>
 
                      <Select value={filterExam} onValueChange={setFilterExam}>
-                        <SelectTrigger className="h-10 w-[160px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl"><span className="truncate">{filterExam === 'all' ? 'Tập câu hỏi (Tất cả)' : filterExam}</span></SelectTrigger>
+                        <SelectTrigger className="h-10 w-[160px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl"><span className="truncate">{filterExam === 'all' ? 'Tập (Tất cả)' : filterExam}</span></SelectTrigger>
                         <SelectContent position="popper" className="bg-white z-50">
-                          <SelectItem value="all">Tập câu hỏi (Tất cả)</SelectItem>
+                          <SelectItem value="all">Tập (Tất cả)</SelectItem>
                           {availableExams.map((e, idx) => (<SelectItem key={idx} value={e}>{e}</SelectItem>))}
                         </SelectContent>
                      </Select>
@@ -786,10 +837,10 @@ const QuestionBank = () => {
                                  </TableCell>
                                  <TableCell className="text-center align-middle font-bold text-slate-400 text-lg">{idx + 1}</TableCell>
                                  
-                                 <TableCell className="align-middle py-4">
+                                 <TableCell className="align-middle py-4 max-w-[250px] sm:max-w-[400px] lg:max-w-[500px]">
                                     <div className="flex flex-col gap-1 pr-4">
                                        <div 
-                                          className="font-medium text-slate-700 text-[15px] leading-relaxed line-clamp-2 q-content-view-table break-words overflow-hidden" 
+                                          className="font-medium text-slate-700 text-[15px] leading-relaxed line-clamp-3 q-content-view-table break-words overflow-hidden" 
                                           dangerouslySetInnerHTML={{ __html: renderLatexContent(q.content) }} 
                                        />
                                        <div className="flex items-center gap-2 mt-1">
@@ -800,7 +851,7 @@ const QuestionBank = () => {
                                     </div>
                                  </TableCell>
                                  
-                                 <TableCell className="text-center align-middle py-4">
+                                 <TableCell className="text-center align-middle py-4 w-[160px]">
                                     <div className="flex flex-col items-center gap-1.5">
                                        <span className="text-sky-700 font-bold text-xs">{q.subject} - Khối {q.grade}</span>
                                        <Badge variant="outline" className={`${q.type==='essay' ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-slate-50 text-slate-500 border-slate-200'} text-[11px] font-medium justify-center`}>{q.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'}</Badge>
@@ -808,7 +859,7 @@ const QuestionBank = () => {
                                     </div>
                                  </TableCell>
                                  
-                                 <TableCell className="text-center align-middle py-4 shrink-0">
+                                 <TableCell className="text-center align-middle py-4 shrink-0 w-[140px]">
                                     <div className="flex justify-center items-center gap-2">
                                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-sky-600 hover:bg-sky-100 rounded-lg" onClick={(e) => { e.stopPropagation(); setViewQuestion(q); }} title="Xem chi tiết"><Eye className="w-4 h-4"/></Button>
                                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-amber-500 hover:bg-amber-100 rounded-lg" onClick={(e) => { e.stopPropagation(); handleEditClick(q); }} title="Sửa"><Pencil className="w-4 h-4"/></Button>
@@ -850,15 +901,14 @@ const QuestionBank = () => {
                   </Select>
 
                   <Select value={filterGrade} onValueChange={setFilterGrade}>
-                    <SelectTrigger className="h-10 w-[120px] bg-white border-indigo-100 font-bold text-indigo-700 rounded-xl shadow-sm">
+                    <SelectTrigger className="h-10 w-[140px] bg-white border-indigo-100 font-bold text-indigo-700 rounded-xl shadow-sm">
                       <span className="truncate">{filterGrade === 'all' ? 'Tất cả khối' : `Khối ${filterGrade}`}</span>
                     </SelectTrigger>
                     <SelectContent position="popper" className="bg-white z-50">
                       <SelectItem value="all">Tất cả khối</SelectItem>
-                      <SelectItem value="6">Khối 6</SelectItem>
-                      <SelectItem value="7">Khối 7</SelectItem>
-                      <SelectItem value="8">Khối 8</SelectItem>
-                      <SelectItem value="9">Khối 9</SelectItem>
+                      {allowedGrades.map(g => (
+                          <SelectItem key={g} value={g}>Khối {g}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
 
@@ -880,7 +930,7 @@ const QuestionBank = () => {
             ) : (
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                  {filteredSets.map((set, idx) => (
-                    <Card key={idx} onClick={() => { setCurrentExam(set); setViewMode("set_detail"); setIsAddingNew(false); }} className="relative border-indigo-100 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-indigo-300 transition-all cursor-pointer group bg-white rounded-3xl overflow-hidden">
+                    <Card key={idx} onClick={() => { setCurrentExam(set); setViewMode("set_detail"); setIsAddingNew(false); setSearchQuery(""); }} className="relative border-indigo-100 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-indigo-300 transition-all cursor-pointer group bg-white rounded-3xl overflow-hidden">
                        <Button onClick={(e) => handleDeleteSet(e, set)} variant="ghost" className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity bg-rose-50 hover:bg-rose-500 text-rose-500 hover:text-white rounded-xl p-2 h-9 w-9 shadow-sm" title="Xóa toàn bộ tập này"><Trash2 className="w-4 h-4" /></Button>
                        <CardContent className="p-6">
                          <div className="flex justify-between items-start mb-4">
@@ -1019,7 +1069,26 @@ const QuestionBank = () => {
                                             <CardContent className="p-4 sm:p-5 space-y-4 relative z-10">
                                               <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
                                                 <div className={`flex-1 transition-all ${isSlotEmpty ? 'border-dashed border-2 border-slate-300 rounded-xl p-1 bg-white' : ''}`}>
-                                                    <RichTextEditor value={q.content} onChange={(val) => handleExtractedChange(q.tempId, 'content', val)} />
+                                                    
+                                                    {/* 👉 SỬ DỤNG GIAO DIỆN LỚP PHỦ CHO SOẠN ĐỀ BÀI (BÓC TÁCH) */}
+                                                    <div 
+                                                        className="relative w-full"
+                                                        onFocusCapture={() => setActiveRTE(`ext-content-${q.tempId}`)}
+                                                        onBlurCapture={(e) => {
+                                                            if (!e.currentTarget.contains(e.relatedTarget)) {
+                                                                setActiveRTE(null);
+                                                            }
+                                                        }}
+                                                    >
+                                                        <RichTextEditor value={q.content} onChange={(val) => handleExtractedChange(q.tempId, 'content', val)} />
+                                                        {activeRTE !== `ext-content-${q.tempId}` && hasLatex(q.content) && (
+                                                            <div 
+                                                                className="absolute inset-0 z-10 bg-white border border-slate-200 rounded-lg p-4 cursor-text overflow-y-auto q-content-view shadow-sm text-lg leading-relaxed"
+                                                                onClick={() => setActiveRTE(`ext-content-${q.tempId}`)}
+                                                                dangerouslySetInnerHTML={{ __html: renderLatexContent(q.content) }}
+                                                            />
+                                                        )}
+                                                    </div>
                                                     
                                                     {!openExtractedMediaPanels[q.tempId] && !q.videoFile && !q.videoUrl && (
                                                        <Button type="button" variant="ghost" size="sm" onClick={() => setOpenExtractedMediaPanels(prev => ({...prev, [q.tempId]: true}))} className="mt-2 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 font-bold self-start w-max">
@@ -1062,6 +1131,9 @@ const QuestionBank = () => {
                                                                                  <p className="text-slate-500 font-medium text-xs">Video bị chặn. Nhấn link để xem.</p>
                                                                               </div>
                                                                           </div>
+                                                                          <a href={q.videoUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center justify-center h-10 px-6 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-sm transition-colors border border-indigo-200 shadow-sm">
+                                                                             <Video className="w-4 h-4 mr-2" /> Click mở Video sang Tab mới
+                                                                          </a>
                                                                       </div>
                                                                   )}
                                                               </div>
@@ -1091,7 +1163,25 @@ const QuestionBank = () => {
                                                 <h4 className="text-sm font-bold text-emerald-700 flex items-center mb-2"><CheckCircle2 className="w-4 h-4 mr-1"/> Đáp án / Hướng dẫn giải</h4>
                                                 <div className="flex flex-col md:flex-row gap-4">
                                                     <div className="flex-1">
-                                                      <RichTextEditor value={q.essayAnswerText} onChange={(val) => handleExtractedChange(q.tempId, 'essayAnswerText', val)} />
+                                                      {/* 👉 SỬ DỤNG GIAO DIỆN LỚP PHỦ CHO LỜI GIẢI (BÓC TÁCH) */}
+                                                      <div 
+                                                          className="relative w-full"
+                                                          onFocusCapture={() => setActiveRTE(`ext-essay-${q.tempId}`)}
+                                                          onBlurCapture={(e) => {
+                                                              if (!e.currentTarget.contains(e.relatedTarget)) {
+                                                                  setActiveRTE(null);
+                                                              }
+                                                          }}
+                                                      >
+                                                          <RichTextEditor value={q.essayAnswerText} onChange={(val) => handleExtractedChange(q.tempId, 'essayAnswerText', val)} />
+                                                          {activeRTE !== `ext-essay-${q.tempId}` && hasLatex(q.essayAnswerText) && (
+                                                              <div 
+                                                                  className="absolute inset-0 z-10 bg-white border border-slate-200 rounded-lg p-4 cursor-text overflow-y-auto q-content-view shadow-sm text-lg leading-relaxed"
+                                                                  onClick={() => setActiveRTE(`ext-essay-${q.tempId}`)}
+                                                                  dangerouslySetInnerHTML={{ __html: renderLatexContent(q.essayAnswerText) }}
+                                                              />
+                                                          )}
+                                                      </div>
                                                     </div>
                                                 </div>
                                               </div>
@@ -1101,21 +1191,37 @@ const QuestionBank = () => {
                                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                                     {q.options.map((opt, i) => {
                                                       const letter = String.fromCharCode(65 + i);
+                                                      const mathExists = hasLatex(q.options[i]);
+
                                                       return (
-                                                      <div key={i} className="flex flex-col gap-1">
-                                                          <div className="flex items-center gap-2">
-                                                            <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base mt-2">{letter}.</span>
-                                                            <div className="flex-1 flex items-center gap-2">
-                                                              <Input className={`h-11 rounded-xl bg-white text-sm sm:text-base ${isSlotEmpty ? 'border-dashed border-slate-300' : 'border-sky-100'}`} value={q.options[i]} onChange={(e) => handleExtractedOptionChange(q.tempId, i, e.target.value)} />
-                                                              <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: q.tempId, targetOptionIndex: i, isExtracted: true, isEditing: false })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
+                                                      <div key={i} className="flex flex-col gap-1 w-full mt-1">
+                                                          <div className="flex items-start gap-2">
+                                                            <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base mt-3 shrink-0">{letter}.</span>
+                                                            <div className="flex-1 flex flex-col gap-2 min-w-0">
+                                                              {/* 👉 GIAO DIỆN PREVIEW ĐÁP ÁN CHO SOẠN TRẮC NGHIỆM (BÓC TÁCH) */}
+                                                              <div className="flex items-center gap-2">
+                                                                <Input 
+                                                                  className="h-11 rounded-xl bg-white text-sm sm:text-base border-sky-100 flex-1" 
+                                                                  value={q.options[i]} 
+                                                                  onChange={(e) => handleExtractedOptionChange(q.tempId, i, e.target.value)} 
+                                                                  onFocus={() => setFocusedOption({ tempId: q.tempId, optIdx: i, isExtracted: true })}
+                                                                  onBlur={() => { setTimeout(() => setFocusedOption({ tempId: null, optIdx: null, isExtracted: true }), 200); }}
+                                                                />
+                                                                <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: q.tempId, targetOptionIndex: i, isExtracted: true, isEditing: false })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
+                                                                {q.options.length > 2 && <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveExtractedOption(q.tempId, i)} className="h-11 w-11 text-rose-400 hover:bg-rose-100 shrink-0 rounded-xl"><Trash2 className="w-4 h-4"/></Button>}
+                                                              </div>
+                                                              
+                                                              {mathExists && (
+                                                                <div className="w-full px-4 py-3 bg-slate-50/80 border border-slate-200 rounded-xl flex items-center min-h-[48px] overflow-x-auto shadow-sm text-slate-800 text-base">
+                                                                  <div className="q-content-view font-medium" dangerouslySetInnerHTML={{ __html: renderLatexContent(q.options[i]) }} />
+                                                                </div>
+                                                              )}
                                                             </div>
-                                                            {q.options.length > 2 && <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveExtractedOption(q.tempId, i)} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 mt-1.5"><Trash2 className="w-4 h-4"/></Button>}
                                                           </div>
                                                       </div>
                                                     )})}
                                                   </div>
                                                   <div className="flex justify-between items-center pt-2 border-t border-slate-200 mt-2">
-                                                    {/* Giới hạn tối đa 16 đáp án */}
                                                     {q.options.length < 16 ? (
                                                         <Button type="button" variant="ghost" size="sm" onClick={() => handleAddExtractedOption(q.tempId)} className="text-indigo-600 hover:bg-indigo-100 rounded-lg"><PlusCircle className="w-4 h-4 mr-1"/> Thêm đáp án</Button>
                                                     ) : <div className="text-xs text-rose-500 font-bold">Đã đạt tối đa 16 đáp án</div>}
@@ -1148,7 +1254,7 @@ const QuestionBank = () => {
                           </div>
                         )}
 
-                        {/* GIAO DIỆN MANUAL SOẠN THẢO TRỰC TIẾP */}
+                        {/* 👉 GIAO DIỆN MANUAL SOẠN THẢO TRỰC TIẾP ĐƯỢC ĐỒNG BỘ UI */}
                         {creationMethod === "manual" && (
                           <div className="space-y-6 mt-4">
                             {draftQuestions.map((q, index) => {
@@ -1189,7 +1295,26 @@ const QuestionBank = () => {
 
                                    <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
                                      <div className={`flex-1 transition-all ${isSlotEmpty ? 'border-dashed border-2 border-slate-300 rounded-xl p-1 bg-white' : ''}`}>
-                                        <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={q.content} onChange={(val) => handleDraftChange(q.tempId, 'content', val)} />
+                                        
+                                        {/* 👉 LỚP PHỦ RICH TEXT EDITOR CHO SOẠN ĐỀ THỦ CÔNG */}
+                                        <div 
+                                            className="relative w-full"
+                                            onFocusCapture={() => setActiveRTE(`draft-content-${q.tempId}`)}
+                                            onBlurCapture={(e) => {
+                                                if (!e.currentTarget.contains(e.relatedTarget)) {
+                                                    setActiveRTE(null);
+                                                }
+                                            }}
+                                        >
+                                            <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={q.content} onChange={(val) => handleDraftChange(q.tempId, 'content', val)} />
+                                            {activeRTE !== `draft-content-${q.tempId}` && hasLatex(q.content) && (
+                                                <div 
+                                                    className="absolute inset-0 z-10 bg-white border border-slate-200 rounded-lg p-4 cursor-text overflow-y-auto q-content-view shadow-sm text-lg leading-relaxed"
+                                                    onClick={() => setActiveRTE(`draft-content-${q.tempId}`)}
+                                                    dangerouslySetInnerHTML={{ __html: renderLatexContent(q.content) }}
+                                                />
+                                            )}
+                                        </div>
                                         
                                         {!openMediaPanels[q.tempId] && !q.videoFile && !q.videoUrl && (
                                            <Button type="button" variant="ghost" size="sm" onClick={() => setOpenMediaPanels(prev => ({...prev, [q.tempId]: true}))} className="mt-2 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 font-bold self-start w-max">
@@ -1232,6 +1357,9 @@ const QuestionBank = () => {
                                                                      <p className="text-slate-500 font-medium text-xs">Video bị chặn. Nhấn link để xem.</p>
                                                                   </div>
                                                               </div>
+                                                              <a href={q.videoUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center justify-center h-10 px-6 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-sm transition-colors border border-indigo-200 shadow-sm">
+                                                                 <Video className="w-4 h-4 mr-2" /> Click mở Video sang Tab mới
+                                                              </a>
                                                           </div>
                                                       )}
                                                   </div>
@@ -1261,7 +1389,25 @@ const QuestionBank = () => {
                                       <h4 className="text-sm font-bold text-emerald-700 flex items-center mb-2"><CheckCircle2 className="w-4 h-4 mr-1"/> Đáp án / Hướng dẫn giải</h4>
                                       <div className="flex flex-col md:flex-row gap-4">
                                           <div className="flex-1">
-                                            <RichTextEditor value={q.essayAnswerText} onChange={(val) => handleDraftChange(q.tempId, 'essayAnswerText', val)} />
+                                            {/* 👉 LỚP PHỦ RICH TEXT EDITOR CHO LỜI GIẢI THỦ CÔNG */}
+                                            <div 
+                                                className="relative w-full"
+                                                onFocusCapture={() => setActiveRTE(`draft-essay-${q.tempId}`)}
+                                                onBlurCapture={(e) => {
+                                                    if (!e.currentTarget.contains(e.relatedTarget)) {
+                                                        setActiveRTE(null);
+                                                    }
+                                                }}
+                                            >
+                                                <RichTextEditor value={q.essayAnswerText} onChange={(val) => handleDraftChange(q.tempId, 'essayAnswerText', val)} />
+                                                {activeRTE !== `draft-essay-${q.tempId}` && hasLatex(q.essayAnswerText) && (
+                                                    <div 
+                                                        className="absolute inset-0 z-10 bg-white border border-slate-200 rounded-lg p-4 cursor-text overflow-y-auto q-content-view shadow-sm text-lg leading-relaxed"
+                                                        onClick={() => setActiveRTE(`draft-essay-${q.tempId}`)}
+                                                        dangerouslySetInnerHTML={{ __html: renderLatexContent(q.essayAnswerText) }}
+                                                    />
+                                                )}
+                                            </div>
                                           </div>
                                       </div>
                                    </div>
@@ -1269,18 +1415,39 @@ const QuestionBank = () => {
                                    {q.type === "multiple_choice" && (
                                       <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3 mt-4">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                          {q.options.map((optLabel, i) => (
-                                            <div key={i} className="flex flex-col gap-1">
-                                              <div className="flex items-start gap-2">
-                                                <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base mt-2">{String.fromCharCode(65 + i)}.</span>
-                                                <div className="flex-1 flex items-center gap-2">
-                                                   <Input className={`h-11 rounded-xl bg-white text-sm sm:text-base ${isSlotEmpty ? 'border-dashed border-slate-300' : 'border-sky-100'}`} value={optLabel} onChange={(e) => handleDraftOptionChange(q.tempId, i, e.target.value)} placeholder={`Gõ đáp án ${String.fromCharCode(65 + i)}...`} />
-                                                   <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: q.tempId, targetOptionIndex: i, isExtracted: false, isEditing: false })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-4 h-4"/></Button>
+                                          {q.options.map((optLabel, optIdx) => {
+                                            const letter = String.fromCharCode(65 + optIdx);
+                                            const mathExists = hasLatex(q.options[optIdx]);
+
+                                            return (
+                                            <div key={optIdx} className="flex flex-col gap-1 w-full mt-1">
+                                                <div className="flex items-start gap-2">
+                                                  <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base mt-3 shrink-0">{letter}.</span>
+                                                  
+                                                  <div className="flex-1 flex flex-col gap-2 min-w-0">
+                                                    {/* 👉 GIAO DIỆN PREVIEW ĐÁP ÁN CHO SOẠN THỦ CÔNG */}
+                                                    <div className="flex items-center gap-2">
+                                                      <Input 
+                                                        className={`h-11 rounded-xl bg-white text-sm sm:text-base flex-1 ${isSlotEmpty ? 'border-dashed border-slate-300' : 'border-sky-100'}`} 
+                                                        value={q.options[optIdx]} 
+                                                        onChange={(e) => handleDraftOptionChange(q.tempId, optIdx, e.target.value)} 
+                                                        placeholder={`Gõ đáp án ${letter}...`} 
+                                                        onFocus={() => setFocusedOption({ tempId: q.tempId, optIdx: optIdx, isExtracted: false })}
+                                                        onBlur={() => { setTimeout(() => setFocusedOption({ tempId: null, optIdx: null, isExtracted: false }), 200); }}
+                                                      />
+                                                      <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: q.tempId, targetOptionIndex: optIdx, isExtracted: false, isEditing: false })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
+                                                      {q.options.length > 2 && <Button type="button" variant="ghost" size="icon" onClick={() => setDraftQuestions(draftQuestions.map(draft => draft.tempId === q.tempId ? {...draft, options: draft.options.filter((_, i) => i !== optIdx)} : draft))} className="h-11 w-11 text-rose-400 hover:bg-rose-100 shrink-0 rounded-xl"><Trash2 className="w-4 h-4"/></Button>}
+                                                    </div>
+                                                    
+                                                    {mathExists && (
+                                                      <div className="w-full px-4 py-3 bg-slate-50/80 border border-slate-200 rounded-xl flex items-center min-h-[48px] overflow-x-auto shadow-sm text-slate-800 text-base">
+                                                        <div className="q-content-view font-medium" dangerouslySetInnerHTML={{ __html: renderLatexContent(q.options[optIdx]) }} />
+                                                      </div>
+                                                    )}
+                                                  </div>
                                                 </div>
-                                                {q.options.length > 2 && <Button type="button" variant="ghost" size="icon" onClick={() => setDraftQuestions(draftQuestions.map(draft => draft.tempId === q.tempId ? {...draft, options: draft.options.filter((_, idx) => idx !== i)} : draft))} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 mt-1.5 rounded-lg"><Trash2 className="w-4 h-4"/></Button>}
-                                              </div>
                                             </div>
-                                          ))}
+                                          )})}
                                         </div>
                                         <div className="flex justify-between items-center pt-2 border-t border-slate-200 mt-2">
                                           {q.options.length < 16 ? (
@@ -1325,23 +1492,25 @@ const QuestionBank = () => {
                     </div>
                  )}
 
-                 {/* GIAO DIỆN HIỂN THỊ CÂU HỎI TRONG CHI TIẾT TẬP */}
-                 {displayedSetQuestions.length === 0 && !isAddingNew ? (
-                    <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-indigo-200 shadow-sm mt-4">
+                 {/* 👉 GIAO DIỆN HIỂN THỊ CÂU HỎI TRONG CHI TIẾT TẬP */}
+                 {!isAddingNew && displayedSetQuestions.length === 0 && (
+                    <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-indigo-200 shadow-sm mt-4 animate-in fade-in zoom-in-95">
                        <FileQuestion className="w-16 h-16 text-indigo-100 mx-auto mb-3" />
                        <h3 className="text-xl font-bold text-slate-700">Tập câu hỏi trống</h3>
                        <p className="text-slate-500 mb-6 mt-1">Tập này chưa có câu hỏi nào (hoặc không khớp với bộ lọc).</p>
                     </div>
-                 ) : (
-                    <div className={`space-y-4 mt-4 ${isAddingNew ? 'opacity-50 pointer-events-none' : ''}`}>
+                 )}
+
+                 {!isAddingNew && displayedSetQuestions.length > 0 && (
+                    <div className="space-y-4 mt-4 animate-in fade-in">
                        <div className="overflow-x-auto min-h-[300px]">
-                          <Table className="min-w-[800px] w-full border-collapse">
+                          <Table className="min-w-[1000px] w-full border-collapse bg-white rounded-2xl overflow-hidden shadow-sm border border-indigo-100">
                              <TableHeader className="bg-slate-50 border-b border-indigo-100">
                                 <TableRow>
                                    <TableHead className="w-14 text-center font-bold text-indigo-800">STT</TableHead>
                                    <TableHead className="font-bold text-indigo-800 w-auto">Nội dung câu hỏi</TableHead>
-                                   <TableHead className="font-bold text-indigo-800 text-center w-[140px]">Thông tin</TableHead>
-                                   <TableHead className="font-bold text-indigo-800 text-center w-[160px] shrink-0">Hành động</TableHead>
+                                   <TableHead className="font-bold text-indigo-800 text-center w-[160px]">Thông tin</TableHead>
+                                   <TableHead className="font-bold text-indigo-800 text-center w-[140px] shrink-0">Hành động</TableHead>
                                 </TableRow>
                              </TableHeader>
                              <TableBody>
@@ -1349,10 +1518,11 @@ const QuestionBank = () => {
                                    <TableRow key={q._id} className="hover:bg-indigo-50/50 transition-colors border-b border-slate-100">
                                       <TableCell className="text-center align-middle font-black text-slate-400 text-lg">{i + 1}</TableCell>
                                       
-                                      <TableCell className="align-middle py-4">
+                                      {/* 👉 ĐÃ KHÓA CHIỀU RỘNG TỐI ĐA CỦA CỘT NỘI DUNG ĐỂ KHÔNG BỊ VỠ BẢNG */}
+                                      <TableCell className="align-middle py-4 max-w-[250px] sm:max-w-[400px] lg:max-w-[500px]">
                                          <div className="flex flex-col gap-1 pr-4">
                                             <div 
-                                               className="font-medium text-slate-700 text-[15px] leading-relaxed line-clamp-2 q-content-view-table break-words overflow-hidden" 
+                                               className="font-medium text-slate-700 text-[15px] leading-relaxed line-clamp-3 q-content-view-table break-words overflow-hidden" 
                                                dangerouslySetInnerHTML={{ __html: renderLatexContent(q.content) }} 
                                             />
                                             <div className="flex items-center gap-2 mt-1">
@@ -1362,14 +1532,14 @@ const QuestionBank = () => {
                                          </div>
                                       </TableCell>
                                       
-                                      <TableCell className="text-center align-middle py-4">
+                                      <TableCell className="text-center align-middle py-4 w-[160px]">
                                          <div className="flex flex-col items-center gap-1.5">
                                             <Badge variant="outline" className={`${q.type==='essay' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-slate-50 text-slate-500 border-slate-200'} text-[11px] font-medium justify-center`}>{q.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'}</Badge>
                                             {q.type === 'essay' && q.points > 0 && <span className="text-indigo-600 font-bold text-xs">{q.points} Điểm</span>}
                                          </div>
                                       </TableCell>
                                       
-                                      <TableCell className="text-center align-middle py-4 shrink-0">
+                                      <TableCell className="text-center align-middle py-4 shrink-0 w-[140px]">
                                          <div className="flex justify-center items-center gap-2">
                                             <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-sky-600 hover:bg-sky-100 rounded-lg" onClick={(e) => { e.stopPropagation(); setViewQuestion(q); }} title="Xem chi tiết"><Eye className="w-4 h-4"/></Button>
                                             <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-amber-500 hover:bg-amber-100 rounded-lg" onClick={(e) => { e.stopPropagation(); handleEditClick(q); }} title="Sửa"><Pencil className="w-4 h-4"/></Button>
@@ -1427,10 +1597,9 @@ const QuestionBank = () => {
                                     <SelectValue placeholder="Chọn khối" />
                                 </SelectTrigger>
                                 <SelectContent className="bg-white">
-                                    <SelectItem value="6">Khối 6</SelectItem>
-                                    <SelectItem value="7">Khối 7</SelectItem>
-                                    <SelectItem value="8">Khối 8</SelectItem>
-                                    <SelectItem value="9">Khối 9</SelectItem>
+                                    {allowedGrades.map(g => (
+                                        <SelectItem key={g} value={g}>Khối {g}</SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -1496,10 +1665,9 @@ const QuestionBank = () => {
                                         <SelectValue placeholder="Chọn khối" />
                                     </SelectTrigger>
                                     <SelectContent className="bg-white">
-                                        <SelectItem value="6">Khối 6</SelectItem>
-                                        <SelectItem value="7">Khối 7</SelectItem>
-                                        <SelectItem value="8">Khối 8</SelectItem>
-                                        <SelectItem value="9">Khối 9</SelectItem>
+                                        {allowedGrades.map(g => (
+                                            <SelectItem key={g} value={g}>Khối {g}</SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -1528,7 +1696,7 @@ const QuestionBank = () => {
             </DialogContent>
         </Dialog>
 
-        {/* MODAL EDIT CÂU HỎI */}
+        {/* 👉 MODAL EDIT CÂU HỎI (ĐÃ ĐỒNG BỘ GIAO DIỆN LỚP PHỦ) */}
         <Dialog open={isEditDialogOpen} onOpenChange={(val) => { setIsEditDialogOpen(val); if(!val) {setEditVideoPreviewUrl(""); setEditVideoFile(null); setEditQuestionData(initialQuestionState);}}}>
           <DialogContent className="sm:max-w-[800px] w-[95%] max-h-[90vh] overflow-y-auto rounded-3xl border-none shadow-2xl p-0 bg-slate-50 modal-detail-view">
             <DialogHeader className="bg-sky-500 text-white px-6 sm:px-8 py-4 sm:py-5 rounded-t-3xl">
@@ -1538,7 +1706,7 @@ const QuestionBank = () => {
               
               <div className="flex flex-wrap gap-4 items-center bg-white p-4 rounded-xl border border-sky-100 shadow-sm">
                 <Select value={editQuestionData.type} onValueChange={(v) => setEditQuestionData({...editQuestionData, type: v})}><SelectTrigger className="h-11 w-max rounded-xl bg-slate-50 border-slate-200 font-bold text-slate-700"><span className="truncate">{editQuestionData.type === "multiple_choice" ? "Trắc nghiệm" : "Tự luận"}</span></SelectTrigger><SelectContent position="popper" className="bg-white z-50"><SelectItem value="multiple_choice">Trắc nghiệm</SelectItem><SelectItem value="essay">Tự luận</SelectItem></SelectContent></Select>
-                <Select disabled={!!editQuestionData.examName} value={editQuestionData.grade} onValueChange={(v) => setEditQuestionData({...editQuestionData, grade: v})}><SelectTrigger className="h-11 w-max rounded-xl bg-slate-50 border-slate-200 font-bold disabled:bg-slate-100 disabled:opacity-50 text-slate-700"><span className="truncate">{editQuestionData.grade ? `Khối ${editQuestionData.grade}` : "Chọn khối"}</span></SelectTrigger><SelectContent position="popper" className="bg-white z-50"><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent></Select>
+                <Select disabled={!!editQuestionData.examName} value={editQuestionData.grade} onValueChange={(v) => setEditQuestionData({...editQuestionData, grade: v})}><SelectTrigger className="h-11 w-max rounded-xl bg-slate-50 border-slate-200 font-bold disabled:bg-slate-100 disabled:opacity-50 text-slate-700"><span className="truncate">{editQuestionData.grade ? `Khối ${editQuestionData.grade}` : "Chọn khối"}</span></SelectTrigger><SelectContent position="popper" className="bg-white z-50">{allowedGrades.map(g => <SelectItem key={g} value={g}>Khối {g}</SelectItem>)}</SelectContent></Select>
                 <Select disabled={!!editQuestionData.examName} value={editQuestionData.semester} onValueChange={(v) => setEditQuestionData({...editQuestionData, semester: v})}><SelectTrigger className="h-11 w-max rounded-xl bg-slate-50 border-slate-200 font-bold disabled:bg-slate-100 disabled:opacity-50 text-slate-700"><span className="truncate">{editQuestionData.semester === 'Cả năm' ? 'Cả năm' : `HK ${editQuestionData.semester}`}</span></SelectTrigger><SelectContent position="popper" className="bg-white z-50"><SelectItem value="1">Học kỳ 1</SelectItem><SelectItem value="2">Học kỳ 2</SelectItem><SelectItem value="Cả năm">Cả năm</SelectItem></SelectContent></Select>
                 <Select value={editQuestionData.difficulty} onValueChange={(v) => setEditQuestionData({...editQuestionData, difficulty: v})}><SelectTrigger className="h-11 w-max rounded-xl bg-slate-50 border-slate-200 font-medium text-slate-700"><span className="truncate">{editQuestionData.difficulty === 'easy' ? 'Dễ' : editQuestionData.difficulty === 'hard' ? 'Khó' : 'Trung bình'}</span></SelectTrigger><SelectContent position="popper" className="bg-white z-50"><SelectItem value="easy">Dễ</SelectItem><SelectItem value="medium">Trung bình</SelectItem><SelectItem value="hard">Khó</SelectItem></SelectContent></Select>
                 
@@ -1554,7 +1722,24 @@ const QuestionBank = () => {
               <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
                 <div className="flex-1">
                   <span className="text-sm font-bold text-slate-700 mb-2 block">Nội dung Đề bài</span>
-                  <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={editQuestionData.content} onChange={(val) => setEditQuestionData({...editQuestionData, content: val})} />
+                  <div 
+                      className="relative w-full"
+                      onFocusCapture={() => setActiveRTE(`edit-content`)}
+                      onBlurCapture={(e) => {
+                          if (!e.currentTarget.contains(e.relatedTarget)) {
+                              setActiveRTE(null);
+                          }
+                      }}
+                  >
+                      <RichTextEditor placeholder="Gõ ĐỀ BÀI hoặc DÁN ẢNH CÔNG THỨC TOÁN..." value={editQuestionData.content} onChange={(val) => setEditQuestionData({...editQuestionData, content: val})} />
+                      {activeRTE !== `edit-content` && hasLatex(editQuestionData.content) && (
+                          <div 
+                              className="absolute inset-0 z-10 bg-white border border-slate-200 rounded-lg p-4 cursor-text overflow-y-auto q-content-view shadow-sm text-lg leading-relaxed"
+                              onClick={() => setActiveRTE(`edit-content`)}
+                              dangerouslySetInnerHTML={{ __html: renderLatexContent(editQuestionData.content) }}
+                          />
+                      )}
+                  </div>
                   
                   {!openEditMediaPanel && !editVideoFile && !editQuestionData.videoUrl && (
                      <Button type="button" variant="ghost" size="sm" onClick={() => setOpenEditMediaPanel(true)} className="mt-2 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 font-bold self-start w-max">
@@ -1626,7 +1811,24 @@ const QuestionBank = () => {
                   <label className="text-sm font-bold text-emerald-700 block mb-3 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1"/> Đáp án / Hướng dẫn giải</label>
                   <div className="flex flex-col md:flex-row gap-4">
                     <div className="flex-1">
-                      <RichTextEditor placeholder="Nhập lời giải..." value={editQuestionData.essayAnswerText} onChange={(val) => setEditQuestionData({...editQuestionData, essayAnswerText: val})} />
+                      <div 
+                          className="relative w-full"
+                          onFocusCapture={() => setActiveRTE(`edit-essay`)}
+                          onBlurCapture={(e) => {
+                              if (!e.currentTarget.contains(e.relatedTarget)) {
+                                  setActiveRTE(null);
+                              }
+                          }}
+                      >
+                          <RichTextEditor placeholder="Nhập lời giải..." value={editQuestionData.essayAnswerText} onChange={(val) => setEditQuestionData({...editQuestionData, essayAnswerText: val})} />
+                          {activeRTE !== `edit-essay` && hasLatex(editQuestionData.essayAnswerText) && (
+                              <div 
+                                  className="absolute inset-0 z-10 bg-white border border-slate-200 rounded-lg p-4 cursor-text overflow-y-auto q-content-view shadow-sm text-lg leading-relaxed"
+                                  onClick={() => setActiveRTE(`edit-essay`)}
+                                  dangerouslySetInnerHTML={{ __html: renderLatexContent(editQuestionData.essayAnswerText) }}
+                              />
+                          )}
+                      </div>
                     </div>
                   </div>
               </div>
@@ -1636,24 +1838,43 @@ const QuestionBank = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {editQuestionData.options.map((opt, i) => {
                       const k = String.fromCharCode(65 + i);
+                      const mathExists = hasLatex(opt);
+                      const isEditingThis = focusedOption.tempId === 'edit' && focusedOption.optIdx === i;
+
                       return (
-                      <div key={i} className="flex flex-col gap-1">
+                      <div key={i} className="flex flex-col gap-1 w-full mt-1">
                           <div className="flex items-start gap-2">
-                            <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base mt-2">{k}.</span>
-                            <div className="flex-1 flex items-center gap-2">
-                              <Input placeholder={`Nhập đáp án ${k}`} className="h-11 rounded-xl bg-slate-50 border-sky-100 font-medium" value={opt} onChange={(e) => {
-                                const newOpts = [...editQuestionData.options];
-                                newOpts[i] = e.target.value;
-                                setEditQuestionData({...editQuestionData, options: newOpts});
-                              }} required />
-                              <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: null, targetOptionIndex: i, isExtracted: false, isEditing: true })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
+                            <span className="font-bold text-slate-500 w-5 sm:w-6 text-sm sm:text-base mt-3 shrink-0">{k}.</span>
+                            <div className="flex-1 flex flex-col gap-2 min-w-0">
+                               <div className="flex items-center gap-2">
+                                 <Input 
+                                    placeholder={`Nhập đáp án ${k}`} 
+                                    className="h-11 rounded-xl bg-slate-50 border-sky-100 font-medium flex-1" 
+                                    value={opt} 
+                                    onChange={(e) => {
+                                      const newOpts = [...editQuestionData.options];
+                                      newOpts[i] = e.target.value;
+                                      setEditQuestionData({...editQuestionData, options: newOpts});
+                                    }} 
+                                    onFocus={() => setFocusedOption({ tempId: 'edit', optIdx: i, isExtracted: false })}
+                                    onBlur={() => { setTimeout(() => setFocusedOption({ tempId: null, optIdx: null, isExtracted: false }), 200); }}
+                                    required 
+                                 />
+                                 <Button type="button" variant="outline" onClick={() => setMathModal({ isOpen: true, targetTempId: null, targetOptionIndex: i, isExtracted: false, isEditing: true })} className="h-11 px-3 border-sky-200 text-sky-600 hover:bg-sky-50 shrink-0 rounded-xl" title="Mở bàn phím gõ Phân số / Toán học"><Sigma className="w-5 h-5"/></Button>
+                                 {editQuestionData.options.length > 2 && (
+                                     <Button type="button" variant="ghost" size="icon" onClick={() => {
+                                         const newOpts = editQuestionData.options.filter((_, idx) => idx !== i);
+                                         setEditQuestionData({...editQuestionData, options: newOpts});
+                                     }} className="h-11 w-11 text-rose-400 hover:bg-rose-100 shrink-0 rounded-xl"><Trash2 className="w-4 h-4"/></Button>
+                                 )}
+                               </div>
+                               
+                               {mathExists && (
+                                 <div className="w-full px-4 py-3 bg-slate-50/80 border border-slate-200 rounded-xl flex items-center min-h-[48px] overflow-x-auto shadow-sm text-slate-800 text-base">
+                                   <div className="q-content-view font-medium" dangerouslySetInnerHTML={{ __html: renderLatexContent(opt) }} />
+                                 </div>
+                               )}
                             </div>
-                            {editQuestionData.options.length > 2 && (
-                                <Button type="button" variant="ghost" size="icon" onClick={() => {
-                                    const newOpts = editQuestionData.options.filter((_, idx) => idx !== i);
-                                    setEditQuestionData({...editQuestionData, options: newOpts});
-                                }} className="h-8 w-8 text-rose-400 hover:bg-rose-100 shrink-0 mt-1.5 rounded-lg"><Trash2 className="w-4 h-4"/></Button>
-                            )}
                           </div>
                       </div>
                     )})}
@@ -1685,12 +1906,14 @@ const QuestionBank = () => {
           </DialogContent>
         </Dialog>
 
-        {/* MODAL VIEW PREVIEW CÂU HỎI */}
+        {/* 👉 MODAL XEM CHI TIẾT CÂU HỎI (ĐÃ ĐỒNG BỘ GIAO DIỆN XEM TRƯỚC) */}
         <Dialog open={!!viewQuestion} onOpenChange={(open) => { if(!open) setViewQuestion(null) }}>
           <DialogContent className="sm:max-w-[700px] w-[95%] rounded-3xl border-none p-0 bg-white shadow-2xl max-h-[90vh] overflow-y-auto modal-detail-view">
-            <DialogHeader className="bg-slate-50 px-8 py-6 border-b border-slate-100"><DialogTitle className="text-2xl font-black text-sky-950 flex items-center gap-3"><Eye className="w-6 h-6 text-sky-500" /> Chi tiết câu hỏi</DialogTitle></DialogHeader>
+            <DialogHeader className="bg-sky-500 text-white px-6 sm:px-8 py-4 sm:py-5 rounded-t-3xl">
+                <DialogTitle className="text-xl sm:text-2xl font-black flex items-center gap-3"><Eye className="w-6 h-6 text-white" /> Chi tiết câu hỏi</DialogTitle>
+            </DialogHeader>
             {viewQuestion && (
-              <div className="space-y-6 p-8 pt-6">
+              <div className="space-y-6 p-6 sm:p-8 pt-6">
                 <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm">
                     <div className="font-bold text-slate-800 text-lg leading-relaxed q-content-view whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: renderLatexContent(viewQuestion.content) }} />
                     {viewQuestion.imageUrl && <img src={getImageUrl(viewQuestion.imageUrl)} className="max-w-full mt-4 rounded-xl border border-slate-200 shadow-sm mx-auto object-contain max-h-[400px]" />}

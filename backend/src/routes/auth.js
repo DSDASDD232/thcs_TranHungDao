@@ -59,7 +59,7 @@ const hasDuplicateAccountByNameAndPhone = async (fullName, phone) => {
 
 const isValidUsernameFormat = (username) => {
     const value = String(username ?? "").trim();
-    if (!value) return false;
+    if (!value || value.length < 6) return false;
 
     const normalized = value
         .normalize('NFD')

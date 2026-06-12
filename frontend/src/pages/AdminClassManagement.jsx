@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import axios from "../lib/axios";
 import ExcelJS from 'exceljs';
+import schoolLogo from "../assets/logo-truong_221020252129.jpg";
 import { saveAs } from 'file-saver';
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,9 +10,41 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { 
+import {
   Loader2, Trash2, Edit, PlusCircle, Search, Eye, UserCheck, Users, Download, UserMinus, ShieldCheck, ArrowRightLeft
 } from "lucide-react";
+
+const addSchoolLogoToExcel = async (workbook, sheet) => {
+  try {
+    const logoResponse = await fetch(schoolLogo);
+    const logoBuffer = await logoResponse.arrayBuffer();
+    const logoId = workbook.addImage({ buffer: logoBuffer, extension: "jpg" });
+    sheet.addImage(logoId, {
+      tl: { col: 0.05, row: 0.02 },
+      ext: { width: 85, height: 85 },
+    });
+  } catch (error) {
+    console.log("Không tải được logo vào Excel", error);
+  }
+};
+
+const autoFitSheetColumns = (sheet, startColumn = 1, endColumn = sheet.columnCount, startRow = 1, endRow = sheet.rowCount) => {
+  for (let columnIndex = startColumn; columnIndex <= endColumn; columnIndex += 1) {
+    let maxLength = 0;
+
+    sheet.getColumn(columnIndex).eachCell({ includeEmpty: true }, (cell, rowNumber) => {
+      if (rowNumber < startRow || rowNumber > endRow) return;
+      const cellValue = cell.value;
+      const text = cellValue == null ? "" : String(cellValue).replace(/\s+/g, " ").trim();
+      maxLength = Math.max(maxLength, text.length);
+    });
+
+    const column = sheet.getColumn(columnIndex);
+    const currentWidth = column.width || 10;
+    const paddedWidth = Math.min(Math.max(maxLength + 2, 8), 36);
+    column.width = Math.max(currentWidth, paddedWidth);
+  }
+};
 
 // ==========================================
 // HÀM XUẤT EXCEL CHUẨN FORM (DANH SÁCH HỌC SINH TRONG LỚP)
@@ -43,73 +76,105 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, adminName = "Q
     },
   };
 
-  sheet.columns = [ { width: 6 }, { width: 6 }, { width: 10 }, { width: 24 }, { width: 28 }, { width: 18 } ];
+  // Cấu hình đúng 4 cột của bảng, không để thừa cột ngoài lề
+  sheet.columns = [{ width: 11 }, { width: 38 }, { width: 28 }, { width: 24 }];
 
-  sheet.addRow(["", "", "PHƯỜNG THỦY NGUYÊN", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", ""]);
-  sheet.addRow(["", "", "TRƯỜNG THCS TRẦN HƯNG ĐẠO", "", "Độc lập - Tự do - Hạnh phúc", ""]);
-  sheet.mergeCells('C1:D1'); sheet.mergeCells('C2:D2'); 
-  sheet.mergeCells('E1:F1'); sheet.mergeCells('E2:F2');
+  sheet.addRow([]);
+  sheet.addRow([]);
+  sheet.mergeCells('C1:D1'); sheet.mergeCells('C2:D2');
+
+  sheet.getCell('B1').value = "PHƯỜNG LƯU KIẾM";
+  sheet.getCell('B2').value = "TRƯỜNG THCS TRẦN HƯNG ĐẠO";
+  sheet.getCell('C1').value = "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
+  sheet.getCell('C2').value = "Độc lập - Tự do - Hạnh phúc";
+
+  await addSchoolLogoToExcel(workbook, sheet);
 
   const formatGovHeader = (rowNum, isBold) => {
-    const row = sheet.getRow(rowNum); row.height = 25; 
-    row.eachCell(cell => { cell.font = { name: 'Times New Roman', size: 12, bold: isBold }; cell.alignment = { vertical: 'middle', horizontal: 'center' }; });
+    const row = sheet.getRow(rowNum); row.height = 25;
+    row.eachCell(cell => { cell.font = { name: 'Times New Roman', size: 13, bold: isBold }; cell.alignment = { vertical: 'middle', horizontal: 'center' }; });
   };
   formatGovHeader(1, true); formatGovHeader(2, true);
-  sheet.getCell('C1').alignment = { vertical: 'middle', horizontal: 'center' };
-  sheet.getCell('C2').alignment = { vertical: 'middle', horizontal: 'center' };
-  sheet.getCell('E1').alignment = { vertical: 'middle', horizontal: 'center' };
-  sheet.getCell('E2').font = { name: 'Times New Roman', size: 13, bold: true, underline: true }; 
-  sheet.getCell('E2').alignment = { vertical: 'middle', horizontal: 'center' };
+  const row3 = sheet.getRow(3); row3.height = 25;
 
-  sheet.addRow([]); 
-  const titleRow = sheet.addRow(["", "", reportTitle.toUpperCase(), "", "", ""]);
-  sheet.mergeCells('C4:F4'); titleRow.height = 40;
-  const titleCell = sheet.getCell('C4');
-  titleCell.font = { name: 'Times New Roman', size: 16, bold: true, color: { argb: 'FF0070C0' } }; 
+  sheet.getCell('B1').font = { name: 'Times New Roman', size: 11, bold: true };
+  sheet.getCell('B2').font = { name: 'Times New Roman', size: 11, bold: true };
+  sheet.getCell('B1').alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('B2').alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('C1').alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('C2').font = { name: 'Times New Roman', size: 13, bold: true, underline: true };
+  sheet.getCell('C2').alignment = { vertical: 'middle', horizontal: 'center' };
+
+  sheet.addRow([]);
+  const titleRow = sheet.addRow([reportTitle.toUpperCase()]);
+  const rowNum = titleRow.number;
+  sheet.mergeCells(`A${rowNum}:D${rowNum}`); titleRow.height = 45;
+  const titleCell = sheet.getCell(`A${rowNum}`);
+  titleCell.font = { name: 'Times New Roman', size: 20, bold: true, color: { argb: 'FF0070C0' } };
   titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
-  sheet.addRow([]); 
+  sheet.addRow([]);
   const tableHeaders = Object.keys(dataList[0]);
-  const headerRow = sheet.addRow(["", "", ...tableHeaders]); headerRow.height = 30; 
+  const headerRow = sheet.addRow(tableHeaders); headerRow.height = 32;
   headerRow.eachCell((cell) => {
-    cell.font = { name: 'Times New Roman', size: 12, bold: true, color: { argb: 'FFFFFFFF' } }; 
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0070C0' } }; 
+    cell.font = { name: 'Times New Roman', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0070C0' } };
     cell.alignment = { vertical: 'middle', horizontal: 'center' };
-    cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }; 
+    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
   });
 
   dataList.forEach(obj => {
-    const row = sheet.addRow(["", "", ...Object.values(obj)]); row.height = 26; 
+    const row = sheet.addRow(Object.values(obj));
     row.eachCell((cell, colNumber) => {
       cell.font = { name: 'Times New Roman', size: 12 };
-      cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
-      if (colNumber === 3) cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      else if (colNumber === 6) cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true, indent: 1 };
-      else if (colNumber === 4 || colNumber === 5) cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
-      else cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+      if (colNumber === 1) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      } else if (colNumber === 3) {
+        cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true, indent: 1 };
+      } else if (colNumber === 2) {
+        cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+      } else {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      }
     });
   });
 
+  autoFitSheetColumns(sheet, 1, 4, 6, sheet.rowCount);
+  sheet.getColumn(1).width = 14;
+  sheet.getColumn(2).width = Math.max(sheet.getColumn(2).width || 0, 38);
+  sheet.getColumn(3).width = Math.max(sheet.getColumn(3).width || 0, 28);
+  sheet.getColumn(4).width = Math.max(sheet.getColumn(4).width || 0, 24);
+
+  // Tính toán chiều cao dòng tự động cho các dòng dữ liệu để không bị mất chữ
+  for (let r = 6; r <= sheet.rowCount; r++) {
+    const row = sheet.getRow(r);
+    const text = String(row.getCell(3).value || ""); // Cột C (Họ và Tên)
+    const col3Width = sheet.getColumn(3).width || 28;
+    const charsPerLine = Math.floor(col3Width * 0.9);
+    const lines = Math.ceil(text.length / charsPerLine) || 1;
+    row.height = Math.max(26, lines * 18 + 4);
+  }
+
   sheet.addRow([]); sheet.addRow([]);
   const dateRowNum = sheet.rowCount + 1;
-  sheet.addRow(["", "", "", dateStr, "", ""]);
-  sheet.mergeCells(`D${dateRowNum}:E${dateRowNum}`);
-  sheet.getCell(`D${dateRowNum}`).font = { name: 'Times New Roman', size: 12, italic: true };
-  sheet.getCell(`D${dateRowNum}`).alignment = { horizontal: 'right' };
+  sheet.addRow(["", "", dateStr, ""]);
+  sheet.mergeCells(`C${dateRowNum}:D${dateRowNum}`);
+  sheet.getCell(`C${dateRowNum}`).font = { name: 'Times New Roman', size: 12, italic: true };
+  sheet.getCell(`C${dateRowNum}`).alignment = { horizontal: 'right' };
 
   const signRowNum = sheet.rowCount + 1;
-  sheet.addRow(["", "", "", "Người xuất danh sách", "", ""]);
-  sheet.mergeCells(`D${signRowNum}:E${signRowNum}`);
-  sheet.getCell(`D${signRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
-  sheet.getCell(`D${signRowNum}`).alignment = { horizontal: 'right' };
+  sheet.addRow(["", "", "Quản trị viên", ""]);
+  sheet.mergeCells(`C${signRowNum}:D${signRowNum}`);
+  sheet.getCell(`C${signRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
+  sheet.getCell(`C${signRowNum}`).alignment = { horizontal: 'right' };
 
   sheet.addRow([]); sheet.addRow([]); sheet.addRow([]); sheet.addRow([]);
   const nameRowNum = sheet.rowCount + 1;
-  sheet.addRow(["", "", "", adminName, "", ""]);
-  sheet.mergeCells(`D${nameRowNum}:E${nameRowNum}`);
-  sheet.getCell(`D${nameRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
-  sheet.getCell(`D${nameRowNum}`).alignment = { horizontal: 'right' };
-
+  sheet.addRow(["", "", adminName, ""]);
+  sheet.mergeCells(`C${nameRowNum}:D${nameRowNum}`);
+  sheet.getCell(`C${nameRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
+  sheet.getCell(`C${nameRowNum}`).alignment = { horizontal: 'right' };
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   saveAs(blob, `${fileName}.xlsx`);
@@ -145,83 +210,108 @@ const exportClassesListExcel = async (dataList, reportTitle, fileName, adminName
     },
   };
 
-  // Remove the trailing spacer column and give the right header more width.
-  sheet.columns = [ { width: 6 }, { width: 4 }, { width: 16 }, { width: 20 }, { width: 18 }, { width: 18 }, { width: 34 } ];
+  sheet.columns = [{ width: 14 }, { width: 20 }, { width: 18 }, { width: 18 }, { width: 34 }];
 
-  sheet.addRow(["", "", "PHƯỜNG THỦY NGUYÊN", "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", ""]);
-  sheet.addRow(["", "", "TRƯỜNG THCS TRẦN HƯNG ĐẠO", "", "", "Độc lập - Tự do - Hạnh phúc", ""]);
-  // Make the left header span three columns so the school name fits.
-  sheet.mergeCells('C1:E1'); sheet.mergeCells('C2:E2'); 
-  // Expand the government header block one column further.
-  sheet.mergeCells('F1:G1'); sheet.mergeCells('F2:G2');
+  sheet.addRow([]);
+  sheet.addRow([]);
+  sheet.mergeCells('B1:C1'); sheet.mergeCells('B2:C2');
+  sheet.mergeCells('D1:E1'); sheet.mergeCells('D2:E2');
+
+  sheet.getCell('B1').value = "PHƯỜNG LƯU KIẾM";
+  sheet.getCell('B2').value = "TRƯỜNG THCS TRẦN HƯNG ĐẠO";
+  sheet.getCell('D1').value = "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
+  sheet.getCell('D2').value = "Độc lập - Tự do - Hạnh phúc";
+
+  await addSchoolLogoToExcel(workbook, sheet);
 
   const formatGovHeader = (rowNum, isBold) => {
-    const row = sheet.getRow(rowNum); row.height = 25; 
-    row.eachCell(cell => { cell.font = { name: 'Times New Roman', size: 12, bold: isBold }; cell.alignment = { vertical: 'middle', horizontal: 'center' }; });
+    const row = sheet.getRow(rowNum); row.height = 25;
+    row.eachCell(cell => { cell.font = { name: 'Times New Roman', size: 13, bold: isBold }; cell.alignment = { vertical: 'middle', horizontal: 'center' }; });
   };
   formatGovHeader(1, true); formatGovHeader(2, true);
-  sheet.getCell('C1').alignment = { vertical: 'middle', horizontal: 'center' };
-  sheet.getCell('C2').alignment = { vertical: 'middle', horizontal: 'center' };
-  sheet.getCell('F1').alignment = { vertical: 'middle', horizontal: 'center' };
-  sheet.getCell('F2').font = { name: 'Times New Roman', size: 13, bold: true, underline: true }; 
-  sheet.getCell('F2').alignment = { vertical: 'middle', horizontal: 'center' };
+  const row3 = sheet.getRow(3); row3.height = 25;
 
-  sheet.addRow([]); 
-  const titleRow = sheet.addRow(["", "", reportTitle.toUpperCase(), "", "", "", ""]);
-  sheet.mergeCells('C4:G4'); titleRow.height = 40;
-  const titleCell = sheet.getCell('C4');
-  titleCell.font = { name: 'Times New Roman', size: 16, bold: true, color: { argb: 'FF0070C0' } }; 
+  sheet.getCell('B1').font = { name: 'Times New Roman', size: 11, bold: true };
+  sheet.getCell('B2').font = { name: 'Times New Roman', size: 11, bold: true };
+  sheet.getCell('B1').alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('B2').alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('D1').alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('D2').font = { name: 'Times New Roman', size: 13, bold: true, underline: true };
+  sheet.getCell('D2').alignment = { vertical: 'middle', horizontal: 'center' };
+
+  sheet.addRow([]);
+  const titleRow = sheet.addRow([reportTitle.toUpperCase()]);
+  const rowNum = titleRow.number;
+  sheet.mergeCells(`A${rowNum}:E${rowNum}`); titleRow.height = 45;
+  const titleCell = sheet.getCell(`A${rowNum}`);
+  titleCell.font = { name: 'Times New Roman', size: 20, bold: true, color: { argb: 'FF0070C0' } };
   titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
-  sheet.addRow([]); 
+  sheet.addRow([]);
   const tableHeaders = Object.keys(dataList[0]);
-  const headerRow = sheet.addRow(["", "", ...tableHeaders]); headerRow.height = 32; 
+  const headerRow = sheet.addRow(tableHeaders); headerRow.height = 32;
   headerRow.eachCell((cell) => {
-    cell.font = { name: 'Times New Roman', size: 12, bold: true, color: { argb: 'FFFFFFFF' } }; 
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0070C0' } }; 
+    cell.font = { name: 'Times New Roman', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0070C0' } };
     cell.alignment = { vertical: 'middle', horizontal: 'center' };
-    cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }; 
+    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
   });
 
   dataList.forEach(obj => {
-    const teacherText = String(obj["Giáo viên phụ trách"] || "");
-    const row = sheet.addRow(["", "", ...Object.values(obj)]); row.height = teacherText.length > 22 ? 38 : 26; 
+    const row = sheet.addRow(Object.values(obj));
     row.eachCell((cell, colNumber) => {
       cell.font = { name: 'Times New Roman', size: 12 };
-      cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
-      if (colNumber <= 2) {
+      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+      if (colNumber === 1) {
         cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      } else if (colNumber === 3 || colNumber === 5 || colNumber === 6) {
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      } else if (colNumber === 7) {
+      } else if (colNumber === 5) {
         cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true, indent: 1 };
+      } else if (colNumber === 2 || colNumber === 3 || colNumber === 4) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
       } else {
         cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
       }
     });
   });
 
+  autoFitSheetColumns(sheet, 1, 5, 6, sheet.rowCount);
+  sheet.getColumn(1).width = 14;
+  sheet.getColumn(2).width = Math.max(sheet.getColumn(2).width || 0, 12);
+  sheet.getColumn(3).width = Math.max(sheet.getColumn(3).width || 0, 10);
+  sheet.getColumn(4).width = Math.max(sheet.getColumn(4).width || 0, 10);
+  sheet.getColumn(5).width = Math.min(Math.max(sheet.getColumn(5).width || 0, 18), 36);
+
+  // Tính toán chiều cao dòng tự động cho các lớp dựa trên độ dài danh sách giáo viên phụ trách
+  for (let r = 6; r <= sheet.rowCount; r++) {
+    const row = sheet.getRow(r);
+    const teacherText = String(row.getCell(5).value || ""); // Cột 5 (Giáo viên phụ trách)
+    const col5Width = sheet.getColumn(5).width || 18;
+    const charsPerLine = Math.floor(col5Width * 0.9);
+    const lines = Math.ceil(teacherText.length / charsPerLine) || 1;
+    row.height = Math.max(26, lines * 18 + 4);
+  }
+
   sheet.views = [{ state: 'normal', x: 1, y: 0, zoomScale: 95 }];
 
   sheet.addRow([]); sheet.addRow([]);
   const dateRowNum = sheet.rowCount + 1;
-  sheet.addRow(["", "", "", "", dateStr, "", ""]);
-  sheet.mergeCells(`E${dateRowNum}:F${dateRowNum}`);
-  sheet.getCell(`E${dateRowNum}`).font = { name: 'Times New Roman', size: 12, italic: true };
-  sheet.getCell(`E${dateRowNum}`).alignment = { horizontal: 'right' };
+  sheet.addRow(["", "", "", dateStr, ""]);
+  sheet.mergeCells(`D${dateRowNum}:E${dateRowNum}`);
+  sheet.getCell(`D${dateRowNum}`).font = { name: 'Times New Roman', size: 12, italic: true };
+  sheet.getCell(`D${dateRowNum}`).alignment = { horizontal: 'right' };
 
   const signRowNum = sheet.rowCount + 1;
-  sheet.addRow(["", "", "", "", "Quản trị viên", "", ""]);
-  sheet.mergeCells(`E${signRowNum}:F${signRowNum}`);
-  sheet.getCell(`E${signRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
-  sheet.getCell(`E${signRowNum}`).alignment = { horizontal: 'right' };
+  sheet.addRow(["", "", "", "Quản trị viên", ""]);
+  sheet.mergeCells(`D${signRowNum}:E${signRowNum}`);
+  sheet.getCell(`D${signRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
+  sheet.getCell(`D${signRowNum}`).alignment = { horizontal: 'right' };
 
   sheet.addRow([]); sheet.addRow([]); sheet.addRow([]); sheet.addRow([]);
   const nameRowNum = sheet.rowCount + 1;
-  sheet.addRow(["", "", "", "", adminName, "", ""]);
-  sheet.mergeCells(`E${nameRowNum}:F${nameRowNum}`);
-  sheet.getCell(`E${nameRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
-  sheet.getCell(`E${nameRowNum}`).alignment = { horizontal: 'right' };
+  sheet.addRow(["", "", "", adminName, ""]);
+  sheet.mergeCells(`D${nameRowNum}:E${nameRowNum}`);
+  sheet.getCell(`D${nameRowNum}`).font = { name: 'Times New Roman', size: 12, bold: true };
+  sheet.getCell(`D${nameRowNum}`).alignment = { horizontal: 'right' };
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -258,12 +348,12 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
   const [isStudentListOpen, setIsStudentListOpen] = useState(false);
   const [selectedClassForStudents, setSelectedClassForStudents] = useState(null);
   const [studentsInClass, setStudentsInClass] = useState([]);
-  const [studentSearchQuery, setStudentSearchQuery] = useState(""); 
+  const [studentSearchQuery, setStudentSearchQuery] = useState("");
 
   // TRANSFER STUDENT
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
   const [studentToTransfer, setStudentToTransfer] = useState(null);
-  const [targetGrade, setTargetGrade] = useState(""); 
+  const [targetGrade, setTargetGrade] = useState("");
   const [targetClassId, setTargetClassId] = useState("");
 
   const [isAssignTeacherDialogOpen, setIsAssignTeacherDialogOpen] = useState(false);
@@ -291,7 +381,7 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
     let subs = [];
     if (Array.isArray(t.subjects) && t.subjects.length > 0) subs = t.subjects;
     else if (t.subject) subs = [t.subject]; // Hỗ trợ dữ liệu cũ
-    
+
     const subStr = subs.length > 0 ? subs.join(", ") : "Chưa đăng ký môn";
     return `${deptStr} • ${subStr}`;
   };
@@ -306,14 +396,14 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
     setLoading(true);
     try {
       await axios.post("/classes/create", newClass, getHeader());
-      alert("✅ Đã tạo lớp học thành công!"); 
-      setIsClassDialogOpen(false); 
-      setNewClass({ name: "", grade: "6", academicYear: "", homeroomTeacher: "" }); 
-      fetchData(); 
-    } catch (error) { 
-      alert(error.response?.data?.message || "Lỗi tạo lớp!"); 
-    } finally { 
-      setLoading(false); 
+      alert("✅ Đã tạo lớp học thành công!");
+      setIsClassDialogOpen(false);
+      setNewClass({ name: "", grade: "6", academicYear: "", homeroomTeacher: "" });
+      fetchData();
+    } catch (error) {
+      alert(error.response?.data?.message || "Lỗi tạo lớp!");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -349,8 +439,8 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
 
     const dataToExport = filteredClassesDisplay.map((cls, index) => {
       const classAssignedTeachers = teachersList.filter(t => t.assignedClasses?.some(c => (c._id || c) === cls._id));
-      const teacherNames = classAssignedTeachers.length > 0 
-        ? classAssignedTeachers.map(t => t.fullName).join(", ") 
+      const teacherNames = classAssignedTeachers.length > 0
+        ? classAssignedTeachers.map(t => t.fullName).join(", ")
         : "Chưa phân công";
 
       return {
@@ -376,131 +466,131 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
   // THAO TÁC HỌC SINH & EXCEL
   // ==========================
   const handleViewClassStudents = async (cls) => {
-      setSelectedClassForStudents(cls);
-      setStudentsInClass([]);
-      setStudentSearchQuery(""); 
-      setIsStudentListOpen(true);
-      try {
-          const res = await axios.get(`/classes/${cls._id}/students`, getHeader());
-        setStudentsInClass((res.data.students || []).map((student) => ({
+    setSelectedClassForStudents(cls);
+    setStudentsInClass([]);
+    setStudentSearchQuery("");
+    setIsStudentListOpen(true);
+    try {
+      const res = await axios.get(`/classes/${cls._id}/students`, getHeader());
+      setStudentsInClass((res.data.students || []).map((student) => ({
         ...student,
         ...getStudentLockState(student),
-        })));
-      } catch (err) {
-          console.error("Lỗi tải học sinh", err);
-      }
+      })));
+    } catch (err) {
+      console.error("Lỗi tải học sinh", err);
+    }
   };
 
   const handleDeleteStudent = async (studentId, studentName) => {
-      if (!window.confirm(`Xóa hoàn toàn tài khoản học sinh: ${studentName}? Hành động này sẽ xóa mọi bài nộp của học sinh này.`)) return;
-      try {
-          await axios.delete(`/admin/users/${studentId}`, getHeader());
-          setStudentsInClass(prev => prev.filter(s => s._id !== studentId)); 
-          fetchData(); 
-          alert("✅ Đã xóa tài khoản học sinh thành công!");
-        } catch {
-          alert("Lỗi xóa tài khoản!");
-      }
+    if (!window.confirm(`Xóa hoàn toàn tài khoản học sinh: ${studentName}? Hành động này sẽ xóa mọi bài nộp của học sinh này.`)) return;
+    try {
+      await axios.delete(`/admin/users/${studentId}`, getHeader());
+      setStudentsInClass(prev => prev.filter(s => s._id !== studentId));
+      fetchData();
+      alert("✅ Đã xóa tài khoản học sinh thành công!");
+    } catch {
+      alert("Lỗi xóa tài khoản!");
+    }
   };
 
   const handleOpenTransferDialog = (student) => {
-      setStudentToTransfer(student);
-      setTargetGrade(selectedClassForStudents?.grade || "");
-      setTargetClassId("");
-      setIsTransferDialogOpen(true);
+    setStudentToTransfer(student);
+    setTargetGrade(selectedClassForStudents?.grade || "");
+    setTargetClassId("");
+    setIsTransferDialogOpen(true);
   };
 
   const submitTransferStudent = async () => {
-      if (!targetClassId) return alert("Vui lòng chọn lớp đích để chuyển đến!");
-      setLoading(true);
-      try {
-          const targetClassObj = classesList.find(c => String(c._id) === targetClassId);
-          
-          const payload = {
-              ...studentToTransfer,
-              classId: targetClassId,
-              grade: targetClassObj.grade 
-          };
+    if (!targetClassId) return alert("Vui lòng chọn lớp đích để chuyển đến!");
+    setLoading(true);
+    try {
+      const targetClassObj = classesList.find(c => String(c._id) === targetClassId);
 
-          await axios.put(`/admin/users/${studentToTransfer._id}`, payload, getHeader());
-          
-          alert(`✅ Đã chuyển học sinh sang lớp ${targetClassObj.name} thành công!`);
-          
-          setStudentsInClass(prev => prev.filter(s => s._id !== studentToTransfer._id));
-          setIsTransferDialogOpen(false);
-          fetchData(); 
-      } catch {
-          alert("Lỗi khi chuyển lớp!");
-      } finally {
-          setLoading(false);
-      }
+      const payload = {
+        ...studentToTransfer,
+        classId: targetClassId,
+        grade: targetClassObj.grade
+      };
+
+      await axios.put(`/admin/users/${studentToTransfer._id}`, payload, getHeader());
+
+      alert(`✅ Đã chuyển học sinh sang lớp ${targetClassObj.name} thành công!`);
+
+      setStudentsInClass(prev => prev.filter(s => s._id !== studentToTransfer._id));
+      setIsTransferDialogOpen(false);
+      fetchData();
+    } catch {
+      alert("Lỗi khi chuyển lớp!");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleExportClassList = async () => {
-      if (studentsInClass.length === 0) return alert("Lớp hiện chưa có học sinh nào!");
-      const dataToExport = studentsInClass.map((s, idx) => ({
-          "STT": idx + 1,
-          "Tài khoản đăng nhập": s.username,
-          "Họ và Tên": s.fullName,
-          "Trạng thái": s.lockLabel || (s.isLocked ? "Đã khóa" : "Đang hoạt động")
-      }));
-      await exportFormalExcel(dataToExport, `DANH SÁCH LỚP ${selectedClassForStudents.name}`, `Danh_Sach_Lop_${selectedClassForStudents.name}`, adminName);
+    if (studentsInClass.length === 0) return alert("Lớp hiện chưa có học sinh nào!");
+    const dataToExport = studentsInClass.map((s, idx) => ({
+      "STT": idx + 1,
+      "Tài khoản đăng nhập": s.username,
+      "Họ và Tên": s.fullName,
+      "Trạng thái": s.lockLabel || (s.isLocked ? "Đã khóa" : "Đang hoạt động")
+    }));
+    await exportFormalExcel(dataToExport, `DANH SÁCH LỚP ${selectedClassForStudents.name}`, `Danh_Sach_Lop_${selectedClassForStudents.name}`, adminName);
   };
 
   // ==========================
   // THAO TÁC PHÂN CÔNG GIÁO VIÊN
   // ==========================
   const handleOpenAssignTeacher = async (cls) => {
-      setSelectedClassForAssign(cls);
-      setAssignedTeacherIds([]);
-      setAssignSearchQuery("");
-      setIsAssignTeacherDialogOpen(true);
-      
-      const currentAssigned = activeTeachers.filter(t => {
-         if(!t.assignedClasses) return false;
-         return t.assignedClasses.some(ac => (ac._id || ac) === cls._id);
-      }).map(t => t._id);
-      
-      setAssignedTeacherIds(currentAssigned);
+    setSelectedClassForAssign(cls);
+    setAssignedTeacherIds([]);
+    setAssignSearchQuery("");
+    setIsAssignTeacherDialogOpen(true);
+
+    const currentAssigned = activeTeachers.filter(t => {
+      if (!t.assignedClasses) return false;
+      return t.assignedClasses.some(ac => (ac._id || ac) === cls._id);
+    }).map(t => t._id);
+
+    setAssignedTeacherIds(currentAssigned);
   };
 
   const handleAddTeacherToClass = (teacherId) => {
-      setAssignedTeacherIds(prev => [...prev, teacherId]);
+    setAssignedTeacherIds(prev => [...prev, teacherId]);
   };
 
   const handleRemoveTeacherFromClass = (teacherId) => {
-      if (assignedTeacherIds.length <= 1) return alert("Lớp phải có ít nhất 1 giáo viên phụ trách!");
-      setAssignedTeacherIds(prev => prev.filter(id => id !== teacherId));
+    if (assignedTeacherIds.length <= 1) return alert("Lớp phải có ít nhất 1 giáo viên phụ trách!");
+    setAssignedTeacherIds(prev => prev.filter(id => id !== teacherId));
   };
 
   const handleSaveTeacherAssignment = async () => {
-      if (assignedTeacherIds.length === 0) return alert("Lớp học phải có ít nhất 1 giáo viên phụ trách!");
-      setLoading(true);
-      try {
-          await axios.post(`/classes/${selectedClassForAssign._id}/assign-teachers`, { teacherIds: assignedTeacherIds }, getHeader());
-          alert("✅ Phân công giáo viên thành công!");
-          setIsAssignTeacherDialogOpen(false);
-          fetchData(); 
-      } catch (err) {
-          alert(err.response?.data?.message || "Lỗi phân công giáo viên!");
-      } finally {
-          setLoading(false);
-      }
+    if (assignedTeacherIds.length === 0) return alert("Lớp học phải có ít nhất 1 giáo viên phụ trách!");
+    setLoading(true);
+    try {
+      await axios.post(`/classes/${selectedClassForAssign._id}/assign-teachers`, { teacherIds: assignedTeacherIds }, getHeader());
+      alert("✅ Phân công giáo viên thành công!");
+      setIsAssignTeacherDialogOpen(false);
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.message || "Lỗi phân công giáo viên!");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filteredClassesDisplay = classesList.filter(c => {
-     const matchName = c.name.toLowerCase().includes(searchClassQuery.toLowerCase());
-     const matchGrade = filterClassGrade === "all" || String(c.grade) === filterClassGrade;
-      const matchAcademicYear = filterAcademicYear === "all" || c.academicYear === filterAcademicYear;
-      return matchName && matchGrade && matchAcademicYear;
+    const matchName = c.name.toLowerCase().includes(searchClassQuery.toLowerCase());
+    const matchGrade = filterClassGrade === "all" || String(c.grade) === filterClassGrade;
+    const matchAcademicYear = filterAcademicYear === "all" || c.academicYear === filterAcademicYear;
+    return matchName && matchGrade && matchAcademicYear;
   });
 
   const assignedTeachers = activeTeachers.filter(t => assignedTeacherIds.includes(t._id));
   const unassignedTeachers = activeTeachers.filter(t => !assignedTeacherIds.includes(t._id) && (t.fullName.toLowerCase().includes(assignSearchQuery.toLowerCase()) || t.username.toLowerCase().includes(assignSearchQuery.toLowerCase())));
 
-  const filteredStudentsInClass = studentsInClass.filter(s => 
-     s.fullName.toLowerCase().includes(studentSearchQuery.toLowerCase()) || 
-     s.username.toLowerCase().includes(studentSearchQuery.toLowerCase())
+  const filteredStudentsInClass = studentsInClass.filter(s =>
+    s.fullName.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+    s.username.toLowerCase().includes(studentSearchQuery.toLowerCase())
   );
 
   return (
@@ -530,15 +620,15 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
             </Select>
           </div>
           <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
-             <Button onClick={handleExportAllClasses} className="bg-teal-500 hover:bg-teal-600 text-white h-11 px-4 sm:px-6 rounded-xl shadow-md font-bold whitespace-nowrap">
-               <Download className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> <span className="hidden sm:inline">Xuất Excel</span>
-             </Button>
-             <Button onClick={() => { setNewClass({ name: "", grade: "6", academicYear: suggestedYears[0], homeroomTeacher: "" }); setIsClassDialogOpen(true); }} className="bg-sky-500 whitespace-nowrap hover:bg-sky-600 text-white h-11 px-4 sm:px-6 rounded-xl shadow-md flex items-center font-bold">
-               <PlusCircle className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Tạo lớp mới
-             </Button>
+            <Button onClick={handleExportAllClasses} className="bg-teal-500 hover:bg-teal-600 text-white h-11 px-4 sm:px-6 rounded-xl shadow-md font-bold whitespace-nowrap">
+              <Download className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> <span className="hidden sm:inline">Xuất Excel</span>
+            </Button>
+            <Button onClick={() => { setNewClass({ name: "", grade: "6", academicYear: suggestedYears[0], homeroomTeacher: "" }); setIsClassDialogOpen(true); }} className="bg-sky-500 whitespace-nowrap hover:bg-sky-600 text-white h-11 px-4 sm:px-6 rounded-xl shadow-md flex items-center font-bold">
+              <PlusCircle className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Tạo lớp mới
+            </Button>
           </div>
         </div>
-        
+
         <div className="overflow-x-auto">
           <Table className="min-w-[800px]">
             <TableHeader className="bg-sky-50/80"><TableRow><TableHead className="pl-4 sm:pl-8 font-bold text-sky-800">Tên Lớp</TableHead><TableHead className="font-bold text-center text-sky-800">Khối</TableHead><TableHead className="font-bold text-center text-sky-800">Năm học</TableHead><TableHead className="font-bold text-center text-sky-800">Giáo viên phụ trách</TableHead><TableHead className="font-bold text-center text-sky-800">Sĩ số</TableHead><TableHead className="text-right pr-4 sm:pr-8 font-bold text-sky-800">Thao tác</TableHead></TableRow></TableHeader>
@@ -546,43 +636,44 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
               {filteredClassesDisplay.map(cls => {
                 const classAssignedTeachers = activeTeachers.filter(t => t.assignedClasses?.some(c => (c._id || c) === cls._id));
                 return (
-                <TableRow key={cls._id} className="hover:bg-sky-50/50">
-                  <TableCell className="font-black text-base sm:text-lg pl-4 sm:pl-8 text-sky-900">{cls.name}</TableCell>
-                  <TableCell className="text-center"><Badge className="bg-sky-100 text-sky-700 shadow-none border-0">Khối {cls.grade}</Badge></TableCell>
-                  <TableCell className="text-center font-bold text-slate-600">{cls.academicYear}</TableCell>
-                  <TableCell className="text-center">
-                    {classAssignedTeachers.length > 0 ? (
-                       <div className="flex flex-wrap items-center justify-center gap-1">
+                  <TableRow key={cls._id} className="hover:bg-sky-50/50">
+                    <TableCell className="font-black text-base sm:text-lg pl-4 sm:pl-8 text-sky-900">{cls.name}</TableCell>
+                    <TableCell className="text-center"><Badge className="bg-sky-100 text-sky-700 shadow-none border-0">Khối {cls.grade}</Badge></TableCell>
+                    <TableCell className="text-center font-bold text-slate-600">{cls.academicYear}</TableCell>
+                    <TableCell className="text-center">
+                      {classAssignedTeachers.length > 0 ? (
+                        <div className="flex flex-wrap items-center justify-center gap-1">
                           {classAssignedTeachers.slice(0, 2).map(t => (
-                             <Badge key={t._id} variant="outline" className="bg-white border-teal-200 text-teal-700 text-xs font-semibold">{t.fullName}</Badge>
+                            <Badge key={t._id} variant="outline" className="bg-white border-teal-200 text-teal-700 text-xs font-semibold">{t.fullName}</Badge>
                           ))}
                           {classAssignedTeachers.length > 2 && (
-                             <Badge variant="outline" className="bg-slate-100 text-slate-500 text-xs">+{classAssignedTeachers.length - 2}</Badge>
+                            <Badge variant="outline" className="bg-slate-100 text-slate-500 text-xs">+{classAssignedTeachers.length - 2}</Badge>
                           )}
-                       </div>
-                    ) : (
-                       <span className="text-xs font-medium text-slate-400 italic">Chưa phân công</span>
-                    )}
-                  </TableCell>
+                        </div>
+                      ) : (
+                        <span className="text-xs font-medium text-slate-400 italic">Chưa phân công</span>
+                      )}
+                    </TableCell>
 
-                  <TableCell className="text-center"><span className="font-black px-3 py-1 rounded-lg bg-slate-50 text-slate-600">{cls.studentCount || 0} em</span></TableCell>
-                  <TableCell className="text-right pr-4 sm:pr-8">
-                    <div className="flex justify-end gap-1">
-                      <Button onClick={() => handleViewClassStudents(cls)} variant="ghost" size="icon" title="Xem danh sách lớp" className="h-8 w-8 text-sky-500 rounded-xl hover:bg-sky-100"><Eye className="h-4 w-4" /></Button>
-                      <Button onClick={() => handleOpenAssignTeacher(cls)} variant="ghost" size="icon" title="Phân công giáo viên" className="h-8 w-8 text-amber-500 rounded-xl hover:bg-amber-100"><UserCheck className="h-4 w-4" /></Button>
-                      <Button onClick={() => { setEditClass({ ...cls }); setIsEditClassDialogOpen(true); }} variant="ghost" size="icon" title="Sửa Lớp" className="h-8 w-8 text-teal-500 rounded-xl hover:bg-teal-100"><Edit className="h-4 w-4" /></Button>
-                      <Button onClick={() => handleDeleteClass(cls._id, cls.name)} variant="ghost" size="icon" title="Xóa Lớp" className="h-8 w-8 text-rose-400 hover:bg-rose-50 hover:text-rose-500"><Trash2 className="h-4 w-4" /></Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )})}
+                    <TableCell className="text-center"><span className="font-black px-3 py-1 rounded-lg bg-slate-50 text-slate-600">{cls.studentCount || 0} em</span></TableCell>
+                    <TableCell className="text-right pr-4 sm:pr-8">
+                      <div className="flex justify-end gap-1">
+                        <Button onClick={() => handleViewClassStudents(cls)} variant="ghost" size="icon" title="Xem danh sách lớp" className="h-8 w-8 text-sky-500 rounded-xl hover:bg-sky-100"><Eye className="h-4 w-4" /></Button>
+                        <Button onClick={() => handleOpenAssignTeacher(cls)} variant="ghost" size="icon" title="Phân công giáo viên" className="h-8 w-8 text-amber-500 rounded-xl hover:bg-amber-100"><UserCheck className="h-4 w-4" /></Button>
+                        <Button onClick={() => { setEditClass({ ...cls }); setIsEditClassDialogOpen(true); }} variant="ghost" size="icon" title="Sửa Lớp" className="h-8 w-8 text-teal-500 rounded-xl hover:bg-teal-100"><Edit className="h-4 w-4" /></Button>
+                        <Button onClick={() => handleDeleteClass(cls._id, cls.name)} variant="ghost" size="icon" title="Xóa Lớp" className="h-8 w-8 text-rose-400 hover:bg-rose-50 hover:text-rose-500"><Trash2 className="h-4 w-4" /></Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
         </div>
       </Card>
 
       <datalist id="year-options">
-          {suggestedYears.map(y => <option key={y} value={y} />)}
+        {suggestedYears.map(y => <option key={y} value={y} />)}
       </datalist>
 
       {/* DIALOG TẠO LỚP */}
@@ -590,17 +681,17 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
         <DialogContent className="sm:max-w-[500px] w-[95%] rounded-3xl border-none">
           <DialogHeader><DialogTitle className="text-2xl font-black text-sky-900">Thêm Lớp Học</DialogTitle></DialogHeader>
           <form onSubmit={handleCreateClass} className="space-y-5 pt-4">
-            <div className="space-y-2"><label className="text-sm font-bold text-slate-500">Tên Lớp</label><Input placeholder="" className="h-12 rounded-xl border-sky-100 focus-visible:ring-sky-500 text-lg font-bold uppercase bg-white" value={newClass.name} onChange={(e) => setNewClass({...newClass, name: e.target.value.toUpperCase()})} required /></div>
+            <div className="space-y-2"><label className="text-sm font-bold text-slate-500">Tên Lớp</label><Input placeholder="" className="h-12 rounded-xl border-sky-100 focus-visible:ring-sky-500 text-lg font-bold uppercase bg-white" value={newClass.name} onChange={(e) => setNewClass({ ...newClass, name: e.target.value.toUpperCase() })} required /></div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><label className="text-sm font-bold text-slate-500">Khối</label><Select value={newClass.grade} onValueChange={(v) => setNewClass({...newClass, grade: v})}><SelectTrigger className="h-12 rounded-xl font-bold border-sky-100 bg-white"><span className="truncate">{newClass.grade ? `Khối ${newClass.grade}` : "Chọn Khối"}</span></SelectTrigger><SelectContent><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent></Select></div>
+              <div className="space-y-2"><label className="text-sm font-bold text-slate-500">Khối</label><Select value={newClass.grade} onValueChange={(v) => setNewClass({ ...newClass, grade: v })}><SelectTrigger className="h-12 rounded-xl font-bold border-sky-100 bg-white"><span className="truncate">{newClass.grade ? `Khối ${newClass.grade}` : "Chọn Khối"}</span></SelectTrigger><SelectContent><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent></Select></div>
               <div className="space-y-2">
-                 <label className="text-sm font-bold text-slate-500">Năm học</label>
-                 <Input list="year-options" placeholder="VD: 2024-2025" className="h-12 rounded-xl font-bold border-sky-100 bg-white" value={newClass.academicYear} onChange={(e) => setNewClass({...newClass, academicYear: e.target.value})} required />
+                <label className="text-sm font-bold text-slate-500">Năm học</label>
+                <Input list="year-options" placeholder="VD: 2024-2025" className="h-12 rounded-xl font-bold border-sky-100 bg-white" value={newClass.academicYear} onChange={(e) => setNewClass({ ...newClass, academicYear: e.target.value })} required />
               </div>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-bold text-slate-500">Giáo viên phụ trách *</label>
-              <Select value={newClass.homeroomTeacher || undefined} onValueChange={(v) => setNewClass({...newClass, homeroomTeacher: v})}>
+              <Select value={newClass.homeroomTeacher || undefined} onValueChange={(v) => setNewClass({ ...newClass, homeroomTeacher: v })}>
                 <SelectTrigger className="h-12 rounded-xl font-bold border-sky-100 bg-white">
                   <span className={`truncate ${newClass.homeroomTeacher ? "text-slate-900" : "text-slate-400"}`}>
                     {newClass.homeroomTeacher ? teachersList.find(t => String(t._id) === String(newClass.homeroomTeacher))?.fullName : "Chọn giáo viên phụ trách"}
@@ -628,12 +719,12 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
           <DialogHeader><DialogTitle className="text-2xl font-black text-sky-900">Sửa Thông Tin Lớp</DialogTitle></DialogHeader>
           {editClass && (
             <form onSubmit={handleUpdateClass} className="space-y-5 pt-4">
-              <div className="space-y-2"><label className="text-sm font-bold text-slate-500">Tên Lớp</label><Input placeholder="VD: 9A1" className="h-12 rounded-xl border-sky-100 focus-visible:ring-sky-500 text-lg font-bold uppercase bg-white" value={editClass.name} onChange={(e) => setEditClass({...editClass, name: e.target.value.toUpperCase()})} required /></div>
+              <div className="space-y-2"><label className="text-sm font-bold text-slate-500">Tên Lớp</label><Input placeholder="VD: 9A1" className="h-12 rounded-xl border-sky-100 focus-visible:ring-sky-500 text-lg font-bold uppercase bg-white" value={editClass.name} onChange={(e) => setEditClass({ ...editClass, name: e.target.value.toUpperCase() })} required /></div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><label className="text-sm font-bold text-slate-500">Khối</label><Select value={editClass.grade} onValueChange={(v) => setEditClass({...editClass, grade: v})}><SelectTrigger className="h-12 rounded-xl font-bold border-sky-100 bg-white"><span className="truncate">{editClass.grade ? `Khối ${editClass.grade}` : "Chọn Khối"}</span></SelectTrigger><SelectContent><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent></Select></div>
+                <div className="space-y-2"><label className="text-sm font-bold text-slate-500">Khối</label><Select value={editClass.grade} onValueChange={(v) => setEditClass({ ...editClass, grade: v })}><SelectTrigger className="h-12 rounded-xl font-bold border-sky-100 bg-white"><span className="truncate">{editClass.grade ? `Khối ${editClass.grade}` : "Chọn Khối"}</span></SelectTrigger><SelectContent><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent></Select></div>
                 <div className="space-y-2">
-                   <label className="text-sm font-bold text-slate-500">Năm học</label>
-                   <Input list="year-options" placeholder="VD: 2024-2025" className="h-12 rounded-xl font-bold border-sky-100 bg-white" value={editClass.academicYear} onChange={(e) => setEditClass({...editClass, academicYear: e.target.value})} required />
+                  <label className="text-sm font-bold text-slate-500">Năm học</label>
+                  <Input list="year-options" placeholder="VD: 2024-2025" className="h-12 rounded-xl font-bold border-sky-100 bg-white" value={editClass.academicYear} onChange={(e) => setEditClass({ ...editClass, academicYear: e.target.value })} required />
                 </div>
               </div>
               <Button type="submit" disabled={loading} className="w-full h-14 rounded-xl bg-teal-500 hover:bg-teal-600 font-black text-lg text-white mt-4 shadow-md">{loading ? <Loader2 className="animate-spin" /> : "Lưu thay đổi"}</Button>
@@ -648,10 +739,10 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
           <div className="p-4 sm:p-6 border-b border-slate-200 bg-white flex flex-col gap-4 shrink-0">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <DialogTitle className="text-xl sm:text-2xl font-black text-sky-950 flex items-center gap-2">
-                <Users className="w-6 h-6 text-sky-500"/> Danh sách Lớp {selectedClassForStudents?.name}
+                <Users className="w-6 h-6 text-sky-500" /> Danh sách Lớp {selectedClassForStudents?.name}
               </DialogTitle>
               <Button onClick={handleExportClassList} className="bg-teal-500 hover:bg-teal-600 text-white font-bold rounded-xl h-10 shadow-sm w-full sm:w-auto">
-                 <Download className="w-4 h-4 mr-2"/> Xuất Excel
+                <Download className="w-4 h-4 mr-2" /> Xuất Excel
               </Button>
             </div>
             <div className="relative w-full">
@@ -659,7 +750,7 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
               <Input placeholder="Tìm theo tên hoặc tài khoản..." className="pl-9 h-11 rounded-xl bg-slate-50 border-sky-100 focus-visible:ring-sky-500" value={studentSearchQuery} onChange={(e) => setStudentSearchQuery(e.target.value)} />
             </div>
           </div>
-          
+
           <div className="p-4 sm:p-6 overflow-y-auto flex-1">
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
               {filteredStudentsInClass.length === 0 ? (
@@ -676,34 +767,34 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
                         const { isLocked: isStudentLocked, lockLabel, lockNote } = getStudentLockState(student);
 
                         return (
-                        <TableRow key={student._id} className={`hover:bg-slate-50 transition-colors ${isStudentLocked ? "bg-rose-50/60" : ""}`}>
-                          <TableCell className="font-medium text-slate-400 text-center">{idx + 1}</TableCell>
-                          <TableCell>
-                            <div className="flex flex-col gap-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-bold text-sky-600">{student.username}</span>
+                          <TableRow key={student._id} className={`hover:bg-slate-50 transition-colors ${isStudentLocked ? "bg-rose-50/60" : ""}`}>
+                            <TableCell className="font-medium text-slate-400 text-center">{idx + 1}</TableCell>
+                            <TableCell>
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-sky-600">{student.username}</span>
+                                  {isStudentLocked && (
+                                    <Badge variant="destructive" className="text-[10px] uppercase">Đã khóa</Badge>
+                                  )}
+                                </div>
                                 {isStudentLocked && (
-                                  <Badge variant="destructive" className="text-[10px] uppercase">Đã khóa</Badge>
+                                  <span className="text-[11px] font-medium text-rose-500">{lockNote}</span>
                                 )}
                               </div>
-                              {isStudentLocked && (
-                                <span className="text-[11px] font-medium text-rose-500">{lockNote}</span>
+                            </TableCell>
+                            <TableCell className="font-bold text-sky-900">{student.fullName}</TableCell>
+                            <TableCell className="text-center">
+                              {isStudentLocked ? (
+                                <Badge variant="destructive" className="text-[10px] uppercase">{lockLabel}</Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[10px] uppercase border-emerald-200 text-emerald-600 bg-emerald-50">Đang hoạt động</Badge>
                               )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-bold text-sky-900">{student.fullName}</TableCell>
-                          <TableCell className="text-center">
-                            {isStudentLocked ? (
-                              <Badge variant="destructive" className="text-[10px] uppercase">{lockLabel}</Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-[10px] uppercase border-emerald-200 text-emerald-600 bg-emerald-50">Đang hoạt động</Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right pr-6">
-                             <Button onClick={() => handleOpenTransferDialog(student)} variant="ghost" size="icon" title="Chuyển học sinh sang lớp khác" className="h-8 w-8 text-sky-500 hover:bg-sky-50 hover:text-sky-600 mr-1"><ArrowRightLeft className="h-4 w-4" /></Button>
-                             <Button onClick={() => handleDeleteStudent(student._id, student.fullName)} variant="ghost" size="icon" title="Xóa khỏi lớp và Xóa tài khoản" className="h-8 w-8 text-rose-400 hover:bg-rose-50 hover:text-rose-500"><UserMinus className="h-4 w-4" /></Button>
-                          </TableCell>
-                        </TableRow>
+                            </TableCell>
+                            <TableCell className="text-right pr-6">
+                              <Button onClick={() => handleOpenTransferDialog(student)} variant="ghost" size="icon" title="Chuyển học sinh sang lớp khác" className="h-8 w-8 text-sky-500 hover:bg-sky-50 hover:text-sky-600 mr-1"><ArrowRightLeft className="h-4 w-4" /></Button>
+                              <Button onClick={() => handleDeleteStudent(student._id, student.fullName)} variant="ghost" size="icon" title="Xóa khỏi lớp và Xóa tài khoản" className="h-8 w-8 text-rose-400 hover:bg-rose-50 hover:text-rose-500"><UserMinus className="h-4 w-4" /></Button>
+                            </TableCell>
+                          </TableRow>
                         );
                       })}
                     </TableBody>
@@ -721,42 +812,42 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
           <DialogHeader><DialogTitle className="text-2xl font-black text-sky-900">Chuyển Lớp</DialogTitle></DialogHeader>
           <div className="pt-4 space-y-5">
             <div className="bg-sky-50 p-4 rounded-xl border border-sky-100">
-               <p className="text-sm text-slate-500 font-medium">Học sinh:</p>
-               <p className="font-black text-sky-900 text-lg">{studentToTransfer?.fullName} <span className="text-sm font-medium text-slate-500">({studentToTransfer?.username})</span></p>
-               <p className="text-sm font-bold text-sky-600 mt-1">Đang học: Lớp {selectedClassForStudents?.name}</p>
+              <p className="text-sm text-slate-500 font-medium">Học sinh:</p>
+              <p className="font-black text-sky-900 text-lg">{studentToTransfer?.fullName} <span className="text-sm font-medium text-slate-500">({studentToTransfer?.username})</span></p>
+              <p className="text-sm font-bold text-sky-600 mt-1">Đang học: Lớp {selectedClassForStudents?.name}</p>
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                 <label className="text-sm font-bold text-slate-700">Khối</label>
-                 <Select value={targetGrade} onValueChange={(val) => { setTargetGrade(val); setTargetClassId(""); }}>
-                   <SelectTrigger className="h-12 rounded-xl font-bold border-sky-200 bg-white"><span className="truncate">{targetGrade ? `Khối ${targetGrade}` : "Chọn Khối"}</span></SelectTrigger>
-                   <SelectContent>
-                      <SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem>
-                   </SelectContent>
-                 </Select>
+                <label className="text-sm font-bold text-slate-700">Khối</label>
+                <Select value={targetGrade} onValueChange={(val) => { setTargetGrade(val); setTargetClassId(""); }}>
+                  <SelectTrigger className="h-12 rounded-xl font-bold border-sky-200 bg-white"><span className="truncate">{targetGrade ? `Khối ${targetGrade}` : "Chọn Khối"}</span></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
-                 <label className="text-sm font-bold text-slate-700">Lớp Đích</label>
-                 <Select value={targetClassId} onValueChange={setTargetClassId} disabled={!targetGrade}>
-                   <SelectTrigger className="h-12 rounded-xl font-bold border-sky-200 bg-white">
-                     <span className="truncate">{targetClassId ? classesList.find(c => String(c._id) === targetClassId)?.name : "Chọn Lớp"}</span>
-                   </SelectTrigger>
-                   <SelectContent>
-                      {classesList.filter(c => String(c.grade) === String(targetGrade) && String(c._id) !== String(selectedClassForStudents?._id)).length === 0 ? (
-                          <SelectItem value="none" disabled>Không có lớp khác</SelectItem>
-                      ) : (
-                          classesList.filter(c => String(c.grade) === String(targetGrade) && String(c._id) !== String(selectedClassForStudents?._id)).map(c => (
-                              <SelectItem key={c._id} value={String(c._id)}>Lớp {c.name}</SelectItem>
-                          ))
-                      )}
-                   </SelectContent>
-                 </Select>
+                <label className="text-sm font-bold text-slate-700">Lớp Đích</label>
+                <Select value={targetClassId} onValueChange={setTargetClassId} disabled={!targetGrade}>
+                  <SelectTrigger className="h-12 rounded-xl font-bold border-sky-200 bg-white">
+                    <span className="truncate">{targetClassId ? classesList.find(c => String(c._id) === targetClassId)?.name : "Chọn Lớp"}</span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {classesList.filter(c => String(c.grade) === String(targetGrade) && String(c._id) !== String(selectedClassForStudents?._id)).length === 0 ? (
+                      <SelectItem value="none" disabled>Không có lớp khác</SelectItem>
+                    ) : (
+                      classesList.filter(c => String(c.grade) === String(targetGrade) && String(c._id) !== String(selectedClassForStudents?._id)).map(c => (
+                        <SelectItem key={c._id} value={String(c._id)}>Lớp {c.name}</SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
             <Button onClick={submitTransferStudent} disabled={loading || !targetClassId} className="w-full h-14 rounded-xl bg-sky-500 hover:bg-sky-600 font-black text-lg text-white mt-4 shadow-md">
-               {loading ? <Loader2 className="animate-spin" /> : "Xác nhận Chuyển"}
+              {loading ? <Loader2 className="animate-spin" /> : "Xác nhận Chuyển"}
             </Button>
           </div>
         </DialogContent>
@@ -767,58 +858,58 @@ const AdminClassManagement = ({ classesList, teachersList, fetchData }) => {
         <DialogContent className="sm:max-w-[700px] w-[95%] max-h-[90vh] overflow-y-auto rounded-3xl border-none p-4 sm:p-6 bg-slate-50">
           <DialogHeader className="border-b border-slate-200 pb-4">
             <DialogTitle className="text-xl sm:text-2xl font-black text-sky-900 flex items-center gap-2">
-              <ShieldCheck className="w-6 h-6 text-sky-500"/> Phân công Lớp {selectedClassForAssign?.name}
+              <ShieldCheck className="w-6 h-6 text-sky-500" /> Phân công Lớp {selectedClassForAssign?.name}
             </DialogTitle>
             <p className="text-slate-500 text-sm mt-1">Chỉ định giáo viên được phép quản lý và giao bài tập cho lớp này.</p>
           </DialogHeader>
-          
+
           <div className="mt-4 space-y-6">
-             <div className="bg-white rounded-2xl border border-sky-100 p-4 shadow-sm">
-                <h4 className="font-bold text-sky-900 mb-3 flex items-center gap-2"><UserCheck className="w-4 h-4 text-emerald-500"/> Đang phụ trách ({assignedTeachers.length})</h4>
-                <div className="space-y-2">
-                   {assignedTeachers.length === 0 ? (
-                       <p className="text-slate-400 text-sm italic py-2">Lớp này hiện chưa có giáo viên nào phụ trách.</p>
-                   ) : (
-                       assignedTeachers.map(t => (
-                           <div key={t._id} className="flex items-center justify-between bg-sky-50/50 border border-sky-100 p-3 rounded-xl">
-                              <div>
-                                 <p className="font-bold text-sky-900">{t.fullName}</p>
-                                 <p className="text-xs text-slate-500 font-medium mt-0.5">{t.username} • {getTeacherInfoString(t)}</p>
-                              </div>
-                              <Button onClick={() => handleRemoveTeacherFromClass(t._id)} variant="ghost" size="sm" className="text-rose-500 hover:bg-rose-100 font-bold px-3">Gỡ bỏ</Button>
-                           </div>
-                       ))
-                   )}
-                </div>
-             </div>
+            <div className="bg-white rounded-2xl border border-sky-100 p-4 shadow-sm">
+              <h4 className="font-bold text-sky-900 mb-3 flex items-center gap-2"><UserCheck className="w-4 h-4 text-emerald-500" /> Đang phụ trách ({assignedTeachers.length})</h4>
+              <div className="space-y-2">
+                {assignedTeachers.length === 0 ? (
+                  <p className="text-slate-400 text-sm italic py-2">Lớp này hiện chưa có giáo viên nào phụ trách.</p>
+                ) : (
+                  assignedTeachers.map(t => (
+                    <div key={t._id} className="flex items-center justify-between bg-sky-50/50 border border-sky-100 p-3 rounded-xl">
+                      <div>
+                        <p className="font-bold text-sky-900">{t.fullName}</p>
+                        <p className="text-xs text-slate-500 font-medium mt-0.5">{t.username} • {getTeacherInfoString(t)}</p>
+                      </div>
+                      <Button onClick={() => handleRemoveTeacherFromClass(t._id)} variant="ghost" size="sm" className="text-rose-500 hover:bg-rose-100 font-bold px-3">Gỡ bỏ</Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
 
-             <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-                <h4 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><PlusCircle className="w-4 h-4 text-slate-400"/> Thêm giáo viên khác</h4>
-                <div className="relative mb-3">
-                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                   <Input placeholder="Tìm tên giáo viên..." className="pl-9 bg-slate-50 border-slate-200 rounded-xl h-10" value={assignSearchQuery} onChange={(e) => setAssignSearchQuery(e.target.value)} />
-                </div>
-                
-                <div className="max-h-[250px] overflow-y-auto space-y-2 pr-2">
-                   {unassignedTeachers.length === 0 ? (
-                       <p className="text-slate-400 text-sm italic text-center py-4">Không tìm thấy giáo viên nào khác.</p>
-                   ) : (
-                       unassignedTeachers.map(t => (
-                           <div key={t._id} className="flex items-center justify-between border border-slate-100 p-3 rounded-xl hover:border-slate-300 transition-colors">
-                              <div>
-                                 <p className="font-bold text-slate-700">{t.fullName}</p>
-                                 <p className="text-xs text-slate-400 font-medium mt-0.5">{t.username} • {getTeacherInfoString(t)}</p>
-                              </div>
-                              <Button onClick={() => handleAddTeacherToClass(t._id)} variant="outline" size="sm" className="text-sky-600 border-sky-200 hover:bg-sky-50 font-bold px-3">Thêm vào</Button>
-                           </div>
-                       ))
-                   )}
-                </div>
-             </div>
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+              <h4 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><PlusCircle className="w-4 h-4 text-slate-400" /> Thêm giáo viên khác</h4>
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input placeholder="Tìm tên giáo viên..." className="pl-9 bg-slate-50 border-slate-200 rounded-xl h-10" value={assignSearchQuery} onChange={(e) => setAssignSearchQuery(e.target.value)} />
+              </div>
 
-             <Button onClick={handleSaveTeacherAssignment} disabled={loading} className="w-full h-14 rounded-xl bg-sky-500 hover:bg-sky-600 font-black text-lg text-white shadow-md">
-                 {loading ? <Loader2 className="animate-spin mr-2" /> : "Lưu Thay Đổi Phân Công"}
-             </Button>
+              <div className="max-h-[250px] overflow-y-auto space-y-2 pr-2">
+                {unassignedTeachers.length === 0 ? (
+                  <p className="text-slate-400 text-sm italic text-center py-4">Không tìm thấy giáo viên nào khác.</p>
+                ) : (
+                  unassignedTeachers.map(t => (
+                    <div key={t._id} className="flex items-center justify-between border border-slate-100 p-3 rounded-xl hover:border-slate-300 transition-colors">
+                      <div>
+                        <p className="font-bold text-slate-700">{t.fullName}</p>
+                        <p className="text-xs text-slate-400 font-medium mt-0.5">{t.username} • {getTeacherInfoString(t)}</p>
+                      </div>
+                      <Button onClick={() => handleAddTeacherToClass(t._id)} variant="outline" size="sm" className="text-sky-600 border-sky-200 hover:bg-sky-50 font-bold px-3">Thêm vào</Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <Button onClick={handleSaveTeacherAssignment} disabled={loading} className="w-full h-14 rounded-xl bg-sky-500 hover:bg-sky-600 font-black text-lg text-white shadow-md">
+              {loading ? <Loader2 className="animate-spin mr-2" /> : "Lưu Thay Đổi Phân Công"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

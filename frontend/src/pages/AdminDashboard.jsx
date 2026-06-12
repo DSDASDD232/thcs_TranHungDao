@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "../lib/axios";
-import * as XLSX from "xlsx"; 
+import * as XLSX from "xlsx";
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,10 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { 
-  ShieldCheck, Users, GraduationCap, School, LogOut, TrendingUp, UserPlus, 
-  Loader2, Trash2, Edit, Search, Filter, FileCheck, 
-  FileSpreadsheet, PenTool, Download, Trophy, BarChart, Calendar, Eye, 
+import {
+  ShieldCheck, Users, GraduationCap, School, LogOut, TrendingUp, UserPlus,
+  Loader2, Trash2, Edit, Search, Filter, FileCheck,
+  FileSpreadsheet, PenTool, Download, Trophy, BarChart, Calendar, Eye,
   Menu, X, Key, Lock, Unlock, Library, Database, ChevronLeft, ChevronRight,
   Save, UploadCloud, Sparkles, User, Settings
 } from "lucide-react";
@@ -22,6 +22,7 @@ import {
 import AdminClassManagement from "./AdminClassManagement";
 import AdminDepartmentManagement from "./AdminDepartmentManagement";
 import AdminQuestionBank from "./AdminQuestionBank";
+import schoolLogo from "../assets/logo-truong_221020252129.jpg";
 
 const exportFormalExcel = async (dataList, reportTitle, fileName, adminName) => {
   if (!dataList || dataList.length === 0) return alert("Không có dữ liệu để xuất báo cáo!");
@@ -35,30 +36,28 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, adminName) => 
   const tableHeaders = Object.keys(dataList[0]);
   const columnCount = Math.max(tableHeaders.length, 1);
   const lastColumnLetter = sheet.getColumn(columnCount).letter;
-  const leftHeaderEndIndex = columnCount > 2 ? Math.max(2, Math.floor(columnCount / 2) - 1) : 1;
-  const leftHeaderEnd = sheet.getColumn(leftHeaderEndIndex).letter;
-  const rightHeaderStart = columnCount > 1 ? sheet.getColumn(leftHeaderEndIndex + 1).letter : lastColumnLetter;
+
   const widthProfiles = {
-    "STT": 8,
-    "Tài Khoản": 16,
-    "Họ và Tên": 24,
+    "STT": 14,
+    "Tài Khoản": 20,
+    "Họ và Tên": 30,
     "Vai Trò": 16,
     "Khối": 12,
     "Lớp": 16,
-    "Tổ": 14,
+    "Tổ": 16,
     "Trạng thái": 18,
-    "SĐT": 16,
-    "Địa chỉ": 24,
-    "Ghi chú": 24,
+    "SĐT": 18,
+    "Địa chỉ": 50,
+    "Ghi chú": 30,
   };
 
   sheet.columns = tableHeaders.map((header, index) => {
     const values = dataList.map((row) => (row?.[header] ?? "").toString());
     const maxContentLength = Math.max(header.length, ...values.map((value) => value.length), 0);
-    const autoWidth = Math.min(Math.max(maxContentLength + 4, 10), 36);
+    const autoWidth = Math.min(Math.max(maxContentLength + 4, 10), 50);
     const preferredWidth = widthProfiles[header] ?? autoWidth;
     const width = header === "Tài Khoản" || header === "Vai Trò" || header === "Khối"
-      ? Math.min(preferredWidth, 16)
+      ? Math.min(preferredWidth, 20)
       : header === "Họ và Tên"
         ? Math.max(preferredWidth, 24)
         : preferredWidth;
@@ -73,44 +72,66 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, adminName) => 
     fitToHeight: 0,
   };
 
-  sheet.addRow(["PHƯỜNG THỦY NGUYÊN", "", "", ""]);
-  sheet.addRow(["TRƯỜNG THCS TRẦN HƯNG ĐẠO", "", "", ""]);
-  sheet.mergeCells(`A1:${leftHeaderEnd}1`);
-  sheet.mergeCells(`A2:${leftHeaderEnd}2`);
+  // Adjust left/right header split to make room for Logo in Column A
+  const leftHeaderEndIndex = columnCount > 3 ? Math.floor(columnCount / 2) : 2;
+  const leftHeaderEnd = sheet.getColumn(leftHeaderEndIndex).letter;
+  const rightHeaderStart = sheet.getColumn(leftHeaderEndIndex + 1).letter;
+
+  sheet.addRow([]);
+  sheet.addRow([]);
+
+  sheet.mergeCells(`B1:${leftHeaderEnd}1`);
+  sheet.mergeCells(`B2:${leftHeaderEnd}2`);
   sheet.mergeCells(`${rightHeaderStart}1:${lastColumnLetter}1`);
   sheet.mergeCells(`${rightHeaderStart}2:${lastColumnLetter}2`);
+
+  // Explicitly set values on master cells to prevent merge wiping issues
+  sheet.getCell('B1').value = "PHƯỜNG LƯU KIẾM";
+  sheet.getCell('B2').value = "TRƯỜNG THCS TRẦN HƯNG ĐẠO";
   sheet.getCell(`${rightHeaderStart}1`).value = "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
   sheet.getCell(`${rightHeaderStart}2`).value = "Độc lập - Tự do - Hạnh phúc";
 
+  try {
+    const logoResponse = await fetch(schoolLogo);
+    const logoBuffer = await logoResponse.arrayBuffer();
+    const logoId = workbook.addImage({ buffer: logoBuffer, extension: "jpeg" });
+    sheet.addImage(logoId, {
+      tl: { col: 0.1, row: 0.1 },
+      ext: { width: 85, height: 85 },
+    });
+  } catch (err) {
+    console.log("Không tải được logo", err);
+  }
+
   const formatGovHeader = (rowNum, isBold) => {
-    const row = sheet.getRow(rowNum); row.height = 25; 
-    row.eachCell(cell => { cell.font = { name: 'Times New Roman', size: 12, bold: isBold }; cell.alignment = { vertical: 'middle', horizontal: 'center' }; });
+    const row = sheet.getRow(rowNum); row.height = 30;
+    row.eachCell(cell => { cell.font = { name: 'Times New Roman', size: 14, bold: isBold }; cell.alignment = { vertical: 'middle', horizontal: 'center' }; });
   };
   formatGovHeader(1, true); formatGovHeader(2, true);
-  sheet.getCell(`${rightHeaderStart}2`).font = { name: 'Times New Roman', size: 13, bold: true, underline: true }; 
+  sheet.getCell(`${rightHeaderStart}2`).font = { name: 'Times New Roman', size: 14, bold: true, underline: true };
 
-  sheet.addRow([]); 
+  sheet.addRow([]);
   const titleRow = sheet.addRow([reportTitle.toUpperCase()]);
-  sheet.mergeCells(`A4:${lastColumnLetter}4`); titleRow.height = 40;
+  sheet.mergeCells(`A4:${lastColumnLetter}4`); titleRow.height = 45;
   const titleCell = sheet.getCell('A4');
-  
-  titleCell.font = { name: 'Times New Roman', size: 16, bold: true, color: { argb: 'FF0070C0' } }; 
+
+  titleCell.font = { name: 'Times New Roman', size: 20, bold: true, color: { argb: 'FF0070C0' } };
   titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
-  sheet.addRow([]); 
-  const headerRow = sheet.addRow(tableHeaders); headerRow.height = 30; 
+  sheet.addRow([]);
+  const headerRow = sheet.addRow(tableHeaders); headerRow.height = 30;
   headerRow.eachCell((cell) => {
-    cell.font = { name: 'Times New Roman', size: 12, bold: true, color: { argb: 'FFFFFFFF' } }; 
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0070C0' } }; 
+    cell.font = { name: 'Times New Roman', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0070C0' } };
     cell.alignment = { vertical: 'middle', horizontal: 'center' };
-    cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }; 
+    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
   });
 
   dataList.forEach(obj => {
-    const row = sheet.addRow(Object.values(obj)); row.height = 25; 
-    row.eachCell((cell, colNumber) => {
+    const row = sheet.addRow(Object.values(obj)); row.height = 25;
+    row.eachCell((cell) => {
       cell.font = { name: 'Times New Roman', size: 12 };
-      cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
       cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
     });
   });
@@ -179,7 +200,7 @@ const exportTeacherExcel = async (dataList, reportTitle, fileName, adminName) =>
     fitToHeight: 0,
   };
 
-  sheet.addRow(["PHƯỜNG THỦY NGUYÊN", "", "", "", ""]);
+  sheet.addRow(["PHƯỜNG LƯU KIẾM", "", "", "", ""]);
   sheet.addRow(["TRƯỜNG THCS TRẦN HƯNG ĐẠO", "", "", "", ""]);
   sheet.mergeCells(`A1:${leftHeaderEnd}1`);
   sheet.mergeCells(`A2:${leftHeaderEnd}2`);
@@ -209,14 +230,14 @@ const exportTeacherExcel = async (dataList, reportTitle, fileName, adminName) =>
     cell.font = { name: 'Times New Roman', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0070C0' } };
     cell.alignment = { vertical: 'middle', horizontal: 'center' };
-    cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
   });
 
   dataList.forEach(obj => {
     const row = sheet.addRow(Object.values(obj)); row.height = 25;
     row.eachCell((cell) => {
       cell.font = { name: 'Times New Roman', size: 12 };
-      cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
       cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
     });
   });
@@ -248,7 +269,7 @@ const exportTeacherExcel = async (dataList, reportTitle, fileName, adminName) =>
 
 const getSubjects = (user) => {
   if (Array.isArray(user.subjects) && user.subjects.length > 0) return user.subjects;
-  if (user.subject) return [user.subject]; 
+  if (user.subject) return [user.subject];
   return [];
 };
 
@@ -314,15 +335,15 @@ const AdminDashboard = () => {
   const currentRole = localStorage.getItem("role");
   const accountFileRef = useRef(null);
 
-  const [activeTab, setActiveTab] = useState("overview"); 
-  const [subTab, setSubTab] = useState("all"); 
+  const [activeTab, setActiveTab] = useState("overview");
+  const [subTab, setSubTab] = useState("all");
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
-  
-  const [recentUsers, setRecentUsers] = useState([]); 
-  const [classesList, setClassesList] = useState([]); 
+
+  const [recentUsers, setRecentUsers] = useState([]);
+  const [classesList, setClassesList] = useState([]);
   const [teachersList, setTeachersList] = useState([]);
   const [lbCounts, setLbCounts] = useState(null);
   const [dashboardStats, setDashboardStats] = useState({ students: 0, teachers: 0, assignments: 0, submissions: 0 });
@@ -341,6 +362,7 @@ const AdminDashboard = () => {
   const [selectedLbClassId, setSelectedLbClassId] = useState("");
   const leaderboardRequestIdRef = useRef(0);
   const [classStudentStats, setClassStudentStats] = useState([]);
+  const [studentLbSearch, setStudentLbSearch] = useState("");
   const [classInfoForStats, setClassInfoForStats] = useState(null);
   const [isLoadingClassStats, setIsLoadingClassStats] = useState(false);
   const [editingStatStudentId, setEditingStatStudentId] = useState(null);
@@ -352,9 +374,9 @@ const AdminDashboard = () => {
   const [isUserDetailDialogOpen, setIsUserDetailDialogOpen] = useState(false);
   const [selectedUserDetail, setSelectedUserDetail] = useState(null);
   const [selectedUserLoading, setSelectedUserLoading] = useState(false);
-  const [createMethod, setCreateMethod] = useState("manual"); 
+  const [createMethod, setCreateMethod] = useState("manual");
   const [newUser, setNewUser] = useState(buildEmptyUserForm());
-  const [editUser, setEditUser] = useState(null); 
+  const [editUser, setEditUser] = useState(null);
   const [subjectOptions, setSubjectOptions] = useState([]);
   const [searchName, setSearchName] = useState("");
   const [filterUserGrade, setFilterUserGrade] = useState("all");
@@ -383,9 +405,9 @@ const AdminDashboard = () => {
 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const carouselImages = [
-    "/slide1.jpg", 
-    "/slide2.jpg", 
-    "/slide3.jpg", 
+    "/slide1.jpg",
+    "/slide2.jpg",
+    "/slide3.jpg",
     "/slide4.jpg",
     "/slide5.jpg"
   ];
@@ -441,10 +463,10 @@ const AdminDashboard = () => {
       setTeachersList(allUsrs.filter(u => u.role === 'teacher'));
       setSubjectOptions(Array.isArray(subjectsRes) ? subjectsRes : (Array.isArray(subjectsRes?.data) ? subjectsRes.data : []));
       setLbCounts(lbCountsRes.data || null);
-    } catch (error) { 
-        if (error.response?.status === 403 || error.response?.status === 401) handleLogout(); 
-    } finally { 
-        setIsLoadingData(false); 
+    } catch (error) {
+      if (error.response?.status === 403 || error.response?.status === 401) handleLogout();
+    } finally {
+      setIsLoadingData(false);
     }
   };
 
@@ -687,24 +709,24 @@ const AdminDashboard = () => {
     try {
       const overrideScope = lbMonth !== "all"
         ? {
-            scopeType: "month",
-            scopeYear: lbYear,
-            scopeMonth: lbMonth,
-            scopeSemester: "",
-          }
+          scopeType: "month",
+          scopeYear: lbYear,
+          scopeMonth: lbMonth,
+          scopeSemester: "",
+        }
         : lbSemester !== "all"
           ? {
-              scopeType: "semester",
-              scopeYear: lbYear,
-              scopeMonth: "",
-              scopeSemester: lbSemester,
-            }
+            scopeType: "semester",
+            scopeYear: lbYear,
+            scopeMonth: "",
+            scopeSemester: lbSemester,
+          }
           : {
-              scopeType: "year",
-              scopeYear: lbYear,
-              scopeMonth: "",
-              scopeSemester: "",
-            };
+            scopeType: "year",
+            scopeYear: lbYear,
+            scopeMonth: "",
+            scopeSemester: "",
+          };
 
       await axios.put(
         `/admin/leaderboard/class/${selectedLbClassId}/students/${studentId}`,
@@ -797,7 +819,7 @@ const AdminDashboard = () => {
 
   const isValidUsernameFormat = (username) => {
     const value = String(username ?? "").trim();
-    if (!value) return false;
+    if (!value || value.length < 6) return false;
 
     const normalized = value
       .normalize("NFD")
@@ -850,7 +872,7 @@ const AdminDashboard = () => {
   const handleCreateUser = async (e) => {
     e.preventDefault();
     if (newUser.role === "student" && (!newUser.grade || !newUser.classId)) return alert("Vui lòng chọn đầy đủ Khối và Lớp cho học sinh!");
-    if (!isValidUsernameFormat(newUser.username)) return alert("Tên đăng nhập không được có dấu hoặc khoảng trắng!");
+    if (!isValidUsernameFormat(newUser.username)) return alert("Tên đăng nhập phải có ít nhất 6 ký tự, không được có dấu hoặc khoảng trắng!");
     if (newUser.role === "student" || newUser.role === "teacher") {
       const phoneRaw = String(newUser.phone ?? "").trim();
       const addressRaw = String(newUser.address ?? "").trim();
@@ -873,14 +895,14 @@ const AdminDashboard = () => {
           ? resolveTeacherPosition(newUser.department, newUser.departmentPosition)
           : "",
       }, getHeader());
-      setIsUserDialogOpen(false); 
-      setNewUser(buildEmptyUserForm()); 
-      fetchData(); 
+      setIsUserDialogOpen(false);
+      setNewUser(buildEmptyUserForm());
+      fetchData();
       alert("✅ Tạo tài khoản thành công!");
-    } catch (err) { 
-        alert(err.response?.data?.message || "❌ Lỗi tạo tài khoản!"); 
-    } finally { 
-        setLoading(false); 
+    } catch (err) {
+      alert(err.response?.data?.message || "❌ Lỗi tạo tài khoản!");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -902,39 +924,39 @@ const AdminDashboard = () => {
     try {
       const payload = buildUserUpdatePayload(editUser);
       await axios.put(`/admin/users/${editUser._id}`, payload, getHeader());
-      setIsEditUserDialogOpen(false); 
-      fetchData(); 
+      setIsEditUserDialogOpen(false);
+      fetchData();
       alert("✅ Cập nhật thành công!");
-    } catch (err) { 
-        const message = err?.response?.data?.message || err?.response?.data || err?.message || "❌ Lỗi cập nhật!";
-        alert(typeof message === 'string' ? message : JSON.stringify(message));
-    } finally { 
-        setLoading(false); 
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.response?.data || err?.message || "❌ Lỗi cập nhật!";
+      alert(typeof message === 'string' ? message : JSON.stringify(message));
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleDeleteUser = async (userId, userName) => {
     if (!window.confirm(`Xóa hoàn toàn tài khoản: ${userName}? Hành động này không thể hoàn tác.`)) return;
-    try { 
-        await axios.delete(`/admin/users/${userId}`, getHeader()); 
-        fetchData(); 
-        alert("✅ Đã xóa tài khoản thành công!");
-    } catch (err) { 
-        alert(err.response?.data?.message || "Lỗi xóa tài khoản!"); 
+    try {
+      await axios.delete(`/admin/users/${userId}`, getHeader());
+      fetchData();
+      alert("✅ Đã xóa tài khoản thành công!");
+    } catch (err) {
+      alert(err.response?.data?.message || "Lỗi xóa tài khoản!");
     }
   };
 
   const handleResetPassword = async (userId, username) => {
     const newPassword = window.prompt(`Nhập mật khẩu mới cho tài khoản ${username}:\n(Để trống nếu muốn đặt mật khẩu mặc định là 1)\nMật khẩu phải có ít nhất 6 ký tự, gồm 1 chữ in hoa, 1 chữ số, 1 ký tự đặc biệt và không được có dấu cách.`, "1");
-    if (newPassword === null) return; 
+    if (newPassword === null) return;
 
     // Client-side validation for newPassword from prompt
     if (newPassword !== "1" && newPassword.length > 0) { // Only validate if not default "1" and not empty
-        if (!isStrongPassword(newPassword)) {
-          return alert("Mật khẩu mới phải có ít nhất 6 ký tự, gồm 1 chữ in hoa, 1 chữ số, 1 ký tự đặc biệt và không được có dấu cách.");
-        }
+      if (!isStrongPassword(newPassword)) {
+        return alert("Mật khẩu mới phải có ít nhất 6 ký tự, gồm 1 chữ in hoa, 1 chữ số, 1 ký tự đặc biệt và không được có dấu cách.");
+      }
     }
-    
+
     try {
       await axios.put(`/admin/users/${userId}`, { password: newPassword }, getHeader());
       alert(`✅ Đã khôi phục mật khẩu cho tài khoản ${username} thành công!`);
@@ -946,7 +968,7 @@ const AdminDashboard = () => {
   const handleToggleLock = async (userId, currentLockStatus) => {
     const actionName = currentLockStatus ? "MỞ KHÓA" : "KHÓA";
     if (!window.confirm(`Bạn có chắc chắn muốn ${actionName} tài khoản này?`)) return;
-    
+
     try {
       const user = recentUsers.find((item) => String(item._id) === String(userId));
       const payload = { isLocked: !currentLockStatus };
@@ -956,7 +978,7 @@ const AdminDashboard = () => {
       }
 
       await axios.put(`/admin/users/${userId}`, payload, getHeader());
-      fetchData(); 
+      fetchData();
       alert(`✅ Đã ${actionName.toLowerCase()} tài khoản thành công!`);
     } catch (err) {
       alert(err.response?.data?.message || `Lỗi khi ${actionName.toLowerCase()} tài khoản!`);
@@ -967,13 +989,13 @@ const AdminDashboard = () => {
     const role = newUser.role === "teacher" ? "teacher" : "student";
     const templateRows = role === "teacher"
       ? [
-          ["STT", "Họ và tên", "Số điện thoại", "Địa chỉ"],
-          [1, "Nguyễn Văn B", "0987654321", "Số 1, Phường A, Quận B"],
-        ]
+        ["STT", "Họ và tên", "Số điện thoại", "Địa chỉ"],
+        [1, "Nguyễn Văn B", "0987654321", "Số 1, Phường A, Quận B"],
+      ]
       : [
-          ["STT", "Họ và tên", "Số điện thoại phụ huynh", "Địa chỉ"],
-          [1, "Nguyễn Văn A", "0987654321", "Số 1, Phường A, Quận B"],
-        ];
+        ["STT", "Họ và tên", "Số điện thoại phụ huynh", "Địa chỉ"],
+        [1, "Nguyễn Văn A", "0987654321", "Số 1, Phường A, Quận B"],
+      ];
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("DanhSach");
@@ -1181,10 +1203,10 @@ const AdminDashboard = () => {
         setImportResults(null);
         setNewUser(buildEmptyUserForm());
       }
-    } catch (error) { 
-        alert(error.response?.data?.message || "Lỗi xử lý. Vui lòng kiểm tra lại file."); 
-    } finally { 
-        setLoading(false); 
+    } catch (error) {
+      alert(error.response?.data?.message || "Lỗi xử lý. Vui lòng kiểm tra lại file.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1193,7 +1215,7 @@ const AdminDashboard = () => {
     const classUsers = filteredUsers.filter(u => String(u.classId?._id || u.classId) === String(filterUserClass));
     if (classUsers.length === 0) return alert("Lớp này hiện chưa có học sinh nào!");
 
-    const dataToExport = classUsers.map((u, i) => ({ 
+    const dataToExport = classUsers.map((u, i) => ({
       "STT": i + 1,
       "Tài Khoản": u.username,
       "Họ và Tên": u.fullName,
@@ -1207,31 +1229,31 @@ const AdminDashboard = () => {
       "Ghi chú": u.note || "",
     }));
     const className = classesList.find(c => String(c._id) === String(filterUserClass))?.name || "Lop";
-    
+
     exportFormalExcel(dataToExport, `DANH SÁCH TÀI KHOẢN LỚP ${className}`, `DS_Tai_Khoan_Lop_${className}`, fullName);
   };
 
-      const handleExportTeacherList = () => {
-        if (filteredUsers.length === 0) return alert("Không có dữ liệu giáo viên để xuất!");
+  const handleExportTeacherList = () => {
+    if (filteredUsers.length === 0) return alert("Không có dữ liệu giáo viên để xuất!");
 
-        const dataToExport = filteredUsers.map((u, i) => {
-          return {
-            "STT": i + 1,
-            "Tài Khoản": u.username,
-            "Họ và Tên": u.fullName,
-            "Vai Trò": "Giáo viên",
-            "Khối": "",
-            "Lớp": "",
-            "Tổ": u.department ? `Tổ ${u.department}` : "",
-            "Trạng thái": getTeacherStatusLabel(u, activeTab),
-            "SĐT": u.phone || "",
-            "Địa chỉ": u.address || "",
-            "Ghi chú": u.note || "",
-          };
-        });
-
-        exportFormalExcel(dataToExport, "DANH SÁCH GIÁO VIÊN", "DS_GiaoVien", fullName);
+    const dataToExport = filteredUsers.map((u, i) => {
+      return {
+        "STT": i + 1,
+        "Tài Khoản": u.username,
+        "Họ và Tên": u.fullName,
+        "Vai Trò": "Giáo viên",
+        "Khối": "",
+        "Lớp": "",
+        "Tổ": u.department ? `Tổ ${u.department}` : "",
+        "Trạng thái": getTeacherStatusLabel(u, activeTab),
+        "SĐT": u.phone || "",
+        "Địa chỉ": u.address || "",
+        "Ghi chú": u.note || "",
       };
+    });
+
+    exportFormalExcel(dataToExport, "DANH SÁCH GIÁO VIÊN", "DS_GiaoVien", fullName);
+  };
 
   const handleExportLeaderboard = async () => {
     if (!filteredLeaderboardClasses || filteredLeaderboardClasses.length === 0) return alert("Không có dữ liệu thi đua để xuất Excel.");
@@ -1243,7 +1265,7 @@ const AdminDashboard = () => {
     const sheet = workbook.addWorksheet('Báo Cáo Thi Đua', { views: [{ showGridLines: true }] });
 
     sheet.columns = [
-      { key: 'col1', width: 8 },  // STT / Hạng
+      { key: 'col1', width: 14 },  // STT / Hạng
       { key: 'col2', width: 25 }, // Tên lớp / Họ và Tên
       { key: 'col3', width: 16 }, // Khối / Tài Khoản
       { key: 'col4', width: 16 }, // Sĩ Số / Lớp Học
@@ -1251,23 +1273,41 @@ const AdminDashboard = () => {
       { key: 'col6', width: 16 }, // Điểm TB
     ];
 
-    sheet.addRow(["PHƯỜNG THỦY NGUYÊN", "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"]);
-    sheet.addRow(["TRƯỜNG THCS TRẦN HƯNG ĐẠO", "", "", "Độc lập - Tự do - Hạnh phúc"]);
-    sheet.mergeCells('A1:C1');
-    sheet.mergeCells('A2:C2');
+    sheet.addRow([]);
+    sheet.addRow([]);
+    sheet.mergeCells('B1:C1');
+    sheet.mergeCells('B2:C2');
     sheet.mergeCells('D1:F1');
     sheet.mergeCells('D2:F2');
 
-    const formatHeaderRows = (rowNum, isBold, underline = false) => {
+    sheet.getCell('B1').value = "PHƯỜNG LƯU KIẾM";
+    sheet.getCell('B2').value = "TRƯỜNG THCS TRẦN HƯNG ĐẠO";
+    sheet.getCell('D1').value = "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
+    sheet.getCell('D2').value = "Độc lập - Tự do - Hạnh phúc";
+
+    try {
+      const logoResponse = await fetch(schoolLogo);
+      const logoBuffer = await logoResponse.arrayBuffer();
+      const logoId = workbook.addImage({ buffer: logoBuffer, extension: "jpeg" });
+      sheet.addImage(logoId, {
+        tl: { col: 0.1, row: 0.1 },
+        ext: { width: 85, height: 85 },
+      });
+    } catch (err) {
+      console.log("Không tải được logo", err);
+    }
+
+    const formatHeaderRows = (rowNum, isBold) => {
       const row = sheet.getRow(rowNum);
-      row.height = 20;
+      row.height = 30;
       row.eachCell(cell => {
-        cell.font = { name: 'Times New Roman', size: 11, bold: isBold, underline };
+        cell.font = { name: 'Times New Roman', size: 12, bold: isBold };
         cell.alignment = { vertical: 'middle', horizontal: 'center' };
       });
     };
     formatHeaderRows(1, true);
-    formatHeaderRows(2, true, true);
+    formatHeaderRows(2, true);
+    sheet.getCell('D2').font = { name: 'Times New Roman', size: 12, bold: true, underline: true };
 
     sheet.addRow([]);
 
@@ -1280,7 +1320,7 @@ const AdminDashboard = () => {
     sheet.mergeCells(`A4:F4`);
     titleRow.height = 45;
     const titleCell = sheet.getCell('A4');
-    titleCell.font = { name: 'Times New Roman', size: 13, bold: true, color: { argb: 'FF0070C0' } };
+    titleCell.font = { name: 'Times New Roman', size: 20, bold: true, color: { argb: 'FF0070C0' } };
     titleCell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
 
     sheet.addRow([]);
@@ -1297,7 +1337,7 @@ const AdminDashboard = () => {
       cell.font = { name: 'Times New Roman', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0070C0' } };
       cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
     });
 
     filteredLeaderboardClasses.forEach((cls, idx) => {
@@ -1312,8 +1352,8 @@ const AdminDashboard = () => {
       row.height = 20;
       row.eachCell((cell, colIdx) => {
         cell.font = { name: 'Times New Roman', size: 11 };
-        cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
-        cell.alignment = { vertical: 'middle', horizontal: colIdx === 2 ? 'left' : 'center' };
+        cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
       });
     });
 
@@ -1331,7 +1371,7 @@ const AdminDashboard = () => {
       cell.font = { name: 'Times New Roman', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC65911' } };
       cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
     });
 
     const top3Classes = leaderboardClassesWithData.slice(0, 3);
@@ -1347,8 +1387,8 @@ const AdminDashboard = () => {
       row.height = 20;
       row.eachCell((cell, colIdx) => {
         cell.font = { name: 'Times New Roman', size: 11, bold: idx === 0 };
-        cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
-        cell.alignment = { vertical: 'middle', horizontal: colIdx === 2 ? 'left' : 'center' };
+        cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
       });
     });
 
@@ -1366,7 +1406,7 @@ const AdminDashboard = () => {
       cell.font = { name: 'Times New Roman', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF548235' } };
       cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
     });
 
     if (topStudents.length === 0) {
@@ -1387,7 +1427,7 @@ const AdminDashboard = () => {
         row.height = 20;
         row.eachCell((cell, colIdx) => {
           cell.font = { name: 'Times New Roman', size: 11 };
-          cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+          cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
           cell.alignment = { vertical: 'middle', horizontal: colIdx === 2 ? 'left' : 'center' };
         });
       });
@@ -1432,19 +1472,19 @@ const AdminDashboard = () => {
 
   const renderTeacherAssignments = (user) => {
     if (!user.assignedClasses || user.assignedClasses.length === 0) return <span className="text-slate-400 italic text-xs mt-1 block">Chưa phân công lớp</span>;
-    
+
     const classNames = user.assignedClasses.map(c => {
-       const classId = typeof c === 'object' ? c._id : c;
-       const matched = classesList.find(cls => String(cls._id) === String(classId));
-       return matched ? matched.name : null;
+      const classId = typeof c === 'object' ? c._id : c;
+      const matched = classesList.find(cls => String(cls._id) === String(classId));
+      return matched ? matched.name : null;
     }).filter(Boolean);
 
     return classNames.length > 0 ? (
-       <div className="flex flex-wrap gap-1 mt-1">
-          {classNames.map((name, idx) => (
-             <Badge key={idx} variant="outline" className="bg-sky-50 text-sky-700 border-sky-200 text-[10px]">{name}</Badge>
-          ))}
-       </div>
+      <div className="flex flex-wrap gap-1 mt-1">
+        {classNames.map((name, idx) => (
+          <Badge key={idx} variant="outline" className="bg-sky-50 text-sky-700 border-sky-200 text-[10px]">{name}</Badge>
+        ))}
+      </div>
     ) : <span className="text-slate-400 italic text-[10px] mt-1 block">Chưa phân công</span>;
   };
 
@@ -1728,14 +1768,14 @@ const AdminDashboard = () => {
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans text-slate-800 relative">
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden" onClick={() => setIsMobileMenuOpen(false)}/>
+        <div className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden" onClick={() => setIsMobileMenuOpen(false)} />
       )}
 
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-100 flex flex-col h-screen shadow-xl transform transition-transform duration-300 lg:translate-x-0 lg:sticky lg:top-0 lg:self-start lg:shadow-[4px_0_24px_rgba(15,23,42,0.04)] ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6 flex items-center justify-between gap-3 border-b border-slate-50">
           <div className="flex items-center gap-3">
             <div className="bg-sky-100 p-2 rounded-xl text-sky-600"><ShieldCheck className="h-6 w-6" /></div>
-            <span className="font-black text-xl text-slate-800 tracking-tight">Hệ Thống<br/>Admin</span>
+            <span className="font-black text-xl text-slate-800 tracking-tight">Hệ Thống<br />Admin</span>
           </div>
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setIsMobileMenuOpen(false)}>
             <X className="w-5 h-5 text-slate-500" />
@@ -1750,32 +1790,32 @@ const AdminDashboard = () => {
           <Button onClick={() => handleViewTeacherAccounts()} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'teacherAccounts' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><Users className="mr-3 h-5 w-5" /> Quản lý Giáo viên</Button>
           <Button onClick={() => handleViewStudentAccounts()} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'studentAccounts' ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><Users className="mr-3 h-5 w-5" /> Quản lý Học sinh</Button>
           <Button onClick={() => handleMenuClick("leaderboard")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all ${activeTab === 'leaderboard' ? 'bg-amber-500 text-white shadow-md shadow-amber-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}><Trophy className="mr-3 h-5 w-5" /> Thi đua toàn trường</Button>
-          
+
           <Button onClick={() => handleMenuClick("settings")} variant="ghost" className={`w-full justify-start rounded-xl h-12 font-bold transition-all mt-4 ${activeTab === 'settings' ? 'bg-slate-800 text-white shadow-md shadow-slate-300' : 'text-slate-500 hover:bg-slate-200 hover:text-slate-800'}`}><Settings className="mr-3 h-5 w-5" /> Thông tin & Bảo mật</Button>
         </nav>
         <div className="p-5 border-t border-slate-50"><Button onClick={handleLogout} variant="ghost" className="w-full h-11 rounded-xl text-rose-500 hover:bg-rose-50 font-bold"><LogOut className="mr-2 h-5 w-5" /> Đăng xuất</Button></div>
       </aside>
 
       <main className="flex-1 p-4 sm:p-8 lg:p-10 w-full overflow-x-hidden max-w-[100vw]">
-        
+
         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-8 gap-4">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" className="lg:hidden bg-white shadow-sm rounded-xl border border-slate-200" onClick={() => setIsMobileMenuOpen(true)}>
               <Menu className="w-5 h-5 text-slate-800" />
             </Button>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
-              {activeTab === "overview" ? "Tổng quan hệ thống" : 
-               activeTab === "classes" ? "Quản lý Lớp học" : 
-               activeTab === "departments" ? "Quản lý Tổ chuyên môn" : 
-               activeTab === "questions" ? "Kho câu hỏi hệ thống" : 
-               activeTab === "leaderboard" ? "Bảng Thi Đua Tổng" : 
-               activeTab === "accounts" ? "Quản lý Tài khoản" : 
-               activeTab === "teacherAccounts" ? "Quản lý Giáo viên" : 
-               activeTab === "studentAccounts" ? "Quản lý Học sinh" : 
-               "Thông tin & Bảo mật"}
+              {activeTab === "overview" ? "Tổng quan hệ thống" :
+                activeTab === "classes" ? "Quản lý Lớp học" :
+                  activeTab === "departments" ? "Quản lý Tổ chuyên môn" :
+                    activeTab === "questions" ? "Kho câu hỏi hệ thống" :
+                      activeTab === "leaderboard" ? "Bảng Thi Đua Tổng" :
+                        activeTab === "accounts" ? "Quản lý Tài khoản" :
+                          activeTab === "teacherAccounts" ? "Quản lý Giáo viên" :
+                            activeTab === "studentAccounts" ? "Quản lý Học sinh" :
+                              "Thông tin & Bảo mật"}
             </h1>
           </div>
-          
+
           <div className="flex gap-3 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
             {(activeTab === "accounts" || activeTab === "studentAccounts") && (
               <Button
@@ -1857,24 +1897,24 @@ const AdminDashboard = () => {
             </div>
 
             <div className="relative w-full h-[350px] sm:h-[450px] lg:h-[550px] rounded-3xl overflow-hidden shadow-sm border border-sky-100 bg-white group">
-              <div 
-                className="w-full h-full flex transition-transform duration-700 ease-[cubic-bezier(0.25,1,0.5,1)]" 
+              <div
+                className="w-full h-full flex transition-transform duration-700 ease-[cubic-bezier(0.25,1,0.5,1)]"
                 style={{ transform: `translateX(-${currentImageIndex * 100}%)` }}
               >
                 {carouselImages.map((src, idx) => (
                   <div key={idx} className="w-full h-full shrink-0 relative flex items-center justify-center bg-slate-100 overflow-hidden">
-                     <img 
-                       src={src} 
-                       className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-60 scale-110 pointer-events-none" 
-                       alt="Nền mở ảo" 
-                       onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=2000&auto=format&fit=crop'; }}
-                     />
-                     <img 
-                       src={src} 
-                       alt={`Slide ${idx + 1}`} 
-                       className="relative z-10 w-full h-full object-contain" 
-                       onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=2000&auto=format&fit=crop'; }}
-                     />
+                    <img
+                      src={src}
+                      className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-60 scale-110 pointer-events-none"
+                      alt="Nền mở ảo"
+                      onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=2000&auto=format&fit=crop'; }}
+                    />
+                    <img
+                      src={src}
+                      alt={`Slide ${idx + 1}`}
+                      className="relative z-10 w-full h-full object-contain"
+                      onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=2000&auto=format&fit=crop'; }}
+                    />
                   </div>
                 ))}
               </div>
@@ -1996,17 +2036,17 @@ const AdminDashboard = () => {
         )}
 
         {activeTab === "classes" && (
-          <AdminClassManagement 
-            classesList={classesList} 
-            teachersList={teachersList} 
-            fetchData={fetchData} 
+          <AdminClassManagement
+            classesList={classesList}
+            teachersList={teachersList}
+            fetchData={fetchData}
           />
         )}
 
         {activeTab === "departments" && (
-          <AdminDepartmentManagement 
-            teachersList={teachersList} 
-            fetchData={fetchData} 
+          <AdminDepartmentManagement
+            teachersList={teachersList}
+            fetchData={fetchData}
           />
         )}
 
@@ -2020,12 +2060,12 @@ const AdminDashboard = () => {
               <div>
                 <h2 className="text-xl sm:text-2xl font-bold text-slate-800 flex items-center gap-2"><Trophy className="w-6 h-6 text-amber-500" /> Thi đua toàn trường</h2>
               </div>
-              
+
               <div className="flex flex-wrap gap-2 w-full lg:w-auto">
                 {/* Nhóm lọc thời gian */}
                 <div className="flex items-center gap-1 sm:gap-2 bg-slate-50 p-1 sm:p-1.5 rounded-xl border border-slate-200 shadow-sm">
                   <Calendar className="w-4 h-4 text-slate-500 ml-2 hidden sm:block" />
-                  
+
                   {/* Chọn Năm */}
                   <Select value={lbYear} onValueChange={setLbYear}>
                     <SelectTrigger className="h-9 bg-white border-none font-bold text-sky-700 shadow-sm w-[110px] sm:w-[120px]">
@@ -2046,7 +2086,7 @@ const AdminDashboard = () => {
                     <SelectContent>
                       <SelectItem value="all">Cả năm</SelectItem>
                       {[...Array(12)].map((_, i) => (
-                        <SelectItem key={i+1} value={(i+1).toString()}>Tháng {i+1}</SelectItem>
+                        <SelectItem key={i + 1} value={(i + 1).toString()}>Tháng {i + 1}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -2232,11 +2272,10 @@ const AdminDashboard = () => {
                                 <TableRow key={student._id} className="hover:bg-slate-50/50 transition-colors">
                                   <TableCell className="text-center font-bold py-2">
                                     {isTop3 ? (
-                                      <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-black ${
-                                        rank === 1 ? "bg-amber-500 text-white shadow-sm shadow-amber-200" :
-                                        rank === 2 ? "bg-slate-300 text-slate-700 shadow-sm shadow-slate-100" :
-                                        "bg-orange-500 text-white shadow-sm shadow-orange-200"
-                                      }`}>
+                                      <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-black ${rank === 1 ? "bg-amber-500 text-white shadow-sm shadow-amber-200" :
+                                          rank === 2 ? "bg-slate-300 text-slate-700 shadow-sm shadow-slate-100" :
+                                            "bg-orange-500 text-white shadow-sm shadow-orange-200"
+                                        }`}>
                                         {rank}
                                       </span>
                                     ) : (
@@ -2303,7 +2342,7 @@ const AdminDashboard = () => {
               </div>
 
               {isLoadingLb ? (
-                <div className="text-center py-20"><Loader2 className="w-12 h-12 animate-spin mx-auto text-sky-500 mb-4"/></div>
+                <div className="text-center py-20"><Loader2 className="w-12 h-12 animate-spin mx-auto text-sky-500 mb-4" /></div>
               ) : filteredLeaderboardClasses.length === 0 ? (
                 <div className="text-center py-20 border border-dashed border-sky-200 m-4 rounded-3xl bg-sky-50/30">
                   <BarChart className="w-16 h-16 text-slate-200 mx-auto mb-4" />
@@ -2352,24 +2391,35 @@ const AdminDashboard = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 sm:p-6">
-                <div className="mb-4 flex flex-col sm:flex-row gap-3 sm:items-center">
-                  <span className="text-sm font-semibold text-slate-600">Chọn lớp:</span>
-                  <Select value={selectedLbClassId || ""} onValueChange={setSelectedLbClassId}>
-                    <SelectTrigger className="w-full sm:w-[220px] bg-white border-slate-200 rounded-xl">
-                      <span className="truncate">
-                        {selectedLbClassId
-                          ? `Lớp ${classesList.find((cls) => String(cls._id) === String(selectedLbClassId))?.name || selectedLbClassId}`
-                          : "Chọn lớp"}
-                      </span>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filteredLeaderboardClasses.map((cls) => (
-                        <SelectItem key={getLeaderboardClassId(cls)} value={getLeaderboardClassId(cls)}>
-                          Lớp {getLeaderboardClassLabel(cls)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="mb-4 flex flex-col sm:flex-row justify-start gap-4 sm:items-center">
+                  <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                    <span className="text-sm font-semibold text-slate-600 shrink-0">Chọn lớp:</span>
+                    <Select value={selectedLbClassId || undefined} onValueChange={setSelectedLbClassId}>
+                      <SelectTrigger className="w-full sm:w-[220px] bg-white border-slate-200 rounded-xl">
+                        <span className="truncate">
+                          {selectedLbClassId
+                            ? `Lớp ${classesList.find((cls) => String(cls._id) === String(selectedLbClassId))?.name || selectedLbClassId}`
+                            : "Chọn lớp"}
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filteredLeaderboardClasses.map((cls) => (
+                          <SelectItem key={getLeaderboardClassId(cls)} value={getLeaderboardClassId(cls)}>
+                            Lớp {getLeaderboardClassLabel(cls)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="relative w-full sm:w-[250px] shrink-0">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Input 
+                      placeholder="Tìm kiếm học sinh..." 
+                      className="pl-10 rounded-xl bg-white border-slate-200"
+                      value={studentLbSearch}
+                      onChange={(e) => setStudentLbSearch(e.target.value)}
+                    />
+                  </div>
                 </div>
 
                 {isLoadingClassStats ? (
@@ -2390,7 +2440,16 @@ const AdminDashboard = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {classStudentStats.map((student, idx) => {
+                        {classStudentStats
+                          .filter(student => {
+                            const keyword = String(studentLbSearch || "").toLowerCase().trim();
+                            if (!keyword) return true;
+                            return (
+                              String(student.fullName || "").toLowerCase().includes(keyword) ||
+                              String(student.username || "").toLowerCase().includes(keyword)
+                            );
+                          })
+                          .map((student, idx) => {
                           const isEditingStudent = editingStatStudentId === student._id;
                           return (
                             <TableRow key={student._id}>
@@ -2477,19 +2536,19 @@ const AdminDashboard = () => {
             <div className="bg-white border-b border-slate-50 px-4 sm:px-8 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
                 <span className="rounded-xl whitespace-nowrap px-4 sm:px-6 font-bold bg-sky-500 text-white">
-                  
+
                 </span>
               </div>
               <div className="flex gap-2 w-full sm:w-auto">
                 {activeTab === "teacherAccounts" && (
                   <Button onClick={handleExportTeacherList} className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl h-10 flex-1 sm:flex-none">
-                    <Download className="w-4 h-4 mr-2"/> Xuất DS Giáo viên
+                    <Download className="w-4 h-4 mr-2" /> Xuất DS Giáo viên
                   </Button>
                 )}
 
                 {activeTab === "studentAccounts" && (
                   <Button onClick={handleExportClassList} className="bg-teal-500 hover:bg-teal-600 text-white font-bold rounded-xl h-10 flex-1 sm:flex-none">
-                    <Download className="w-4 h-4 mr-2"/> Xuất Excel Lớp
+                    <Download className="w-4 h-4 mr-2" /> Xuất Excel Lớp
                   </Button>
                 )}
 
@@ -2510,7 +2569,7 @@ const AdminDashboard = () => {
                     }));
                     exportFormalExcel(data, "DANH SÁCH TẤT CẢ TÀI KHOẢN", "DS_TatCa_TaiKhoan", fullName);
                   }} className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl h-10 flex-1 sm:flex-none">
-                    <Download className="w-4 h-4 mr-2"/> Xuất DS Tất cả
+                    <Download className="w-4 h-4 mr-2" /> Xuất DS Tất cả
                   </Button>
                 )}
               </div>
@@ -2541,19 +2600,19 @@ const AdminDashboard = () => {
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div className="text-sm text-slate-700">Đã chọn <span className="font-semibold text-slate-900">{selectedCount}</span> tài khoản</div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-                      <>
-                        <Select value={bulkEditFields.status} onValueChange={(val) => setBulkEditFields((prev) => ({ ...prev, status: val }))}>
-                          <SelectTrigger className="h-11 min-w-[180px] rounded-xl bg-white"><span className="truncate">{bulkEditFields.status ? getStatusLabel(bulkEditFields.status, activeTab) : "Trạng thái chung"}</span></SelectTrigger>
-                          <SelectContent>
-                            {getStatusOptions(activeTab).map((option) => (
-                              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button onClick={handleBulkUpdate} disabled={!bulkEditFields.status || isBulkSaving} className="h-11 bg-sky-500 hover:bg-sky-600 text-white font-bold">
-                          {isBulkSaving ? "Đang lưu..." : "Áp dụng trạng thái"}
-                        </Button>
-                      </>
+                    <>
+                      <Select value={bulkEditFields.status} onValueChange={(val) => setBulkEditFields((prev) => ({ ...prev, status: val }))}>
+                        <SelectTrigger className="h-11 min-w-[180px] rounded-xl bg-white"><span className="truncate">{bulkEditFields.status ? getStatusLabel(bulkEditFields.status, activeTab) : "Trạng thái chung"}</span></SelectTrigger>
+                        <SelectContent>
+                          {getStatusOptions(activeTab).map((option) => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button onClick={handleBulkUpdate} disabled={!bulkEditFields.status || isBulkSaving} className="h-11 bg-sky-500 hover:bg-sky-600 text-white font-bold">
+                        {isBulkSaving ? "Đang lưu..." : "Áp dụng trạng thái"}
+                      </Button>
+                    </>
                     <Button onClick={handleBulkExport} className="h-11 bg-slate-800 hover:bg-slate-900 text-white font-bold">
                       <Download className="w-4 h-4 mr-2" /> Xuất Excel
                     </Button>
@@ -2568,26 +2627,26 @@ const AdminDashboard = () => {
             <div className="overflow-x-auto">
               <Table className="min-w-[900px]">
                 <TableHeader className="bg-slate-50">
-                <TableRow>
-                  <TableHead className="w-32 pl-4 sm:pl-8 font-bold text-slate-700">
-                    <label className="flex items-center gap-2 h-full cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={isAllSelected}
-                        onChange={handleSelectAllVisible}
-                        className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
-                      />
-                      <span className="text-sm font-medium text-slate-700">Chọn tất cả</span>
-                    </label>
-                  </TableHead>
-                  <TableHead className="font-bold text-slate-700 w-[160px]">Tên ĐN</TableHead>
-                  <TableHead className="font-bold text-slate-700 w-[220px]">Họ và tên</TableHead>
-                  {activeTab === "accounts" && <TableHead className="font-bold text-slate-700 w-[130px]">Vai trò</TableHead>}
-                  {activeTab === "teacherAccounts" && <TableHead className="font-bold text-slate-700 w-[220px]">Phân công</TableHead>}
-                  <TableHead className="font-bold text-slate-700 min-w-[320px]">Thông tin</TableHead>
-                  <TableHead className="text-right pr-4 sm:pr-8 font-bold text-slate-700 w-[180px]">Thao tác</TableHead>
-                </TableRow>
-              </TableHeader>
+                  <TableRow>
+                    <TableHead className="w-32 pl-4 sm:pl-8 font-bold text-slate-700">
+                      <label className="flex items-center gap-2 h-full cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={isAllSelected}
+                          onChange={handleSelectAllVisible}
+                          className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                        />
+                        <span className="text-sm font-medium text-slate-700">Chọn tất cả</span>
+                      </label>
+                    </TableHead>
+                    <TableHead className="font-bold text-slate-700 w-[160px]">Tên ĐN</TableHead>
+                    <TableHead className="font-bold text-slate-700 w-[220px]">Họ và tên</TableHead>
+                    {activeTab === "accounts" && <TableHead className="font-bold text-slate-700 w-[130px]">Vai trò</TableHead>}
+                    {activeTab === "teacherAccounts" && <TableHead className="font-bold text-slate-700 w-[220px]">Phân công</TableHead>}
+                    <TableHead className="font-bold text-slate-700 min-w-[320px]">Thông tin</TableHead>
+                    <TableHead className="text-right pr-4 sm:pr-8 font-bold text-slate-700 w-[180px]">Thao tác</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
                   {filteredUsers.length === 0 ? (
                     <TableRow>
@@ -2705,23 +2764,23 @@ const AdminDashboard = () => {
 
       </main>
 
-      <Dialog open={isUserDialogOpen} onOpenChange={(val) => { setIsUserDialogOpen(val); if(!val) {setAccountFile(null); setPreviewData([]); setUploadClassId(""); setUploadGrade(""); setImportDuplicateMessage(""); setImportResults(null);} }}>
+      <Dialog open={isUserDialogOpen} onOpenChange={(val) => { setIsUserDialogOpen(val); if (!val) { setAccountFile(null); setPreviewData([]); setUploadClassId(""); setUploadGrade(""); setImportDuplicateMessage(""); setImportResults(null); } }}>
         <DialogContent className="sm:max-w-[700px] w-[95%] max-h-[90vh] overflow-y-auto overflow-x-hidden rounded-3xl border-none p-4 sm:p-6">
           <DialogHeader><DialogTitle className="text-xl sm:text-2xl font-black text-sky-950">{newUser.role === "teacher" ? "Thêm giáo viên mới" : "Thêm người dùng mới"}</DialogTitle></DialogHeader>
 
           <div className="flex bg-slate-100 rounded-xl w-full p-1 mt-4">
-            <button type="button" onClick={() => setCreateMethod("manual")} className={`flex-1 flex items-center justify-center gap-2 px-2 py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all ${createMethod === 'manual' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-sky-600'}`}><PenTool className="w-4 h-4"/> Nhập thủ công</button>
-            <button type="button" onClick={() => setCreateMethod("upload")} className={`flex-1 flex items-center justify-center gap-2 px-2 py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all ${createMethod === 'upload' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-sky-600'}`}><FileSpreadsheet className="w-4 h-4"/> {newUser.role === "teacher" ? "Thêm giáo viên bằng file Excel" : "Thêm học sinh bằng file Excel"}</button>
+            <button type="button" onClick={() => setCreateMethod("manual")} className={`flex-1 flex items-center justify-center gap-2 px-2 py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all ${createMethod === 'manual' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-sky-600'}`}><PenTool className="w-4 h-4" /> Nhập thủ công</button>
+            <button type="button" onClick={() => setCreateMethod("upload")} className={`flex-1 flex items-center justify-center gap-2 px-2 py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all ${createMethod === 'upload' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-sky-600'}`}><FileSpreadsheet className="w-4 h-4" /> {newUser.role === "teacher" ? "Thêm giáo viên bằng file Excel" : "Thêm học sinh bằng file Excel"}</button>
           </div>
 
           {createMethod === "manual" ? (
             <form onSubmit={handleCreateUser} className="space-y-4 mt-6">
-              <Input placeholder="Họ và tên..." className="h-11 rounded-xl border-sky-100 bg-white" value={newUser.fullName} onChange={(e) => setNewUser({...newUser, fullName: e.target.value})} required />
+              <Input placeholder="Họ và tên..." className="h-11 rounded-xl border-sky-100 bg-white" value={newUser.fullName} onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })} required />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input placeholder="Tên đăng nhập" className="h-11 rounded-xl border-sky-100 bg-white" value={newUser.username} onChange={(e) => setNewUser({...newUser, username: sanitizeUsernameInput(e.target.value)})} autoCapitalize="none" autoComplete="off" spellCheck={false} inputMode="text" required />
-                <Input type="password" placeholder="Mật khẩu" className="h-11 rounded-xl border-sky-100 bg-white" value={newUser.password} onChange={(e) => setNewUser({...newUser, password: e.target.value})} required />
+                <Input placeholder="Tên đăng nhập" className="h-11 rounded-xl border-sky-100 bg-white" value={newUser.username} onChange={(e) => setNewUser({ ...newUser, username: sanitizeUsernameInput(e.target.value) })} autoCapitalize="none" autoComplete="off" spellCheck={false} inputMode="text" required />
+                <Input type="password" placeholder="Mật khẩu" className="h-11 rounded-xl border-sky-100 bg-white" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} required />
               </div>
-              <Select value={newUser.role} onValueChange={(val) => setNewUser({...newUser, role: val, grade: "", classId: "", qualification: val === "teacher" ? "Đại học" : ""})}>
+              <Select value={newUser.role} onValueChange={(val) => setNewUser({ ...newUser, role: val, grade: "", classId: "", qualification: val === "teacher" ? "Đại học" : "" })}>
                 <SelectTrigger className="h-11 w-full rounded-xl font-medium border-sky-100 bg-white"><span className="truncate">{getRoleLabel(newUser.role)}</span></SelectTrigger>
                 <SelectContent><SelectItem value="student">Học sinh</SelectItem><SelectItem value="teacher">Giáo viên</SelectItem></SelectContent>
               </Select>
@@ -2738,9 +2797,9 @@ const AdminDashboard = () => {
                     setNewUser((prev) => ({ ...prev, phone: digitsOnly }));
                   }}
                 />
-                <Input placeholder="Địa chỉ *" className="h-11 rounded-xl border-sky-100 bg-white" value={newUser.address} onChange={(e) => setNewUser({...newUser, address: e.target.value})} required />
+                <Input placeholder="Địa chỉ *" className="h-11 rounded-xl border-sky-100 bg-white" value={newUser.address} onChange={(e) => setNewUser({ ...newUser, address: e.target.value })} required />
               </div>
-              <Select value={newUser.status} onValueChange={(val) => setNewUser({...newUser, status: val})}>
+              <Select value={newUser.status} onValueChange={(val) => setNewUser({ ...newUser, status: val })}>
                 <SelectTrigger className="h-11 w-full rounded-xl font-medium border-sky-100 bg-white"><span className="truncate">{getStatusLabel(newUser.status, activeTab)}</span></SelectTrigger>
                 <SelectContent>{getStatusOptions(activeTab).map((option) => (
                   <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
@@ -2748,7 +2807,7 @@ const AdminDashboard = () => {
               </Select>
               {newUser.role === "teacher" && (
                 <div className="p-4 bg-emerald-50/50 rounded-xl border-emerald-100 space-y-4">
-                  <Select value={newUser.department || ""} onValueChange={(val) => setNewUser({...newUser, department: val === "" ? "" : val, subjects: [], departmentPosition: val === "" ? "" : (newUser.departmentPosition || "Giáo viên thường")})}>
+                  <Select value={newUser.department || ""} onValueChange={(val) => setNewUser({ ...newUser, department: val === "" ? "" : val, subjects: [], departmentPosition: val === "" ? "" : (newUser.departmentPosition || "Giáo viên thường") })}>
                     <SelectTrigger className="h-11 w-full rounded-xl border-emerald-100 bg-white">
                       <span className={`truncate ${newUser.department ? 'text-slate-900' : 'text-slate-400'}`}>
                         {newUser.department ? (newUser.department === 'KHTN' ? 'Tổ KHTN (Khoa học Tự nhiên)' : 'Tổ KHXH (Khoa học Xã hội)') : 'Chưa cập nhật'}
@@ -2761,7 +2820,7 @@ const AdminDashboard = () => {
                     </SelectContent>
                   </Select>
                   {newUser.department && (
-                    <Select value={newUser.departmentPosition || "Giáo viên thường"} onValueChange={(val) => setNewUser({...newUser, departmentPosition: val})}>
+                    <Select value={newUser.departmentPosition || "Giáo viên thường"} onValueChange={(val) => setNewUser({ ...newUser, departmentPosition: val })}>
                       <SelectTrigger className="h-11 w-full rounded-xl border-emerald-100 bg-white"><SelectValue placeholder="Chức vụ trong tổ" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="Giáo viên thường">Giáo viên thường</SelectItem>
@@ -2770,7 +2829,7 @@ const AdminDashboard = () => {
                       </SelectContent>
                     </Select>
                   )}
-                  <Select value={newUser.qualification || "Đại học"} onValueChange={(val) => setNewUser({...newUser, qualification: val})}>
+                  <Select value={newUser.qualification || "Đại học"} onValueChange={(val) => setNewUser({ ...newUser, qualification: val })}>
                     <SelectTrigger className="h-11 w-full rounded-xl border-emerald-100 bg-white">
                       <span className="truncate text-slate-900">{newUser.qualification || "Đại học"}</span>
                     </SelectTrigger>
@@ -2805,20 +2864,20 @@ const AdminDashboard = () => {
                       </div>
                     )}
                   </div>
-                  <Input placeholder="Ghi chú (nếu có)" className="h-11 rounded-xl border-emerald-100 bg-white" value={newUser.note || ""} onChange={(e) => setNewUser({...newUser, note: e.target.value})} />
+                  <Input placeholder="Ghi chú (nếu có)" className="h-11 rounded-xl border-emerald-100 bg-white" value={newUser.note || ""} onChange={(e) => setNewUser({ ...newUser, note: e.target.value })} />
                 </div>
               )}
               {newUser.role === "student" && (
                 <div className="p-4 bg-sky-50/50 rounded-xl border-sky-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Select value={newUser.grade} onValueChange={(val) => setNewUser({...newUser, grade: val, classId: ""})}>
-                      <SelectTrigger className="h-11 rounded-xl border-sky-100 bg-white"><span className="truncate">{newUser.grade ? `Khối ${newUser.grade}` : "Chọn Khối"}</span></SelectTrigger>
-                      <SelectContent><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent>
-                    </Select>
-                    <Select value={newUser.classId ? String(newUser.classId) : ""} onValueChange={(val) => setNewUser({...newUser, classId: val})} disabled={!newUser.grade}>
-                      <SelectTrigger className="h-11 rounded-xl border-sky-100 bg-white"><span className="truncate">{newUser.classId ? classesList.find(c => String(c._id) === String(newUser.classId))?.name : "Chọn Lớp"}</span></SelectTrigger>
-                      <SelectContent>{filteredClassesForDropdown.length === 0 ? <SelectItem value="none" disabled>Chưa có lớp</SelectItem> : filteredClassesForDropdown.map(c => (<SelectItem key={c._id} value={String(c._id)}>{c.name}</SelectItem>))}</SelectContent>
-                    </Select>
-                    <Input placeholder="Ghi chú (nếu có)" className="h-11 rounded-xl border-sky-100 bg-white sm:col-span-2" value={newUser.note || ""} onChange={(e) => setNewUser({...newUser, note: e.target.value})} />
+                  <Select value={newUser.grade} onValueChange={(val) => setNewUser({ ...newUser, grade: val, classId: "" })}>
+                    <SelectTrigger className="h-11 rounded-xl border-sky-100 bg-white"><span className="truncate">{newUser.grade ? `Khối ${newUser.grade}` : "Chọn Khối"}</span></SelectTrigger>
+                    <SelectContent><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent>
+                  </Select>
+                  <Select value={newUser.classId ? String(newUser.classId) : undefined} onValueChange={(val) => setNewUser({ ...newUser, classId: val })} disabled={!newUser.grade}>
+                    <SelectTrigger className="h-11 rounded-xl border-sky-100 bg-white"><span className="truncate">{newUser.classId ? classesList.find(c => String(c._id) === String(newUser.classId))?.name : "Chọn Lớp"}</span></SelectTrigger>
+                    <SelectContent>{filteredClassesForDropdown.length === 0 ? <SelectItem value="none" disabled>Chưa có lớp</SelectItem> : filteredClassesForDropdown.map(c => (<SelectItem key={c._id} value={String(c._id)}>{c.name}</SelectItem>))}</SelectContent>
+                  </Select>
+                  <Input placeholder="Ghi chú (nếu có)" className="h-11 rounded-xl border-sky-100 bg-white sm:col-span-2" value={newUser.note || ""} onChange={(e) => setNewUser({ ...newUser, note: e.target.value })} />
                 </div>
               )}
               <Button type="submit" disabled={loading} className="w-full h-11 rounded-xl bg-sky-500 hover:bg-sky-600 shadow-md text-white font-bold">{loading ? <Loader2 className="animate-spin" /> : "Lưu tài khoản"}</Button>
@@ -2826,13 +2885,13 @@ const AdminDashboard = () => {
           ) : (
             <div className="space-y-4 mt-4 overflow-y-auto pr-2">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-sky-50 p-4 rounded-xl gap-3 border border-sky-100">
-                  <div>
-                    <h4 className="font-bold text-sky-900 text-sm">1. Tải file mẫu</h4>
-                    <p className="text-xs text-slate-500">
-                      File Excel cần có 4 cột: <strong>STT</strong>, <strong>Họ và tên</strong>, <strong>{newUser.role === "teacher" ? "Số điện thoại" : "Số điện thoại phụ huynh"}</strong> và <strong>Địa chỉ</strong>.
-                    </p>
-                  </div>
-                  <Button type="button" onClick={handleDownloadTemplate} variant="outline" className="bg-white border-sky-200 text-sky-600 hover:bg-sky-100 w-full sm:w-auto"><Download className="w-4 h-4 mr-2"/> Tải mẫu</Button>
+                <div>
+                  <h4 className="font-bold text-sky-900 text-sm">1. Tải file mẫu</h4>
+                  <p className="text-xs text-slate-500">
+                    File Excel cần có 4 cột: <strong>STT</strong>, <strong>Họ và tên</strong>, <strong>{newUser.role === "teacher" ? "Số điện thoại" : "Số điện thoại phụ huynh"}</strong> và <strong>Địa chỉ</strong>.
+                  </p>
+                </div>
+                <Button type="button" onClick={handleDownloadTemplate} variant="outline" className="bg-white border-sky-200 text-sky-600 hover:bg-sky-100 w-full sm:w-auto"><Download className="w-4 h-4 mr-2" /> Tải mẫu</Button>
               </div>
 
               <div className="bg-sky-50/50 p-4 rounded-xl border border-sky-100">
@@ -2856,7 +2915,7 @@ const AdminDashboard = () => {
               </div>
 
               <div className="bg-sky-50/50 p-4 rounded-xl border border-sky-100 text-center">
-                <h4 className="font-bold text-sky-900 text-sm mb-3"><UploadCloud className="w-4 h-4 inline mr-2"/>3. Kéo thả file Excel</h4>
+                <h4 className="font-bold text-sky-900 text-sm mb-3"><UploadCloud className="w-4 h-4 inline mr-2" />3. Kéo thả file Excel</h4>
                 <p className="text-xs text-slate-500 mb-3">Các cột bắt buộc: <strong>STT</strong>, <strong>Họ và tên</strong>, <strong>{newUser.role === "teacher" ? "Số điện thoại" : "Số điện thoại phụ huynh"}</strong>, <strong>Địa chỉ</strong>. Chỉ đọc sheet đầu tiên.</p>
                 <div onDragOver={(e) => { e.preventDefault(); }} onDragEnter={(e) => { e.preventDefault(); }} onDrop={handleAccountFileDrop} onClick={() => accountFileRef.current.click()} className={`border-2 border-dashed rounded-xl p-4 cursor-pointer flex flex-col items-center gap-2 ${accountFile ? 'border-sky-500 bg-sky-100' : 'border-slate-300 bg-white'}`}>
                   <input type="file" ref={accountFileRef} onChange={handleAccountFileChange} className="hidden" accept=".xlsx, .xls, .csv" />
@@ -2932,12 +2991,12 @@ const AdminDashboard = () => {
 
       <Dialog open={isEditUserDialogOpen} onOpenChange={setIsEditUserDialogOpen}>
         <DialogContent className="sm:max-w-[500px] w-[95%] rounded-2xl border-none">
-          <DialogHeader><DialogTitle className="text-2xl font-bold flex items-center gap-2 text-sky-900"><Edit className="h-5 w-5"/> Sửa tài khoản</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-2xl font-bold flex items-center gap-2 text-sky-900"><Edit className="h-5 w-5" /> Sửa tài khoản</DialogTitle></DialogHeader>
           {editUser && (
             <form onSubmit={handleUpdateUser} className="space-y-4 pt-4">
               <Input value={editUser.username} disabled className="h-11 rounded-xl bg-slate-50 text-slate-400" />
-              <Input value={editUser.fullName} onChange={(e) => setEditUser({...editUser, fullName: e.target.value})} required className="h-11 rounded-xl bg-white" />
-              <Select value={editUser.role} onValueChange={(val) => setEditUser({...editUser, role: val, grade: "", classId: ""})}>
+              <Input value={editUser.fullName} onChange={(e) => setEditUser({ ...editUser, fullName: e.target.value })} required className="h-11 rounded-xl bg-white" />
+              <Select value={editUser.role} onValueChange={(val) => setEditUser({ ...editUser, role: val, grade: "", classId: "" })}>
                 <SelectTrigger className="h-11 w-full rounded-xl bg-white"><span className="truncate">{getRoleLabel(editUser.role)}</span></SelectTrigger>
                 <SelectContent><SelectItem value="student">Học sinh</SelectItem><SelectItem value="teacher">Giáo viên</SelectItem></SelectContent>
               </Select>
@@ -2954,9 +3013,9 @@ const AdminDashboard = () => {
                     setEditUser((prev) => ({ ...prev, phone: digitsOnly }));
                   }}
                 />
-                <Input placeholder="Địa chỉ *" className="h-11 rounded-xl bg-white" value={editUser.address || ""} onChange={(e) => setEditUser({...editUser, address: e.target.value})} required />
+                <Input placeholder="Địa chỉ *" className="h-11 rounded-xl bg-white" value={editUser.address || ""} onChange={(e) => setEditUser({ ...editUser, address: e.target.value })} required />
               </div>
-              <Select value={editUser.status || "active"} onValueChange={(val) => setEditUser({...editUser, status: val})}>
+              <Select value={editUser.status || "active"} onValueChange={(val) => setEditUser({ ...editUser, status: val })}>
                 <SelectTrigger className="h-11 w-full rounded-xl bg-white"><span className="truncate">{getStatusLabel(editUser.status, activeTab)}</span></SelectTrigger>
                 <SelectContent>{getStatusOptions(activeTab).map((option) => (
                   <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
@@ -2964,7 +3023,7 @@ const AdminDashboard = () => {
               </Select>
               {editUser.role === "teacher" && (
                 <div className="p-4 bg-emerald-50/50 rounded-xl border-emerald-100 space-y-4">
-                  <Select value={editUser.department || ""} onValueChange={(val) => setEditUser({...editUser, department: val === "" ? "" : val, subjects: [], departmentPosition: val === "" ? "" : (editUser.departmentPosition || "Giáo viên thường")})}>
+                  <Select value={editUser.department || ""} onValueChange={(val) => setEditUser({ ...editUser, department: val === "" ? "" : val, subjects: [], departmentPosition: val === "" ? "" : (editUser.departmentPosition || "Giáo viên thường") })}>
                     <SelectTrigger className="h-11 w-full rounded-xl bg-white">
                       <span className={`truncate ${editUser.department ? 'text-slate-900' : 'text-slate-400'}`}>
                         {editUser.department ? (editUser.department === 'KHTN' ? 'Tổ KHTN (Khoa học Tự nhiên)' : 'Tổ KHXH (Khoa học Xã hội)') : 'Chưa cập nhật'}
@@ -2977,7 +3036,7 @@ const AdminDashboard = () => {
                     </SelectContent>
                   </Select>
                   {editUser.department && (
-                    <Select value={editUser.departmentPosition || "Giáo viên thường"} onValueChange={(val) => setEditUser({...editUser, departmentPosition: val})}>
+                    <Select value={editUser.departmentPosition || "Giáo viên thường"} onValueChange={(val) => setEditUser({ ...editUser, departmentPosition: val })}>
                       <SelectTrigger className="h-11 w-full rounded-xl bg-white"><SelectValue placeholder="Chức vụ trong tổ" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="Giáo viên thường">Giáo viên thường</SelectItem>
@@ -2986,7 +3045,7 @@ const AdminDashboard = () => {
                       </SelectContent>
                     </Select>
                   )}
-                  <Select value={editUser.qualification || "Đại học"} onValueChange={(val) => setEditUser({...editUser, qualification: val})}>
+                  <Select value={editUser.qualification || "Đại học"} onValueChange={(val) => setEditUser({ ...editUser, qualification: val })}>
                     <SelectTrigger className="h-11 w-full rounded-xl bg-white">
                       <span className="truncate text-slate-900">{editUser.qualification || "Đại học"}</span>
                     </SelectTrigger>
@@ -3021,20 +3080,20 @@ const AdminDashboard = () => {
                       </div>
                     )}
                   </div>
-                  <Input placeholder="Ghi chú giáo viên" className="h-11 rounded-xl bg-white" value={editUser.note || ""} onChange={(e) => setEditUser({...editUser, note: e.target.value})} />
+                  <Input placeholder="Ghi chú giáo viên" className="h-11 rounded-xl bg-white" value={editUser.note || ""} onChange={(e) => setEditUser({ ...editUser, note: e.target.value })} />
                 </div>
               )}
               {editUser.role === "student" && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Select value={editUser.grade || ""} onValueChange={(val) => setEditUser({...editUser, grade: val, classId: ""})}>
+                  <Select value={editUser.grade || ""} onValueChange={(val) => setEditUser({ ...editUser, grade: val, classId: "" })}>
                     <SelectTrigger className="h-11 rounded-xl bg-white"><span className="truncate">{editUser.grade ? `Khối ${editUser.grade}` : "Chọn khối"}</span></SelectTrigger>
                     <SelectContent><SelectItem value="6">Khối 6</SelectItem><SelectItem value="7">Khối 7</SelectItem><SelectItem value="8">Khối 8</SelectItem><SelectItem value="9">Khối 9</SelectItem></SelectContent>
                   </Select>
-                  <Select value={editUser.classId ? String(editUser.classId) : ""} onValueChange={(val) => setEditUser({...editUser, classId: val})} disabled={!editUser.grade}>
+                  <Select value={editUser.classId ? String(editUser.classId) : undefined} onValueChange={(val) => setEditUser({ ...editUser, classId: val })} disabled={!editUser.grade}>
                     <SelectTrigger className="h-11 rounded-xl bg-white"><span className="truncate">{editUser.classId ? classesList.find(c => String(c._id) === String(editUser.classId))?.name : "Chọn Lớp"}</span></SelectTrigger>
                     <SelectContent>{filteredClassesForDropdown.length === 0 ? <SelectItem value="none" disabled>Chưa có lớp</SelectItem> : filteredClassesForDropdown.map(c => (<SelectItem key={c._id} value={String(c._id)}>{c.name}</SelectItem>))}</SelectContent>
                   </Select>
-                  <Input placeholder="Ghi chú học sinh" className="h-11 rounded-xl bg-white sm:col-span-2" value={editUser.note || ""} onChange={(e) => setEditUser({...editUser, note: e.target.value})} />
+                  <Input placeholder="Ghi chú học sinh" className="h-11 rounded-xl bg-white sm:col-span-2" value={editUser.note || ""} onChange={(e) => setEditUser({ ...editUser, note: e.target.value })} />
                 </div>
               )}
               <Button type="submit" disabled={loading} className="w-full h-11 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-bold">{loading ? <Loader2 className="animate-spin" /> : "Cập nhật"}</Button>

@@ -6,6 +6,7 @@ import "katex/dist/katex.min.css";
 import 'mathlive'; 
 import { Button } from "@/components/ui/button";
 import { Calculator, CheckCircle2, X } from "lucide-react";
+import axios from "../../lib/axios"; // 👉 Thêm import axios để gọi API
 
 // Gán thư viện Toán học vào window để trình soạn thảo nhận diện được
 window.katex = katex;
@@ -26,32 +27,94 @@ const RichTextEditor = ({ value, onChange, placeholder }) => {
   const toggleMathPanel = useRef(() => {});
   toggleMathPanel.current = () => setIsMathPanelOpen((prev) => !prev);
 
-  // Cấu hình thanh công cụ Quill (ĐÃ BỎ NÚT VIDEO)
+  // ==========================================
+  // HÀM XỬ LÝ UPLOAD ẢNH LÊN CLOUDINARY
+  // ==========================================
+  const imageHandler = () => {
+    const input = document.createElement('input');
+    input.setAttribute('type', 'file');
+    input.setAttribute('accept', 'image/*');
+    input.click();
+
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      // Bọc file vào field 'files[0]' cho khớp với API backend cũ của Jodit
+      formData.append('files[0]', file); 
+
+      try {
+        // Gọi API backend để upload ảnh
+        const res = await axios.post('/upload/editor', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+
+        // Nếu backend trả về thành công kèm link URL
+        if (res.data.success && res.data.url) {
+            const imageUrl = res.data.url; 
+
+            // Chèn URL ảnh vào đúng vị trí con trỏ đang đứng trong khung soạn thảo
+            const editor = quillRef.current.getEditor();
+            const range = editor.getSelection(true); // Lấy vị trí hiện tại an toàn hơn
+            const position = range ? range.index : editor.getLength();
+            
+            editor.insertEmbed(position, 'image', imageUrl);
+            editor.setSelection(position + 1);
+        } else {
+            alert('Upload thất bại: ' + (res.data.msg || 'Lỗi không xác định từ Server'));
+        }
+      } catch (error) {
+        console.error("Lỗi upload ảnh:", error);
+        alert('Không thể tải ảnh lên hệ thống Cloudinary. Vui lòng kiểm tra lại kết nối!');
+      }
+    };
+  };
+
+  // Cấu hình thanh công cụ Quill
   const modules = useMemo(() => ({
+    formula: true, // 👈 Bật tính năng render công thức Toán học chuẩn trực quan
     toolbar: {
       container: [
         [{ 'header': [1, 2, 3, false] }],
         ['bold', 'italic', 'underline', 'strike'],
         [{ 'script': 'sub'}, { 'script': 'super' }],
         ['customMathLive'], // Nút chữ Sigma
-        ['image'], // Chỉ giữ lại nút Image, đã xóa 'video'
+        ['image'], 
         ['clean']
       ],
       handlers: {
         customMathLive: function() {
            toggleMathPanel.current();
-        }
+        },
+        image: imageHandler // 👈 Gắn hàm xử lý ảnh tuỳ chỉnh vào đây
       }
-    },
+    }
   }), []);
 
-  // Fix z-index của bàn phím ảo MathLive để nó nổi lên trên cùng
+  // Khởi tạo style tinh chỉnh z-index bàn phím và khống chế kích thước ảnh cố định
   useEffect(() => {
      const style = document.createElement('style');
      style.innerHTML = `
        .ML__keyboard { z-index: 999999 !important; }
        math-field::part(virtual-keyboard-toggle) { color: #0ea5e9; }
        math-field:focus-within { outline: 2px solid #38bdf8 !important; }
+       
+       /* CỐ ĐỊNH KÍCH THƯỚC ẢNH VỪA ĐỦ, KHÔNG ĐỂ QUÁ TO */
+       .ql-editor img {
+           max-width: 100% !important;
+           max-height: 380px !important; 
+           object-fit: contain !important;
+           display: block;
+           margin: 12px 0;
+           border-radius: 8px;
+       }
+       
+       /* Định dạng công thức toán hiển thị to rõ */
+       .ql-formula {
+           font-size: 1.2rem !important;
+           margin: 0 4px;
+       }
      `;
      document.head.appendChild(style);
      return () => document.head.removeChild(style);
@@ -77,21 +140,17 @@ const RichTextEditor = ({ value, onChange, placeholder }) => {
     const editor = quillRef.current.getEditor();
     const cursorPosition = editor.getSelection()?.index || editor.getLength();
     
-    // ĐÃ FIX: Bọc $$ vào 2 đầu chuỗi latex để KaTeX có thể nhận diện
-    const formattedLatex = `$$ ${latex} $$`;
-    
-    // Chèn công thức đã được bọc vào vị trí con trỏ
-    editor.insertEmbed(cursorPosition, 'formula', formattedLatex);
-    editor.insertText(cursorPosition + 1, ' '); // Cách ra một khoảng cho dễ nhìn
+    // Sử dụng embed 'formula' gốc của Quill để hiển thị ký tự toán học chuẩn
+    editor.insertEmbed(cursorPosition, 'formula', latex);
+    editor.insertText(cursorPosition + 1, ' '); 
     editor.setSelection(cursorPosition + 2);
     
-    // Xóa ô gõ và tự động thu gọn thanh Toán học
     mathFieldRef.current.value = '';
     setIsMathPanelOpen(false);
   };
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 relative">
         {/* KHUNG SOẠN THẢO CHÍNH */}
         <div className="bg-white rounded-xl border border-sky-100 overflow-hidden shadow-sm focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100 transition-all">
           <div className="
@@ -128,7 +187,7 @@ const RichTextEditor = ({ value, onChange, placeholder }) => {
 
         {/* THANH CÔNG CỤ GÕ TOÁN */}
         {isMathPanelOpen && (
-          <div className="bg-sky-50/80 border-2 border-sky-200 rounded-xl p-3 sm:p-4 shadow-sm animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-sky-50/80 border-2 border-sky-200 rounded-xl p-3 sm:p-4 shadow-sm animate-in fade-in zoom-in-95 duration-200 absolute top-[50px] left-0 right-0 z-50">
             <div className="flex justify-between items-center mb-3 border-b border-sky-100 pb-2">
                <h4 className="font-black text-sky-800 text-sm flex items-center gap-2">
                  <Calculator className="w-4 h-4 text-sky-500"/> Công cụ gõ Toán
@@ -141,7 +200,6 @@ const RichTextEditor = ({ value, onChange, placeholder }) => {
             
             <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
               <div className="flex-1 bg-white rounded-lg">
-                {/* COMPONENT GÕ TOÁN CỦA MATHLIVE */}
                 <math-field 
                    ref={mathFieldRef}
                    style={{ 

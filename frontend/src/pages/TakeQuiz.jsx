@@ -23,31 +23,92 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
 // ==========================================
-// HÀM DỊCH MÃ LATEX THÀNH CÔNG THỨC TOÁN HỌC (ĐÃ ÉP KÍCH THƯỚC TO)
+// HÀM DỊCH MÃ LATEX "SIÊU CẤP" (TỰ ĐỘNG BẮT MỌI CÔNG THỨC THÔ)
 // ==========================================
 const renderLatexContent = (htmlString) => {
   if (!htmlString) return "";
-  
-  // Xử lý công thức Toán block $$...$$
-  let parsedHtml = htmlString.replace(/\$\$([\s\S]*?)\$\$/g, (match, math) => {
-    try {
-      // Dùng \displaystyle để ép phân số to ra, kết hợp displayMode: false để giữ nó trên cùng 1 dòng
-      return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false });
-    } catch (e) {
-      return match;
-    }
+  let processedHtml = htmlString;
+
+  // 1. DÀNH RIÊNG CHO ĐÁP ÁN: Tự động dịch nếu là chuỗi Toán học thô (VD: "\frac{1}{5}", "\sqrt3")
+  // Kiểm tra xem chuỗi có thẻ HTML không. Nếu không có HTML mà lại chứa \ hoặc ^ _ thì đích thị là Đáp án Toán.
+  if (!/<[a-z][\s\S]*>/i.test(processedHtml) && (processedHtml.includes('\\') || processedHtml.includes('^') || processedHtml.includes('_'))) {
+      try {
+          const cleanMath = processedHtml.replace(/\$/g, '').trim();
+          // Thử dịch, nếu đúng cấu trúc Toán thì trả về luôn
+          return katex.renderToString(`\\displaystyle ${cleanMath}`, { displayMode: false, throwOnError: true });
+      } catch (e) {
+          // Nếu có chữ bình thường trộn lẫn, bỏ qua để xử lý ở bước 4
+      }
+  }
+
+  // 2. Xử lý các thẻ của khung soạn thảo Quill (<span class="ql-formula">)
+  if (processedHtml.includes('ql-formula')) {
+      try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(processedHtml, 'text/html');
+          const formulas = doc.querySelectorAll('.ql-formula');
+          formulas.forEach(formula => {
+              const latex = formula.getAttribute('data-value') || formula.textContent;
+              if (latex) {
+                  try {
+                      formula.innerHTML = katex.renderToString(`\\displaystyle ${latex}`, { displayMode: false, throwOnError: false });
+                  } catch (e) { console.error("Lỗi render công thức:", e); }
+              }
+          });
+          processedHtml = doc.body.innerHTML;
+      } catch (e) { console.error("Lỗi parse DOM:", e); }
+  }
+
+  // 3. Xử lý khi được bọc thủ công bằng $$...$$ hoặc $...$
+  processedHtml = processedHtml.replace(/\$\$([\s\S]*?)\$\$/g, (match, math) => {
+    try { return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false }); } 
+    catch (e) { return match; }
+  });
+  processedHtml = processedHtml.replace(/\$([^\$]+)\$/g, (match, math) => {
+    try { return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false }); } 
+    catch (e) { return match; }
   });
 
-  // Xử lý công thức Toán inline $...$ (nếu có)
-  parsedHtml = parsedHtml.replace(/\$([^\$]+)\$/g, (match, math) => {
-    try {
-      return katex.renderToString(`\\displaystyle ${math}`, { displayMode: false, throwOnError: false });
-    } catch (e) {
-      return match;
-    }
-  });
+  // 4. QUÉT SÂU BẮT MÃ THÔ: Quét tìm các cụm \frac, \sqrt, x^2... nằm rải rác bên trong câu chữ bình thường
+  if (processedHtml.includes('\\') || processedHtml.includes('^') || processedHtml.includes('_')) {
+      try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(processedHtml, 'text/html');
+          
+          const walkTextNodes = (node) => {
+              // Chỉ tìm trong phần chữ (tránh làm hỏng thẻ HTML như hình ảnh)
+              if (node.nodeType === 3) { 
+                  let text = node.nodeValue;
+                  // Đảm bảo cụm từ này chưa được dịch bởi KaTeX
+                  if (node.parentNode && !node.parentNode.closest('.katex')) {
+                       // Bắt các lệnh \frac, \sqrt, \pi... HOẶC biến số có mũ x^2, y_1
+                       const simpleMathRegex = /(\\(?:[a-zA-Z]+)[0-9a-zA-Z\+\-\*\/\^\_\{\}\(\)\.=]*|[a-zA-Z][\^_][0-9a-zA-Z\{\}]+[\+\-\*\/\^\_\{\}\(\)\.=0-9a-zA-Z]*)/g;
+                       if (simpleMathRegex.test(text)) {
+                          const newHtml = text.replace(simpleMathRegex, (match) => {
+                              try { 
+                                 return katex.renderToString(`\\displaystyle ${match}`, { displayMode: false, throwOnError: true }); 
+                              } catch (e) { 
+                                 return match; // Nếu nó báo lỗi (VD: không phải toán) thì giữ nguyên chữ đó
+                              }
+                          });
+                          const span = document.createElement('span');
+                          span.innerHTML = newHtml;
+                          node.replaceWith(span);
+                       }
+                  }
+              } else if (node.nodeType === 1) { 
+                  if (!node.classList.contains('katex') && !node.classList.contains('ql-formula')) {
+                      Array.from(node.childNodes).forEach(walkTextNodes);
+                  }
+              }
+          };
+
+          Array.from(doc.body.childNodes).forEach(walkTextNodes);
+          processedHtml = doc.body.innerHTML;
+      } catch (e) { console.error("DOMParser Error in Raw Math:", e); }
+  }
   
-  return parsedHtml;
+  return processedHtml;
 };
 
 // ==========================================
@@ -439,7 +500,6 @@ const TakeQuiz = () => {
     }
   };
 
-  // 👉 HÀM XỬ LÝ KHI BẤM LÀM LẠI BÀI
   const handleRetake = () => {
       if (!window.confirm("Kết quả lần làm bài trước đã được lưu. Em muốn làm lại từ đầu chứ?")) return;
       
@@ -547,7 +607,6 @@ const TakeQuiz = () => {
         )}
         
         <div className="flex flex-col gap-3">
-            {/* 👉 HIỂN THỊ NÚT LÀM LẠI BÀI NẾU ALLOW MULTIPLE SUBMISSIONS */}
             {assignment?.allowMultipleSubmissions && (
                 <Button onClick={handleRetake} variant="outline" className="w-full h-12 sm:h-14 rounded-2xl border-2 border-sky-500 text-sky-600 hover:bg-sky-50 font-black text-base sm:text-lg shadow-sm transition-all">
                   <RefreshCcw className="w-5 h-5 mr-2" /> Làm lại bài
@@ -584,7 +643,6 @@ const TakeQuiz = () => {
               <Badge className={`mb-3 font-black border-0 px-3 sm:px-4 py-1.5 text-xs sm:text-sm uppercase tracking-wider shadow-sm ${currentAnswer.isFlagged ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'}`}>
                 Câu {idx + 1}
               </Badge>
-              {/* 👉 RENDER ĐỀ BÀI CHUẨN CÔNG THỨC TOÁN */}
               <div 
                   className="text-lg sm:text-xl font-bold text-slate-800 leading-relaxed whitespace-pre-wrap q-content-view w-full"
                   dangerouslySetInnerHTML={{ __html: renderLatexContent(q?.content) }}
@@ -677,7 +735,6 @@ const TakeQuiz = () => {
                         <span className={`flex shrink-0 items-center justify-center w-8 h-8 rounded-full text-sm font-black transition-colors ${isSelected ? 'bg-sky-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
                           {optLabel}
                         </span> 
-                        {/* 👉 RENDER ĐÁP ÁN CHUẨN CÔNG THỨC TOÁN */}
                         <div 
                             className={`q-content-view w-full text-lg ${isSelected ? 'text-sky-950 font-bold' : 'text-slate-600'}`}
                             dangerouslySetInnerHTML={{ __html: renderLatexContent(opt) }}
@@ -846,7 +903,7 @@ const TakeQuiz = () => {
              <div className="flex-1 lg:flex-none overflow-y-auto pr-1 custom-scrollbar">
                 <div className="border-2 border-sky-50 bg-slate-50/50 rounded-2xl p-4">
                   
-                  {/* 👉 BẢN ĐỒ CÂU HỎI: KÍ HIỆU TRÀN RA NGOÀI, KHÔNG CÓ VIỀN TRẮNG */}
+                  {/* 👉 BẢN ĐỒ CÂU HỎI */}
                   <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 pt-3 pl-1">
                     {assignment.questions.map((item, idx) => {
                       const qId = item.questionId._id;
@@ -881,12 +938,12 @@ const TakeQuiz = () => {
                           {/* 👉 SỐ CÂU HỎI */}
                           <span>{idx + 1}</span>
                           
-                          {/* 👉 ĐÃ TRẢ LỜI - CHẤM XANH LÁ (Đưa ra mép ngoài góc trái trên, không viền) */}
+                          {/* 👉 ĐÃ TRẢ LỜI - CHẤM XANH LÁ */}
                           {isAnswered && (
                             <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-emerald-500 rounded-full shadow-sm z-10"></div>
                           )}
                           
-                          {/* 👉 ĐÃ CẮM CỜ - CỜ VÀNG (Đưa ra mép ngoài góc phải trên, không nền trắng, không viền) */}
+                          {/* 👉 ĐÃ CẮM CỜ - CỜ VÀNG */}
                           {isFlagged && (
                             <div className="absolute -top-2.5 -right-2 z-10 animate-in zoom-in drop-shadow-md">
                               <Flag className="w-4 h-4 text-amber-500 fill-amber-500" />

@@ -1318,7 +1318,7 @@ const TeacherDashboard = () => {
                   <SelectTrigger className="h-10 sm:h-12 rounded-xl bg-sky-50 min-w-[200px] border-none font-bold text-sky-800 shadow-sm">
                     <span className="truncate">
                         {lbMonth === "all" 
-                            ? "Chọn ngày" 
+                            ? "Chọn tuần" 
                             : lbWeek === "all" 
                                 ? "Tất cả các tuần" 
                                 : weeksInMonth.find(w => w.id === lbWeek)?.label || 'Chọn tuần'}

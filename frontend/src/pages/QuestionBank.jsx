@@ -180,8 +180,8 @@ const QuestionBank = () => {
   const [groupedSets, setGroupedSets] = useState([]); 
   const [currentExam, setCurrentExam] = useState(null); 
 
-  const [filterSubject, setFilterSubject] = useState("all");
-  const [filterGrade, setFilterGrade] = useState("all");
+  const [filterSubject, setFilterSubject] = useState("");
+  const [filterGrade, setFilterGrade] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterExam, setFilterExam] = useState("all"); 
 
@@ -293,14 +293,6 @@ const QuestionBank = () => {
     setMathModal({ isOpen: false, targetTempId: null, targetOptionIndex: null, isExtracted: false, isEditing: false });
   };
 
-  const getImageUrl = (url) => {
-      if (!url) return "";
-      if (url.startsWith("http") || url.startsWith("blob:")) return url;
-      let cleanUrl = url.replace(/\\/g, '/'); 
-      if (!cleanUrl.startsWith("/")) cleanUrl = "/" + cleanUrl;
-      return `${serverUrl}${cleanUrl}`;
-  };
-
   const fetchBankData = async () => {
     setLoading(true);
     try {
@@ -313,7 +305,8 @@ const QuestionBank = () => {
       fetchedSets.forEach(set => {
          if(set.questions && set.questions.length > 0) {
             set.questions.forEach(q => {
-               allQuestionsFlat.push({...q, _setId: set._id});
+               // Gán thêm thông tin người tạo của Tập vào từng Câu hỏi
+               allQuestionsFlat.push({...q, _setId: set._id, createdBy: set.createdBy || q.createdBy});
             });
          }
       });
@@ -339,8 +332,10 @@ const QuestionBank = () => {
     initData();
   }, []);
 
-  const teacherSubjects = Array.isArray(teacherProfile?.subjects) && teacherProfile.subjects.length > 0 
-    ? teacherProfile.subjects : teacherProfile?.subject ? [teacherProfile.subject] : [];
+  const teacherSubjects = useMemo(() => {
+     return Array.isArray(teacherProfile?.subjects) && teacherProfile.subjects.length > 0 
+       ? teacherProfile.subjects : teacherProfile?.subject ? [teacherProfile.subject] : [];
+  }, [teacherProfile]);
 
   const getTeacherDeptInfo = () => {
     if(!teacherProfile) return "Đang tải...";
@@ -349,19 +344,42 @@ const QuestionBank = () => {
     return `${deptStr} • ${subStr}`;
   };
 
-  // 👉 TỰ ĐỘNG PHÂN TÍCH KHỐI DỰA TRÊN LỚP ĐƯỢC PHÂN CÔNG (KHÔNG GIỚI HẠN)
   const allowedGrades = useMemo(() => {
     if (!teacherProfile?.assignedClasses || teacherProfile.assignedClasses.length === 0) return ["6", "7", "8", "9"];
     const grades = teacherProfile.assignedClasses.map(c => c.grade || c.name?.match(/\d+/)?.[0]).filter(Boolean);
     return [...new Set(grades)].sort();
   }, [teacherProfile]);
 
-  const availableExams = [...new Set(groupedSets.filter(s => (filterSubject === "all" || s.subject === filterSubject)).map(s => s.examName))];
+  useEffect(() => {
+     if (teacherSubjects.length > 0 && !filterSubject) {
+         setFilterSubject(teacherSubjects[0]);
+     }
+  }, [teacherSubjects, filterSubject]);
+
+  useEffect(() => {
+     if (allowedGrades.length > 0 && !filterGrade) {
+         setFilterGrade(allowedGrades[0]);
+     }
+  }, [allowedGrades, filterGrade]);
+
+  // 👉 LỌC CÁC TẬP (EXAMS) HIỂN THỊ Ở TRONG SELECT DỰA THEO CẢ MÔN VÀ KHỐI
+  const availableExams = useMemo(() => {
+      return [...new Set(groupedSets.filter(s => {
+          const matchSub = !filterSubject || s.subject === filterSubject;
+          const matchGrade = !filterGrade || String(s.grade) === String(filterGrade);
+          return matchSub && matchGrade;
+      }).map(s => s.examName))];
+  }, [groupedSets, filterSubject, filterGrade]);
+
+  // 👉 TỰ ĐỘNG RESET BỘ LỌC TẬP CÂU HỎI (EXAM) VỀ "TẤT CẢ" NẾU ĐỔI KHỐI / MÔN
+  useEffect(() => {
+      setFilterExam("all");
+  }, [filterSubject, filterGrade]);
 
   const filteredOverviewQuestions = questions.filter(q => {
     const matchSearch = (q.content || "").toLowerCase().includes(searchQuery.toLowerCase());
-    const matchSubject = filterSubject === "all" || q.subject === filterSubject;
-    const matchGrade = filterGrade === "all" || String(q.grade) === filterGrade;
+    const matchSubject = !filterSubject || q.subject === filterSubject;
+    const matchGrade = !filterGrade || String(q.grade) === filterGrade;
     const matchType = filterType === "all" || q.type === filterType;
     const matchExam = filterExam === "all" || q.examName === filterExam;
     return matchSearch && matchSubject && matchGrade && matchType && matchExam;
@@ -369,10 +387,20 @@ const QuestionBank = () => {
 
   const filteredSets = groupedSets.filter(set => {
      const matchSearch = set.examName?.toLowerCase().includes(searchQuery.toLowerCase());
-     const matchSub = filterSubject === "all" || set.subject === filterSubject;
-     const matchGrade = filterGrade === "all" || set.grade === filterGrade;
+     const matchSub = !filterSubject || set.subject === filterSubject;
+     const matchGrade = !filterGrade || String(set.grade) === filterGrade;
      return matchSearch && matchSub && matchGrade;
   });
+
+  // 👉 BỘ LỌC ĐỂ CHỈ HIỂN THỊ CÁC TẬP DO CHÍNH GIÁO VIÊN ĐANG ĐĂNG NHẬP TẠO
+  const myFilteredSets = useMemo(() => {
+      if (!teacherProfile) return [];
+      const myId = String(teacherProfile._id || teacherProfile.id);
+      return filteredSets.filter(set => {
+          const creatorId = String(set.createdBy?._id || set.createdBy || set.teacherId || set.teacher);
+          return myId === creatorId;
+      });
+  }, [filteredSets, teacherProfile]);
 
   const displayedSetQuestions = (currentExam?.questions || []).filter(q => {
     const matchSearch = (q.content || "").toLowerCase().includes(searchQuery.toLowerCase());
@@ -756,17 +784,15 @@ const QuestionBank = () => {
                      <div className="flex items-center gap-2 mr-2"><Filter className="w-5 h-5 text-sky-500" /><span className="text-sm font-bold text-slate-600">Bộ lọc:</span></div>
                      
                      <Select value={filterSubject} onValueChange={setFilterSubject}>
-                       <SelectTrigger className="h-10 w-[140px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl"><span className="truncate">{filterSubject === 'all' ? 'Tất cả môn' : filterSubject}</span></SelectTrigger>
+                       <SelectTrigger className="h-10 w-[140px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl"><span className="truncate">{filterSubject ? `Môn: ${filterSubject}` : 'Chọn môn'}</span></SelectTrigger>
                        <SelectContent position="popper" className="bg-white z-50">
-                         <SelectItem value="all">Tất cả môn</SelectItem>
                          {teacherSubjects.map(sub => <SelectItem key={sub} value={sub}>Môn: {sub}</SelectItem>)}
                        </SelectContent>
                      </Select>
 
                      <Select value={filterGrade} onValueChange={setFilterGrade}>
-                       <SelectTrigger className="h-10 w-[140px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl"><span className="truncate">{filterGrade === 'all' ? 'Khối (Tất cả)' : `Khối ${filterGrade}`}</span></SelectTrigger>
+                       <SelectTrigger className="h-10 w-[140px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl"><span className="truncate">{filterGrade ? `Khối ${filterGrade}` : 'Chọn khối'}</span></SelectTrigger>
                        <SelectContent position="popper" className="bg-white z-50">
-                          <SelectItem value="all">Khối (Tất cả)</SelectItem>
                           {allowedGrades.map(g => (
                               <SelectItem key={g} value={g}>Khối {g}</SelectItem>
                           ))}
@@ -779,7 +805,8 @@ const QuestionBank = () => {
                      </Select>
 
                      <Select value={filterExam} onValueChange={setFilterExam}>
-                        <SelectTrigger className="h-10 w-[160px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl"><span className="truncate">{filterExam === 'all' ? 'Tập (Tất cả)' : filterExam}</span></SelectTrigger>
+                        {/* 👉 ĐÃ CẬP NHẬT ĐỘ RỘNG MỚI ĐỂ HIỂN THỊ ĐỦ TÊN TẬP CÂU HỎI MÀ KHÔNG BỊ TRUNCATE */}
+                        <SelectTrigger className="h-10 w-full sm:w-[280px] max-w-[280px] bg-slate-50 border-sky-100 font-bold text-sky-700 rounded-xl"><span className="truncate">{filterExam === 'all' ? 'Tập (Tất cả)' : filterExam}</span></SelectTrigger>
                         <SelectContent position="popper" className="bg-white z-50">
                           <SelectItem value="all">Tập (Tất cả)</SelectItem>
                           {availableExams.map((e, idx) => (<SelectItem key={idx} value={e}>{e}</SelectItem>))}
@@ -818,15 +845,16 @@ const QuestionBank = () => {
                            <TableHead className="w-12 text-center shrink-0"></TableHead>
                            <TableHead className="w-14 text-center font-bold text-sky-800">STT</TableHead>
                            <TableHead className="font-bold text-sky-800 w-auto">Nội dung câu hỏi</TableHead>
-                           <TableHead className="font-bold text-sky-800 text-center w-[160px]">Thông tin</TableHead>
+                           <TableHead className="font-bold text-sky-800 text-center w-[140px]">Thông tin</TableHead>
+                           <TableHead className="font-bold text-sky-800 text-center w-[130px]">Người tạo</TableHead>
                            <TableHead className="font-bold text-sky-800 text-center w-[140px] shrink-0">Hành động</TableHead>
                         </TableRow>
                      </TableHeader>
                      <TableBody>
                         {loading ? (
-                           <TableRow><TableCell colSpan={5} className="text-center py-20"><Loader2 className="w-10 h-10 animate-spin text-sky-500 mx-auto" /></TableCell></TableRow>
+                           <TableRow><TableCell colSpan={6} className="text-center py-20"><Loader2 className="w-10 h-10 animate-spin text-sky-500 mx-auto" /></TableCell></TableRow>
                         ) : filteredOverviewQuestions.length === 0 ? (
-                           <TableRow><TableCell colSpan={5} className="text-center py-20 text-slate-400 italic">Không tìm thấy câu hỏi phù hợp với bộ lọc.</TableCell></TableRow>
+                           <TableRow><TableCell colSpan={6} className="text-center py-20 text-slate-400 italic">Không tìm thấy câu hỏi phù hợp với bộ lọc.</TableCell></TableRow>
                         ) : (
                            filteredOverviewQuestions.map((q, idx) => {
                               const isSelected = bankSelected.includes(q._id);
@@ -851,14 +879,18 @@ const QuestionBank = () => {
                                     </div>
                                  </TableCell>
                                  
-                                 <TableCell className="text-center align-middle py-4 w-[160px]">
+                                 {/* 👉 ĐÃ XÓA HIỂN THỊ ĐIỂM Ở TAB TỰ LUẬN TRONG BẢNG NÀY */}
+                                 <TableCell className="text-center align-middle py-4 w-[140px]">
                                     <div className="flex flex-col items-center gap-1.5">
                                        <span className="text-sky-700 font-bold text-xs">{q.subject} - Khối {q.grade}</span>
                                        <Badge variant="outline" className={`${q.type==='essay' ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-slate-50 text-slate-500 border-slate-200'} text-[11px] font-medium justify-center`}>{q.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'}</Badge>
-                                       {q.type === 'essay' && q.points > 0 && <span className="text-indigo-600 font-bold text-xs">{q.points} Điểm</span>}
                                     </div>
                                  </TableCell>
                                  
+                                 <TableCell className="text-center align-middle py-4 w-[130px]">
+                                    <span className="text-xs font-bold text-slate-600 line-clamp-2">{q.createdBy?.fullName || q.teacher?.fullName || (typeof q.createdBy === 'string' ? q.createdBy : null) || 'Ẩn danh'}</span>
+                                 </TableCell>
+
                                  <TableCell className="text-center align-middle py-4 shrink-0 w-[140px]">
                                     <div className="flex justify-center items-center gap-2">
                                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-sky-600 hover:bg-sky-100 rounded-lg" onClick={(e) => { e.stopPropagation(); setViewQuestion(q); }} title="Xem chi tiết"><Eye className="w-4 h-4"/></Button>
@@ -881,7 +913,8 @@ const QuestionBank = () => {
           <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
             <div className="flex flex-col gap-4 bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-indigo-100">
                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <h3 className="font-bold text-indigo-900 whitespace-nowrap text-lg">Tập Câu Hỏi đã tạo ({filteredSets.length})</h3>
+                  {/* 👉 TIÊU ĐỀ THAY ĐỔI ĐỂ PHẢN ÁNH CHỈ HIỂN THỊ TẬP CỦA TÔI */}
+                  <h3 className="font-bold text-indigo-900 whitespace-nowrap text-lg">Tập Câu Hỏi do tôi tạo ({myFilteredSets.length})</h3>
                   <Button onClick={openCreateSetModal} className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl shadow-md w-full sm:w-auto h-11 px-6">
                      <PlusCircle className="w-4 h-4 mr-2"/> Tạo Tập câu hỏi mới
                   </Button>
@@ -892,20 +925,18 @@ const QuestionBank = () => {
                   
                   <Select value={filterSubject} onValueChange={setFilterSubject}>
                     <SelectTrigger className="h-10 w-auto min-w-[140px] max-w-[200px] bg-white border-indigo-100 font-bold text-indigo-700 rounded-xl shadow-sm">
-                      <span className="truncate">{filterSubject === 'all' ? 'Tất cả môn' : `Môn: ${filterSubject}`}</span>
+                      <span className="truncate">{filterSubject ? `Môn: ${filterSubject}` : 'Chọn môn'}</span>
                     </SelectTrigger>
                     <SelectContent position="popper" className="bg-white z-50">
-                      <SelectItem value="all">Tất cả môn</SelectItem>
                       {teacherSubjects.map(sub => <SelectItem key={sub} value={sub} className="font-bold">Môn: {sub}</SelectItem>)}
                     </SelectContent>
                   </Select>
 
                   <Select value={filterGrade} onValueChange={setFilterGrade}>
                     <SelectTrigger className="h-10 w-[140px] bg-white border-indigo-100 font-bold text-indigo-700 rounded-xl shadow-sm">
-                      <span className="truncate">{filterGrade === 'all' ? 'Tất cả khối' : `Khối ${filterGrade}`}</span>
+                      <span className="truncate">{filterGrade ? `Khối ${filterGrade}` : 'Chọn khối'}</span>
                     </SelectTrigger>
                     <SelectContent position="popper" className="bg-white z-50">
-                      <SelectItem value="all">Tất cả khối</SelectItem>
                       {allowedGrades.map(g => (
                           <SelectItem key={g} value={g}>Khối {g}</SelectItem>
                       ))}
@@ -921,15 +952,16 @@ const QuestionBank = () => {
 
             {loading ? (
                <div className="flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-indigo-500" /></div>
-            ) : filteredSets.length === 0 ? (
+            ) : myFilteredSets.length === 0 ? (
                <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-indigo-200">
                   <LibraryBig className="w-16 h-16 text-indigo-200 mx-auto mb-4" />
-                  <h3 className="text-xl font-bold text-slate-700">Chưa có Tập câu hỏi nào</h3>
+                  <h3 className="text-xl font-bold text-slate-700">Chưa có Tập câu hỏi nào do bạn tạo</h3>
                   <p className="text-slate-500 mb-6 mt-2">Hãy tạo một tập câu hỏi mới để bắt đầu lưu trữ.</p>
                </div>
             ) : (
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                 {filteredSets.map((set, idx) => (
+                 {/* 👉 MAP QUA myFilteredSets THAY VÌ filteredSets */}
+                 {myFilteredSets.map((set, idx) => (
                     <Card key={idx} onClick={() => { setCurrentExam(set); setViewMode("set_detail"); setIsAddingNew(false); setSearchQuery(""); }} className="relative border-indigo-100 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-indigo-300 transition-all cursor-pointer group bg-white rounded-3xl overflow-hidden">
                        <Button onClick={(e) => handleDeleteSet(e, set)} variant="ghost" className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity bg-rose-50 hover:bg-rose-500 text-rose-500 hover:text-white rounded-xl p-2 h-9 w-9 shadow-sm" title="Xóa toàn bộ tập này"><Trash2 className="w-4 h-4" /></Button>
                        <CardContent className="p-6">
@@ -938,6 +970,7 @@ const QuestionBank = () => {
                            <Badge className="bg-indigo-100 text-indigo-700 border-0 shadow-none font-bold rounded-xl">{set.questions?.length || 0} Câu hỏi</Badge>
                          </div>
                          <h3 className="text-xl font-black text-indigo-950 mb-3 line-clamp-2 group-hover:text-indigo-600 transition-colors pr-8">{set.examName}</h3>
+                         <p className="text-xs font-bold text-slate-500 mb-3">Tạo bởi: {set.createdBy?.fullName || set.teacher?.fullName || (typeof set.createdBy === 'string' ? set.createdBy : null) || 'Tôi'}</p>
                          <div className="flex flex-wrap gap-2 border-t border-slate-50 pt-3">
                            <Badge variant="outline" className="border-slate-200 text-slate-500 font-medium rounded-lg">Khối {set.grade}</Badge>
                            <Badge variant="outline" className="border-amber-200 text-amber-600 font-medium rounded-lg bg-amber-50">{set.semester === 'Cả năm' ? 'Cả năm' : `HK ${set.semester}`}</Badge>
@@ -1510,6 +1543,7 @@ const QuestionBank = () => {
                                    <TableHead className="w-14 text-center font-bold text-indigo-800">STT</TableHead>
                                    <TableHead className="font-bold text-indigo-800 w-auto">Nội dung câu hỏi</TableHead>
                                    <TableHead className="font-bold text-indigo-800 text-center w-[160px]">Thông tin</TableHead>
+                                   <TableHead className="font-bold text-indigo-800 text-center w-[130px]">Người tạo</TableHead>
                                    <TableHead className="font-bold text-indigo-800 text-center w-[140px] shrink-0">Hành động</TableHead>
                                 </TableRow>
                              </TableHeader>
@@ -1537,6 +1571,10 @@ const QuestionBank = () => {
                                             <Badge variant="outline" className={`${q.type==='essay' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-slate-50 text-slate-500 border-slate-200'} text-[11px] font-medium justify-center`}>{q.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'}</Badge>
                                             {q.type === 'essay' && q.points > 0 && <span className="text-indigo-600 font-bold text-xs">{q.points} Điểm</span>}
                                          </div>
+                                      </TableCell>
+
+                                      <TableCell className="text-center align-middle py-4 w-[130px]">
+                                         <span className="text-xs font-bold text-slate-600 line-clamp-2">{q.createdBy?.fullName || q.teacher?.fullName || 'Ẩn danh'}</span>
                                       </TableCell>
                                       
                                       <TableCell className="text-center align-middle py-4 shrink-0 w-[140px]">

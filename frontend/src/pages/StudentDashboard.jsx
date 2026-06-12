@@ -42,7 +42,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   BookOpen,
   LogOut,
@@ -64,7 +69,7 @@ import {
   RefreshCcw,
   UserCircle,
   Key,
-  Save
+  Save,
 } from "lucide-react";
 
 const CustomDateInput = ({ label, value, onChange }) => {
@@ -118,7 +123,12 @@ const CustomDateInput = ({ label, value, onChange }) => {
   );
 };
 
-const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) => {
+const exportFormalExcel = async (
+  dataList,
+  reportTitle,
+  fileName,
+  studentName,
+) => {
   if (!dataList || dataList.length === 0)
     return alert("Không có dữ liệu để xuất báo cáo!");
 
@@ -126,30 +136,49 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
   const dateStr = `Ngày ${today.getDate().toString().padStart(2, "0")} tháng ${(today.getMonth() + 1).toString().padStart(2, "0")} năm ${today.getFullYear()}`;
 
   const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet("Lịch Sử Học Tập", { views: [{ showGridLines: false }] });
-  
+  const sheet = workbook.addWorksheet("Lịch Sử Học Tập", {
+    views: [{ showGridLines: false }],
+  });
+
   sheet.pageSetup = {
-    paperSize: 9, 
+    paperSize: 9,
     orientation: "portrait",
     fitToPage: true,
     fitToWidth: 1,
     fitToHeight: 0,
-    margins: { left: 0.3, right: 0.3, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 },
+    margins: {
+      left: 0.3,
+      right: 0.3,
+      top: 0.5,
+      bottom: 0.5,
+      header: 0.3,
+      footer: 0.3,
+    },
     horizontalCentered: true,
   };
 
   sheet.columns = [
-    { width: 8 },  
-    { width: 35 }, 
-    { width: 15 }, 
-    { width: 12 }, 
-    { width: 20 }, 
-    { width: 25 }, 
-    { width: 20 }, 
+    { width: 8 },
+    { width: 35 },
+    { width: 15 },
+    { width: 12 },
+    { width: 20 },
+    { width: 25 },
+    { width: 20 },
   ];
 
-  sheet.addRow(["", "UBND PHƯỜNG LƯU KIẾM", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"]);
-  sheet.addRow(["", "TRƯỜNG THCS TRẦN HƯNG ĐẠO", "", "ĐỘC LẬP - TỰ DO - HẠNH PHÚC"]);
+  sheet.addRow([
+    "",
+    "UBND PHƯỜNG LƯU KIẾM",
+    "",
+    "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+  ]);
+  sheet.addRow([
+    "",
+    "TRƯỜNG THCS TRẦN HƯNG ĐẠO",
+    "",
+    "ĐỘC LẬP - TỰ DO - HẠNH PHÚC",
+  ]);
 
   sheet.mergeCells("B1:C1");
   sheet.mergeCells("B2:C2");
@@ -172,7 +201,7 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
     const row = sheet.getRow(rowNum);
     row.height = 25;
     row.eachCell((cell, colNum) => {
-      if (colNum > 1) { 
+      if (colNum > 1) {
         cell.font = { name: "Times New Roman", size: 12, bold: true };
         cell.alignment = { vertical: "middle", horizontal: "center" };
       }
@@ -180,13 +209,23 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
   };
   formatGovHeader(1);
   formatGovHeader(2);
-  sheet.getCell("D2").font = { name: "Times New Roman", size: 13, bold: true, underline: true };
+  sheet.getCell("D2").font = {
+    name: "Times New Roman",
+    size: 13,
+    bold: true,
+    underline: true,
+  };
 
   sheet.addRow([]);
   const titleRow = sheet.addRow([reportTitle.toUpperCase()]);
   sheet.mergeCells("A4:G4");
   titleRow.height = 40;
-  sheet.getCell("A4").font = { name: "Times New Roman", size: 16, bold: true, color: { argb: "FF0070C0" } };
+  sheet.getCell("A4").font = {
+    name: "Times New Roman",
+    size: 16,
+    bold: true,
+    color: { argb: "FF0070C0" },
+  };
   sheet.getCell("A4").alignment = { vertical: "middle", horizontal: "center" };
 
   sheet.addRow([]);
@@ -194,10 +233,24 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
   const headerRow = sheet.addRow(tableHeaders);
   headerRow.height = 30;
   headerRow.eachCell((cell) => {
-    cell.font = { name: "Times New Roman", size: 12, bold: true, color: { argb: "FFFFFFFF" } };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0070C0" } };
+    cell.font = {
+      name: "Times New Roman",
+      size: 12,
+      bold: true,
+      color: { argb: "FFFFFFFF" },
+    };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF0070C0" },
+    };
     cell.alignment = { vertical: "middle", horizontal: "center" };
-    cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+    cell.border = {
+      top: { style: "thin" },
+      left: { style: "thin" },
+      bottom: { style: "thin" },
+      right: { style: "thin" },
+    };
   });
 
   dataList.forEach((obj) => {
@@ -205,9 +258,16 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
     row.height = 25;
     row.eachCell((cell, colNumber) => {
       cell.font = { name: "Times New Roman", size: 12 };
-      cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
-      if (colNumber === 1 || colNumber >= 3) cell.alignment = { vertical: "middle", horizontal: "center" };
-      else cell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+      if (colNumber === 1 || colNumber >= 3)
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+      else
+        cell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
     });
   });
 
@@ -218,13 +278,21 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
   const dateRow = sheet.addRow(["", "", "", "", "", dateStr]);
   const dateRowNum = dateRow.number;
   sheet.mergeCells(`F${dateRowNum}:G${dateRowNum}`);
-  sheet.getCell(`F${dateRowNum}`).font = { name: "Times New Roman", size: 12, italic: true };
+  sheet.getCell(`F${dateRowNum}`).font = {
+    name: "Times New Roman",
+    size: 12,
+    italic: true,
+  };
   sheet.getCell(`F${dateRowNum}`).alignment = { horizontal: "center" };
 
   const signRow = sheet.addRow(["", "", "", "", "", "Học sinh"]);
   const signRowNum = signRow.number;
   sheet.mergeCells(`F${signRowNum}:G${signRowNum}`);
-  sheet.getCell(`F${signRowNum}`).font = { name: "Times New Roman", size: 12, bold: true };
+  sheet.getCell(`F${signRowNum}`).font = {
+    name: "Times New Roman",
+    size: 12,
+    bold: true,
+  };
   sheet.getCell(`F${signRowNum}`).alignment = { horizontal: "center" };
 
   // Thêm 3 dòng trống để chừa chỗ ký tên
@@ -236,13 +304,19 @@ const exportFormalExcel = async (dataList, reportTitle, fileName, studentName) =
   const nameRow = sheet.addRow(["", "", "", "", "", studentName]);
   const nameRowNum = nameRow.number;
   sheet.mergeCells(`F${nameRowNum}:G${nameRowNum}`);
-  sheet.getCell(`F${nameRowNum}`).font = { name: "Times New Roman", size: 12, bold: true };
+  sheet.getCell(`F${nameRowNum}`).font = {
+    name: "Times New Roman",
+    size: 12,
+    bold: true,
+  };
   sheet.getCell(`F${nameRowNum}`).alignment = { horizontal: "center" };
-  
+
   sheet.headerFooter.oddFooter = `&R&"Times New Roman,Bold"&10Người xuất file: ${studentName}`;
-  
+
   const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
   saveAs(blob, `${fileName}.xlsx`);
 };
 
@@ -253,126 +327,48 @@ const exportPDF = async (dataList, reportTitle, studentName) => {
 
   try {
     const [regularFontRes, boldFontRes] = await Promise.all([
-      fetch("https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Regular.ttf"),
-      fetch("https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Medium.ttf")
+      fetch(
+        "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Regular.ttf",
+      ),
+      fetch(
+        "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Medium.ttf",
+      ),
     ]);
 
     const regularFontBuffer = await regularFontRes.arrayBuffer();
     const boldFontBuffer = await boldFontRes.arrayBuffer();
 
-    const regularBase64 = btoa(new Uint8Array(regularFontBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
-    const boldBase64 = btoa(new Uint8Array(boldFontBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+    const regularBase64 = btoa(
+      new Uint8Array(regularFontBuffer).reduce(
+        (data, byte) => data + String.fromCharCode(byte),
+        "",
+      ),
+    );
+    const boldBase64 = btoa(
+      new Uint8Array(boldFontBuffer).reduce(
+        (data, byte) => data + String.fromCharCode(byte),
+        "",
+      ),
+    );
 
     doc.addFileToVFS("Roboto-Regular.ttf", regularBase64);
     doc.addFileToVFS("Roboto-Medium.ttf", boldBase64);
     doc.addFont("Roboto-Regular.ttf", "Roboto", "normal");
     doc.addFont("Roboto-Medium.ttf", "Roboto", "bold");
-    
+
     doc.setFont("Roboto", "normal");
   } catch (error) {
     console.error("Lỗi tải font Tiếng Việt, sử dụng font mặc định:", error);
   }
 
   const today = new Date();
-  const dateStr = `Ngày ${today.getDate().toString().padStart(2, '0')} tháng ${(today.getMonth() + 1).toString().padStart(2, '0')} năm ${today.getFullYear()}`;
+  const dateStr = `Ngày ${today.getDate().toString().padStart(2, "0")} tháng ${(today.getMonth() + 1).toString().padStart(2, "0")} năm ${today.getFullYear()}`;
 
   try {
-     doc.addImage(schoolLogo, "JPEG", 15, 10, 22, 22);
-  } catch (e) { console.log(e) }
-
-  doc.setFontSize(12);
-  doc.setFont("Roboto", "bold");
-  doc.text("UBND PHƯỜNG LƯU KIẾM", 65, 16, { align: "center" });
-  doc.text("TRƯỜNG THCS TRẦN HƯNG ĐẠO", 65, 22, { align: "center" });
-
-  doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", 150, 16, { align: "center" });
-  doc.text("ĐỘC LẬP - TỰ DO - HẠNH PHÚC", 150, 22, { align: "center" });
-
-  const sloganWidth = doc.getTextWidth("ĐỘC LẬP - TỰ DO - HẠNH PHÚC");
-  doc.setDrawColor(0, 0, 0);
-  doc.setLineWidth(0.5);
-  doc.line(150 - sloganWidth / 2, 23.5, 150 + sloganWidth / 2, 23.5);
-
-  doc.setFontSize(16);
-  doc.setTextColor(0, 112, 192); 
-  doc.text(reportTitle.toUpperCase(), 105, 38, { align: "center" });
-  doc.setTextColor(0, 0, 0); 
-
-  autoTable(doc, {
-    startY: 45,
-    head: [Object.keys(dataList[0])],
-    body: dataList.map((obj) => Object.values(obj)),
-    styles: {
-      font: "Roboto", 
-      fontSize: 9,
-      halign: "center",
-      valign: "middle",
-      lineColor: [0, 0, 0],
-      lineWidth: 0.1,
-    },
-    headStyles: {
-      fillColor: [0, 112, 192],
-      textColor: [255, 255, 255],
-      fontStyle: "bold",
-    },
-    columnStyles: {
-      1: { halign: "left" }, 
-    },
-  });
-
-  const finalY = doc.lastAutoTable.finalY + 12;
-
-  doc.setFontSize(12);
-  doc.setFont("Roboto", "normal");
-  doc.text(dateStr, 155, finalY, { align: "center" });
-  
-  doc.setFont("Roboto", "bold");
-  doc.text("Học sinh", 155, finalY + 6, { align: "center" });
-  doc.text(studentName, 155, finalY + 25, { align: "center" });
-
-  doc.setFontSize(10);
-  doc.setFont("Roboto", "normal");
-  doc.text(`Người xuất file: ${studentName}`, 200, 287, { align: "right" });
-
-  doc.save(`${reportTitle.replace(/\s+/g, '_')}.pdf`);
-};
-
-// =====================================================================
-// HÀM MỚI: TẠO VÀ IN BẢNG ĐIỂM TRỰC TIẾP QUA IFRAME ẨN
-// =====================================================================
-const printPDF = async (dataList, reportTitle, studentName) => {
-  if (!dataList || dataList.length === 0) return alert("Không có dữ liệu!");
-
-  const doc = new jsPDF("p", "mm", "a4");
-
-  try {
-    const [regularFontRes, boldFontRes] = await Promise.all([
-      fetch("https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Regular.ttf"),
-      fetch("https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Medium.ttf")
-    ]);
-
-    const regularFontBuffer = await regularFontRes.arrayBuffer();
-    const boldFontBuffer = await boldFontRes.arrayBuffer();
-
-    const regularBase64 = btoa(new Uint8Array(regularFontBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
-    const boldBase64 = btoa(new Uint8Array(boldFontBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
-
-    doc.addFileToVFS("Roboto-Regular.ttf", regularBase64);
-    doc.addFileToVFS("Roboto-Medium.ttf", boldBase64);
-    doc.addFont("Roboto-Regular.ttf", "Roboto", "normal");
-    doc.addFont("Roboto-Medium.ttf", "Roboto", "bold");
-    
-    doc.setFont("Roboto", "normal");
-  } catch (error) {
-    console.error("Lỗi tải font Tiếng Việt:", error);
+    doc.addImage(schoolLogo, "JPEG", 15, 10, 22, 22);
+  } catch (e) {
+    console.log(e);
   }
-
-  const today = new Date();
-  const dateStr = `Ngày ${today.getDate().toString().padStart(2, '0')} tháng ${(today.getMonth() + 1).toString().padStart(2, '0')} năm ${today.getFullYear()}`;
-
-  try {
-     doc.addImage(schoolLogo, "JPEG", 15, 10, 22, 22);
-  } catch (e) { console.log(e) }
 
   doc.setFontSize(12);
   doc.setFont("Roboto", "bold");
@@ -410,7 +406,7 @@ const printPDF = async (dataList, reportTitle, studentName) => {
       fontStyle: "bold",
     },
     columnStyles: {
-      1: { halign: "left" }, 
+      1: { halign: "left" },
     },
   });
 
@@ -419,7 +415,117 @@ const printPDF = async (dataList, reportTitle, studentName) => {
   doc.setFontSize(12);
   doc.setFont("Roboto", "normal");
   doc.text(dateStr, 155, finalY, { align: "center" });
-  
+
+  doc.setFont("Roboto", "bold");
+  doc.text("Học sinh", 155, finalY + 6, { align: "center" });
+  doc.text(studentName, 155, finalY + 25, { align: "center" });
+
+  doc.setFontSize(10);
+  doc.setFont("Roboto", "normal");
+  doc.text(`Người xuất file: ${studentName}`, 200, 287, { align: "right" });
+
+  doc.save(`${reportTitle.replace(/\s+/g, "_")}.pdf`);
+};
+
+// =====================================================================
+// HÀM MỚI: TẠO VÀ IN BẢNG ĐIỂM TRỰC TIẾP QUA IFRAME ẨN
+// =====================================================================
+const printPDF = async (dataList, reportTitle, studentName) => {
+  if (!dataList || dataList.length === 0) return alert("Không có dữ liệu!");
+
+  const doc = new jsPDF("p", "mm", "a4");
+
+  try {
+    const [regularFontRes, boldFontRes] = await Promise.all([
+      fetch(
+        "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Regular.ttf",
+      ),
+      fetch(
+        "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Medium.ttf",
+      ),
+    ]);
+
+    const regularFontBuffer = await regularFontRes.arrayBuffer();
+    const boldFontBuffer = await boldFontRes.arrayBuffer();
+
+    const regularBase64 = btoa(
+      new Uint8Array(regularFontBuffer).reduce(
+        (data, byte) => data + String.fromCharCode(byte),
+        "",
+      ),
+    );
+    const boldBase64 = btoa(
+      new Uint8Array(boldFontBuffer).reduce(
+        (data, byte) => data + String.fromCharCode(byte),
+        "",
+      ),
+    );
+
+    doc.addFileToVFS("Roboto-Regular.ttf", regularBase64);
+    doc.addFileToVFS("Roboto-Medium.ttf", boldBase64);
+    doc.addFont("Roboto-Regular.ttf", "Roboto", "normal");
+    doc.addFont("Roboto-Medium.ttf", "Roboto", "bold");
+
+    doc.setFont("Roboto", "normal");
+  } catch (error) {
+    console.error("Lỗi tải font Tiếng Việt:", error);
+  }
+
+  const today = new Date();
+  const dateStr = `Ngày ${today.getDate().toString().padStart(2, "0")} tháng ${(today.getMonth() + 1).toString().padStart(2, "0")} năm ${today.getFullYear()}`;
+
+  try {
+    doc.addImage(schoolLogo, "JPEG", 15, 10, 22, 22);
+  } catch (e) {
+    console.log(e);
+  }
+
+  doc.setFontSize(12);
+  doc.setFont("Roboto", "bold");
+  doc.text("UBND PHƯỜNG LƯU KIẾM", 65, 16, { align: "center" });
+  doc.text("TRƯỜNG THCS TRẦN HƯNG ĐẠO", 65, 22, { align: "center" });
+
+  doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", 150, 16, { align: "center" });
+  doc.text("ĐỘC LẬP - TỰ DO - HẠNH PHÚC", 150, 22, { align: "center" });
+
+  const sloganWidth = doc.getTextWidth("ĐỘC LẬP - TỰ DO - HẠNH PHÚC");
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.5);
+  doc.line(150 - sloganWidth / 2, 23.5, 150 + sloganWidth / 2, 23.5);
+
+  doc.setFontSize(16);
+  doc.setTextColor(0, 112, 192);
+  doc.text(reportTitle.toUpperCase(), 105, 38, { align: "center" });
+  doc.setTextColor(0, 0, 0);
+
+  autoTable(doc, {
+    startY: 45,
+    head: [Object.keys(dataList[0])],
+    body: dataList.map((obj) => Object.values(obj)),
+    styles: {
+      font: "Roboto",
+      fontSize: 9,
+      halign: "center",
+      valign: "middle",
+      lineColor: [0, 0, 0],
+      lineWidth: 0.1,
+    },
+    headStyles: {
+      fillColor: [0, 112, 192],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+    },
+    columnStyles: {
+      1: { halign: "left" },
+    },
+  });
+
+  const finalY = doc.lastAutoTable.finalY + 12;
+
+  doc.setFontSize(12);
+  doc.setFont("Roboto", "normal");
+  doc.text(dateStr, 155, finalY, { align: "center" });
+
   doc.setFont("Roboto", "bold");
   doc.text("Học sinh", 155, finalY + 6, { align: "center" });
   doc.text(studentName, 155, finalY + 25, { align: "center" });
@@ -431,7 +537,7 @@ const printPDF = async (dataList, reportTitle, studentName) => {
   doc.autoPrint();
   const blob = doc.output("blob");
   const blobUrl = URL.createObjectURL(blob);
-  
+
   const iframe = document.createElement("iframe");
   iframe.style.display = "none";
   iframe.src = blobUrl;
@@ -858,7 +964,7 @@ const StudentDashboard = () => {
   const [allAssignmentsForRef, setAllAssignmentsForRef] = useState([]);
 
   const [historySearch, setHistorySearch] = useState("");
-  const [historySubjectSearch, setHistorySubjectSearch] = useState(""); 
+  const [historySubjectSearch, setHistorySubjectSearch] = useState("");
   const [historySubject, setHistorySubject] = useState("all");
   const [historyScoreStatus, setHistoryScoreStatus] = useState("all");
   const [scoreFrom, setScoreFrom] = useState("");
@@ -875,8 +981,16 @@ const StudentDashboard = () => {
   const [isPrinting, setIsPrinting] = useState(false);
 
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
-  const [profileForm, setProfileForm] = useState({ fullName: '', phone: '', address: '' });
-  const [passwordData, setPasswordData] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+  const [profileForm, setProfileForm] = useState({
+    fullName: "",
+    phone: "",
+    address: "",
+  });
+  const [passwordData, setPasswordData] = useState({
+    oldPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
   useEffect(() => {
@@ -894,9 +1008,9 @@ const StudentDashboard = () => {
         if (profileRes && profileRes.data) {
           setProfile(profileRes.data);
           setProfileForm({
-              fullName: profileRes.data.fullName || "",
-              phone: profileRes.data.phone || "",
-              address: profileRes.data.address || "",
+            fullName: profileRes.data.fullName || "",
+            phone: profileRes.data.phone || "",
+            address: profileRes.data.address || "",
           });
         }
 
@@ -914,8 +1028,8 @@ const StudentDashboard = () => {
 
         setAllAssignmentsForRef(allAssignments);
 
-        const submittedAssignmentIds = mySubmissions.map(
-          (sub) => String(sub.assignment?._id || sub.assignment)
+        const submittedAssignmentIds = mySubmissions.map((sub) =>
+          String(sub.assignment?._id || sub.assignment),
         );
         const now = new Date();
 
@@ -925,8 +1039,10 @@ const StudentDashboard = () => {
         allAssignments.forEach((a) => {
           const isSubmitted = submittedAssignmentIds.includes(String(a._id));
           const isPastDue = new Date(a.dueDate) < now;
-          
-          const isAllowMultiple = a.allowMultipleSubmissions === true || a.allowMultipleSubmissions === "true";
+
+          const isAllowMultiple =
+            a.allowMultipleSubmissions === true ||
+            a.allowMultipleSubmissions === "true";
 
           if (!isSubmitted) {
             if (isPastDue) {
@@ -1069,11 +1185,18 @@ const StudentDashboard = () => {
       return {
         STT: idx + 1,
         "Tên Bài Tập": assignData.title || "Bài tập đã xóa",
-        "Phân Loại": assignData.assignmentType === "exam" ? "Đề thi" : "Bài tập",
+        "Phân Loại":
+          assignData.assignmentType === "exam" ? "Đề thi" : "Bài tập",
         "Học Kỳ": assignData.semester || "-",
         "Môn Học": getSubject(sub),
-        "Thời Gian Nộp": sub.isOverdueMock ? "Không nộp" : formatDateVN(sub.createdAt),
-        "Điểm Số": sub.isOverdueMock ? "0 (Bỏ lỡ)" : sub.status === "pending" ? "Chờ chấm" : sub.score,
+        "Thời Gian Nộp": sub.isOverdueMock
+          ? "Không nộp"
+          : formatDateVN(sub.createdAt),
+        "Điểm Số": sub.isOverdueMock
+          ? "0 (Bỏ lỡ)"
+          : sub.status === "pending"
+            ? "Chờ chấm"
+            : sub.score,
       };
     });
 
@@ -1093,11 +1216,18 @@ const StudentDashboard = () => {
       return {
         STT: idx + 1,
         "Tên Bài Tập": assignData.title || "Bài tập đã xóa",
-        "Phân Loại": assignData.assignmentType === "exam" ? "Đề thi" : "Bài tập",
+        "Phân Loại":
+          assignData.assignmentType === "exam" ? "Đề thi" : "Bài tập",
         "Học Kỳ": assignData.semester || "-",
         "Môn Học": getSubject(sub),
-        "Thời Gian Nộp": sub.isOverdueMock ? "Không nộp" : formatDateVN(sub.createdAt),
-        "Điểm Số": sub.isOverdueMock ? "0 (Bỏ lỡ)" : sub.status === "pending" ? "Chờ chấm" : sub.score,
+        "Thời Gian Nộp": sub.isOverdueMock
+          ? "Không nộp"
+          : formatDateVN(sub.createdAt),
+        "Điểm Số": sub.isOverdueMock
+          ? "0 (Bỏ lỡ)"
+          : sub.status === "pending"
+            ? "Chờ chấm"
+            : sub.score,
       };
     });
 
@@ -1119,11 +1249,18 @@ const StudentDashboard = () => {
       return {
         STT: idx + 1,
         "Tên Bài Tập": assignData.title || "Bài tập đã xóa",
-        "Phân Loại": assignData.assignmentType === "exam" ? "Đề thi" : "Bài tập",
+        "Phân Loại":
+          assignData.assignmentType === "exam" ? "Đề thi" : "Bài tập",
         "Học Kỳ": assignData.semester || "-",
         "Môn Học": getSubject(sub),
-        "Thời Gian Nộp": sub.isOverdueMock ? "Không nộp" : formatDateVN(sub.createdAt),
-        "Điểm Số": sub.isOverdueMock ? "0 (Bỏ lỡ)" : sub.status === "pending" ? "Chờ chấm" : sub.score,
+        "Thời Gian Nộp": sub.isOverdueMock
+          ? "Không nộp"
+          : formatDateVN(sub.createdAt),
+        "Điểm Số": sub.isOverdueMock
+          ? "0 (Bỏ lỡ)"
+          : sub.status === "pending"
+            ? "Chờ chấm"
+            : sub.score,
       };
     });
 
@@ -1146,11 +1283,18 @@ const StudentDashboard = () => {
       return {
         STT: idx + 1,
         "Tên Bài Tập": assignData.title || "Bài tập đã xóa",
-        "Phân Loại": assignData.assignmentType === "exam" ? "Đề thi" : "Bài tập",
+        "Phân Loại":
+          assignData.assignmentType === "exam" ? "Đề thi" : "Bài tập",
         "Học Kỳ": assignData.semester || "-",
         "Môn Học": getSubject(sub),
-        "Thời Gian Nộp": sub.isOverdueMock ? "Không nộp" : formatDateVN(sub.createdAt),
-        "Điểm Số": sub.isOverdueMock ? "0 (Bỏ lỡ)" : sub.status === "pending" ? "Chờ chấm" : sub.score,
+        "Thời Gian Nộp": sub.isOverdueMock
+          ? "Không nộp"
+          : formatDateVN(sub.createdAt),
+        "Điểm Số": sub.isOverdueMock
+          ? "0 (Bỏ lỡ)"
+          : sub.status === "pending"
+            ? "Chờ chấm"
+            : sub.score,
       };
     });
 
@@ -1166,17 +1310,23 @@ const StudentDashboard = () => {
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
-    if (passwordData.newPassword && passwordData.newPassword !== passwordData.confirmPassword) {
+    if (
+      passwordData.newPassword &&
+      passwordData.newPassword !== passwordData.confirmPassword
+    ) {
       return alert("Mật khẩu mới và xác nhận mật khẩu không khớp!");
     }
-    
+
     if (passwordData.newPassword && passwordData.newPassword.length > 0) {
-        if (passwordData.newPassword.length < 6) return alert("Mật khẩu mới phải có ít nhất 6 ký tự!");
-        if (!/[!@#$%^&*(),.?":{}|<>]/.test(passwordData.newPassword)) {
-          return alert("Mật khẩu mới phải chứa ít nhất một ký tự đặc biệt (!@#$%^&*(),.?\":{}|<>).");
-        }
+      if (passwordData.newPassword.length < 6)
+        return alert("Mật khẩu mới phải có ít nhất 6 ký tự!");
+      if (!/[!@#$%^&*(),.?":{}|<>]/.test(passwordData.newPassword)) {
+        return alert(
+          'Mật khẩu mới phải chứa ít nhất một ký tự đặc biệt (!@#$%^&*(),.?":{}|<>).',
+        );
+      }
     }
-    
+
     setIsUpdatingProfile(true);
     try {
       const payload = {
@@ -1186,23 +1336,27 @@ const StudentDashboard = () => {
       };
 
       if (passwordData.oldPassword && passwordData.newPassword) {
-          payload.oldPassword = passwordData.oldPassword;
-          payload.newPassword = passwordData.newPassword;
+        payload.oldPassword = passwordData.oldPassword;
+        payload.newPassword = passwordData.newPassword;
       }
 
-      const res = await axios.put('/auth/update-my-profile', payload, {
-         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      const res = await axios.put("/auth/update-my-profile", payload, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
-      
+
       alert("✅ Lưu thông tin thành công!");
-      localStorage.setItem("fullName", res.data.user.fullName); 
+      localStorage.setItem("fullName", res.data.user.fullName);
       setProfile(res.data.user);
-      setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+      setPasswordData({
+        oldPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
       setIsEditProfileOpen(false);
 
       if (passwordData.newPassword) {
-          alert("Bạn vừa đổi mật khẩu, hệ thống sẽ tự động đăng xuất.");
-          handleLogout();
+        alert("Bạn vừa đổi mật khẩu, hệ thống sẽ tự động đăng xuất.");
+        handleLogout();
       }
     } catch (error) {
       alert(error.response?.data?.message || "Lỗi khi cập nhật thông tin!");
@@ -1220,7 +1374,7 @@ const StudentDashboard = () => {
               <BookOpen className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
             </div>
             <span className="font-extrabold text-lg sm:text-xl text-sky-950 truncate max-w-[120px] sm:max-w-none">
-              Học Sinh 
+              Học Sinh
             </span>
           </div>
 
@@ -1237,10 +1391,10 @@ const StudentDashboard = () => {
                     : "Chưa phân lớp"}
               </p>
             </div>
-            <div 
-               onClick={() => setIsEditProfileOpen(true)}
-               className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-sky-100 flex items-center justify-center text-sky-600 font-bold border-2 border-sky-200 shrink-0 cursor-pointer hover:bg-sky-200 transition-colors"
-               title="Sửa thông tin cá nhân"
+            <div
+              onClick={() => setIsEditProfileOpen(true)}
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-sky-100 flex items-center justify-center text-sky-600 font-bold border-2 border-sky-200 shrink-0 cursor-pointer hover:bg-sky-200 transition-colors"
+              title="Sửa thông tin cá nhân"
             >
               {fullName.charAt(0).toUpperCase()}
             </div>
@@ -1259,82 +1413,128 @@ const StudentDashboard = () => {
 
       <Dialog open={isEditProfileOpen} onOpenChange={setIsEditProfileOpen}>
         <DialogContent className="sm:max-w-[500px] w-[95%] rounded-3xl border-none p-6 bg-white shadow-2xl">
-            <DialogHeader>
-                <DialogTitle className="text-xl font-bold flex items-center gap-2 text-sky-700 pb-2 border-b border-sky-100">
-                    <UserCircle className="h-5 w-5" /> Thông tin cá nhân & Bảo mật
-                </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleUpdateProfile} className="space-y-4 pt-2">
-                <div>
-                    <label className="text-sm font-bold text-slate-600 mb-1 block">Họ và tên</label>
-                    <Input 
-                        value={profileForm.fullName} 
-                        onChange={(e) => setProfileForm({...profileForm, fullName: e.target.value})} 
-                        required 
-                        className="h-11 rounded-xl bg-white border-slate-200 focus-visible:ring-sky-500 font-bold" 
-                    />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                        <label className="text-sm font-bold text-slate-600 mb-1 block">Số điện thoại</label>
-                        <Input
-                            className="h-11 rounded-xl bg-white border-slate-200 focus-visible:ring-sky-500"
-                            value={profileForm.phone}
-                            inputMode="numeric"
-                            maxLength={15}
-                            onChange={(e) => {
-                                const digitsOnly = String(e.target.value).replace(/[^0-9]/g, "").slice(0, 15);
-                                setProfileForm((prev) => ({ ...prev, phone: digitsOnly }));
-                            }}
-                        />
-                    </div>
-                    <div>
-                        <label className="text-sm font-bold text-slate-600 mb-1 block">Địa chỉ</label>
-                        <Input 
-                            className="h-11 rounded-xl bg-white border-slate-200 focus-visible:ring-sky-500"
-                            value={profileForm.address}
-                            onChange={(e) => setProfileForm({...profileForm, address: e.target.value})}
-                        />
-                    </div>
-                </div>
-                
-                <div className="bg-amber-50/50 p-4 rounded-2xl border border-amber-100 mt-2">
-                    <label className="text-sm font-bold text-amber-700 flex items-center gap-1 mb-3 border-b border-amber-100 pb-2">
-                        <Key className="w-4 h-4"/> Đổi mật khẩu
-                    </label>
-                    <div className="space-y-3">
-                        <Input 
-                            type="password" 
-                            placeholder="Mật khẩu cũ (hiện tại)..."
-                            className="h-11 rounded-xl bg-white border-amber-200 focus-visible:ring-amber-500"
-                            value={passwordData.oldPassword}
-                            onChange={(e) => setPasswordData({...passwordData, oldPassword: e.target.value})}
-                        />
-                        <Input 
-                            type="password" 
-                            placeholder="Mật khẩu mới..."
-                            className="h-11 rounded-xl bg-white border-amber-200 focus-visible:ring-amber-500"
-                            value={passwordData.newPassword}
-                            onChange={(e) => setPasswordData({...passwordData, newPassword: e.target.value})}
-                        />
-                        <Input 
-                            type="password" 
-                            placeholder="Xác nhận mật khẩu mới..."
-                            className="h-11 rounded-xl bg-white border-amber-200 focus-visible:ring-amber-500"
-                            value={passwordData.confirmPassword}
-                            onChange={(e) => setPasswordData({...passwordData, confirmPassword: e.target.value})}
-                        />
-                    </div>
-                    <p className="text-[10px] text-amber-600 mt-2 font-medium">*Bỏ trống nếu không muốn đổi mật khẩu. (MK cần chứa số/chữ và ký tự đặc biệt)</p>
-                </div>
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2 text-sky-700 pb-2 border-b border-sky-100">
+              <UserCircle className="h-5 w-5" /> Thông tin cá nhân & Bảo mật
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleUpdateProfile} className="space-y-4 pt-2">
+            <div>
+              <label className="text-sm font-bold text-slate-600 mb-1 block">
+                Họ và tên
+              </label>
+              <Input
+                value={profileForm.fullName}
+                onChange={(e) =>
+                  setProfileForm({ ...profileForm, fullName: e.target.value })
+                }
+                required
+                className="h-11 rounded-xl bg-white border-slate-200 focus-visible:ring-sky-500 font-bold"
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-bold text-slate-600 mb-1 block">
+                  Số điện thoại
+                </label>
+                <Input
+                  className="h-11 rounded-xl bg-white border-slate-200 focus-visible:ring-sky-500"
+                  value={profileForm.phone}
+                  inputMode="numeric"
+                  maxLength={15}
+                  onChange={(e) => {
+                    const digitsOnly = String(e.target.value)
+                      .replace(/[^0-9]/g, "")
+                      .slice(0, 15);
+                    setProfileForm((prev) => ({ ...prev, phone: digitsOnly }));
+                  }}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-bold text-slate-600 mb-1 block">
+                  Địa chỉ
+                </label>
+                <Input
+                  className="h-11 rounded-xl bg-white border-slate-200 focus-visible:ring-sky-500"
+                  value={profileForm.address}
+                  onChange={(e) =>
+                    setProfileForm({ ...profileForm, address: e.target.value })
+                  }
+                />
+              </div>
+            </div>
 
-                <div className="pt-2 flex justify-end gap-2">
-                    <Button type="button" variant="ghost" onClick={() => setIsEditProfileOpen(false)} className="rounded-xl font-bold h-11 text-slate-500">Đóng</Button>
-                    <Button type="submit" disabled={isUpdatingProfile} className="h-11 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-bold px-6">
-                        {isUpdatingProfile ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Save className="w-4 h-4 mr-2" />} Lưu thay đổi
-                    </Button>
-                </div>
-            </form>
+            <div className="bg-amber-50/50 p-4 rounded-2xl border border-amber-100 mt-2">
+              <label className="text-sm font-bold text-amber-700 flex items-center gap-1 mb-3 border-b border-amber-100 pb-2">
+                <Key className="w-4 h-4" /> Đổi mật khẩu
+              </label>
+              <div className="space-y-3">
+                <Input
+                  type="password"
+                  placeholder="Mật khẩu cũ (hiện tại)..."
+                  className="h-11 rounded-xl bg-white border-amber-200 focus-visible:ring-amber-500"
+                  value={passwordData.oldPassword}
+                  onChange={(e) =>
+                    setPasswordData({
+                      ...passwordData,
+                      oldPassword: e.target.value,
+                    })
+                  }
+                />
+                <Input
+                  type="password"
+                  placeholder="Mật khẩu mới..."
+                  className="h-11 rounded-xl bg-white border-amber-200 focus-visible:ring-amber-500"
+                  value={passwordData.newPassword}
+                  onChange={(e) =>
+                    setPasswordData({
+                      ...passwordData,
+                      newPassword: e.target.value,
+                    })
+                  }
+                />
+                <Input
+                  type="password"
+                  placeholder="Xác nhận mật khẩu mới..."
+                  className="h-11 rounded-xl bg-white border-amber-200 focus-visible:ring-amber-500"
+                  value={passwordData.confirmPassword}
+                  onChange={(e) =>
+                    setPasswordData({
+                      ...passwordData,
+                      confirmPassword: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <p className="text-[10px] text-amber-600 mt-2 font-medium">
+                *Bỏ trống nếu không muốn đổi mật khẩu. (MK cần chứa số/chữ và ký
+                tự đặc biệt)
+              </p>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setIsEditProfileOpen(false)}
+                className="rounded-xl font-bold h-11 text-slate-500"
+              >
+                Đóng
+              </Button>
+              <Button
+                type="submit"
+                disabled={isUpdatingProfile}
+                className="h-11 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-bold px-6"
+              >
+                {isUpdatingProfile ? (
+                  <Loader2 className="animate-spin w-4 h-4 mr-2" />
+                ) : (
+                  <Save className="w-4 h-4 mr-2" />
+                )}{" "}
+                Lưu thay đổi
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -1408,8 +1608,12 @@ const StudentDashboard = () => {
                       >
                         <CardHeader className="pb-3 border-b border-slate-50 p-5 sm:p-6">
                           <div className="flex justify-between items-start mb-3 gap-2">
-                            <Badge className={`border-0 shadow-none font-bold px-3 py-1 text-xs whitespace-nowrap ${assig.isRetakeable ? 'bg-amber-100 text-amber-700' : 'bg-sky-50 text-sky-600'}`}>
-                              {assig.isRetakeable ? "Có thể làm lại" : "Đang mở"}
+                            <Badge
+                              className={`border-0 shadow-none font-bold px-3 py-1 text-xs whitespace-nowrap ${assig.isRetakeable ? "bg-amber-100 text-amber-700" : "bg-sky-50 text-sky-600"}`}
+                            >
+                              {assig.isRetakeable
+                                ? "Có thể làm lại"
+                                : "Đang mở"}
                             </Badge>
                             <Badge
                               variant="outline"
@@ -1452,12 +1656,18 @@ const StudentDashboard = () => {
                         <CardFooter className="pt-0 pb-5 px-5 sm:px-6">
                           <Button
                             onClick={() => navigate(`/take-quiz/${assig._id}`)}
-                            className={`w-full h-11 sm:h-12 rounded-xl font-black text-sm sm:text-base shadow-sm transition-all active:scale-95 text-white ${assig.isRetakeable ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-200' : 'bg-sky-500 hover:bg-sky-600 shadow-sky-200'}`}
+                            className={`w-full h-11 sm:h-12 rounded-xl font-black text-sm sm:text-base shadow-sm transition-all active:scale-95 text-white ${assig.isRetakeable ? "bg-amber-500 hover:bg-amber-600 shadow-amber-200" : "bg-sky-500 hover:bg-sky-600 shadow-sky-200"}`}
                           >
                             {assig.isRetakeable ? (
-                                <><RefreshCcw className="w-4 h-4 sm:w-5 sm:h-5 mr-2" /> Làm lại bài</>
+                              <>
+                                <RefreshCcw className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />{" "}
+                                Làm lại bài
+                              </>
                             ) : (
-                                <><PlayCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-2" /> Bắt đầu làm bài</>
+                              <>
+                                <PlayCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />{" "}
+                                Bắt đầu làm bài
+                              </>
                             )}
                           </Button>
                         </CardFooter>
@@ -1486,7 +1696,11 @@ const StudentDashboard = () => {
                       disabled={isPrinting}
                       className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl h-11 shadow-sm flex-1 sm:flex-none"
                     >
-                      {isPrinting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Printer className="w-4 h-4 mr-2" />} 
+                      {isPrinting ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Printer className="w-4 h-4 mr-2" />
+                      )}
                       In bảng điểm
                     </Button>
 
@@ -1504,7 +1718,11 @@ const StudentDashboard = () => {
                       variant="outline"
                       className="bg-white text-sky-700 border-sky-300 hover:bg-sky-50 font-bold rounded-xl h-11 shadow-sm flex-1 sm:flex-none"
                     >
-                      {isExportingPDF ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />} 
+                      {isExportingPDF ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4 mr-2" />
+                      )}
                       PDF
                     </Button>
 
@@ -1557,8 +1775,13 @@ const StudentDashboard = () => {
                                   {
                                     all: "Tất cả môn",
                                     Toán: "Toán",
+                                    "Vật Lý": "Vật Lý",
+                                    "Sinh Học": "Sinh Học",
+                                    "Hóa Học": "Hóa Học",
                                     "Ngữ Văn": "Ngữ Văn",
                                     "Tiếng Anh": "Tiếng Anh",
+                                    GDCD: "GDCD",
+                                    "Lịch Sử": "Lịch Sử",
                                   }[historySubject]
                                 }
                               </SelectValue>
@@ -1568,8 +1791,13 @@ const StudentDashboard = () => {
                           <SelectContent>
                             <SelectItem value="all">Tất cả môn</SelectItem>
                             <SelectItem value="Toán">Toán</SelectItem>
+                            <SelectItem value="Vật Lý">Vật Lý</SelectItem>
+                            <SelectItem value="Sinh Học">Sinh Học</SelectItem>
+                            <SelectItem value="Hóa Học">Hóa Học</SelectItem>
                             <SelectItem value="Ngữ Văn">Ngữ Văn</SelectItem>
                             <SelectItem value="Tiếng Anh">Tiếng Anh</SelectItem>
+                            <SelectItem value="GDCD">GDCD</SelectItem>
+                            <SelectItem value="Lịch Sử">Lịch Sử</SelectItem>
                           </SelectContent>
                         </Select>
 
@@ -1621,7 +1849,9 @@ const StudentDashboard = () => {
                             if (num < 0 || num > 10) return;
 
                             if (scoreTo !== "" && num > Number(scoreTo)) {
-                              alert('Điểm "Từ" phải nhỏ hơn hoặc bằng điểm "Đến"');
+                              alert(
+                                'Điểm "Từ" phải nhỏ hơn hoặc bằng điểm "Đến"',
+                              );
                               return;
                             }
 
@@ -1655,7 +1885,9 @@ const StudentDashboard = () => {
                             if (num < 0 || num > 10) return;
 
                             if (scoreFrom !== "" && num < Number(scoreFrom)) {
-                              alert('Điểm "Đến" phải lớn hơn hoặc bằng điểm "Từ"');
+                              alert(
+                                'Điểm "Đến" phải lớn hơn hoặc bằng điểm "Từ"',
+                              );
                               return;
                             }
 
@@ -1726,7 +1958,7 @@ const StudentDashboard = () => {
                         filteredHistory.map((sub, idx) => {
                           const isPending = sub.status === "pending";
                           const isOverdueMock = sub.isOverdueMock;
-                          
+
                           // 👉 GỌI HÀM ĐỂ LẤY DỮ LIỆU ĐẦY ĐỦ CỦA BÀI TẬP
                           const assignData = getAssignData(sub);
 
@@ -1752,10 +1984,15 @@ const StudentDashboard = () => {
                                   </span>
                                 )}
                               </TableCell>
-                              
+
                               <TableCell className="text-center">
-                                <Badge variant="outline" className={`border-0 font-bold text-[11px] ${assignData.assignmentType === 'exam' ? 'bg-indigo-100 text-indigo-700' : 'bg-sky-100 text-sky-700'}`}>
-                                  {assignData.assignmentType === 'exam' ? "Đề Thi" : "Bài Tập"}
+                                <Badge
+                                  variant="outline"
+                                  className={`border-0 font-bold text-[11px] ${assignData.assignmentType === "exam" ? "bg-indigo-100 text-indigo-700" : "bg-sky-100 text-sky-700"}`}
+                                >
+                                  {assignData.assignmentType === "exam"
+                                    ? "Đề Thi"
+                                    : "Bài Tập"}
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-center font-bold text-slate-500 text-sm">
